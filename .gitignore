@@ -1,0 +1,65 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.the-book-author-runtime.log
+.the-book-author-runtime.err.log
+.the-book-author.providers.json
+.the-book-author.autopilot.json
+next-start.out.log
+next-start.err.log
+.tmp-ai-debug.ts
+
+# local runtime / packaged artifacts
+/runtime/
+/dist/
+/exports/
+/.tools/
+/.tmp-pdf/
+/src/app/downloads/*.cmd
+
+# local data
+/prisma/*.db
+/prisma/*.db-*
+
+# temporary QA assets
+smoke-ui-*.png
+tmp-*
+*.webm
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

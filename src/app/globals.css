@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f3f5f8;
+  --bg-soft: #e8edf5;
+  --workspace: #eef2f7;
+  --panel: #ffffff;
+  --panel-soft: #f8fafd;
+  --panel-strong: #dde5f1;
+  --text: #1f1f1f;
+  --muted: #5b6676;
+  --accent: #2b579a;
+  --accent-strong: #1f4e94;
+  --accent-rgb: 43 87 154;
+  --accent-ink: #ffffff;
+  --success: #1f7a45;
+  --danger: #b42318;
+  --line: rgba(31, 41, 55, 0.12);
+  --line-strong: rgba(31, 41, 55, 0.2);
+  --shadow: rgba(15, 23, 42, 0.12);
+  --glow: rgba(43, 87, 154, 0.18);
+  --font-heading: "Segoe UI", "Aptos", "Calibri", "Arial", sans-serif;
+  --font-body: "Segoe UI", "Aptos", "Calibri", "Arial", sans-serif;
+  --font-manuscript: "Georgia", "Cambria", "Times New Roman", serif;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-body);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(243, 245, 248, 1)),
+    linear-gradient(180deg, rgba(43, 87, 154, 0.025), transparent 180px);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(43, 87, 154, 0.05), transparent 120px),
+    radial-gradient(circle at top, rgba(43, 87, 154, 0.06), transparent 40%);
+  opacity: 0.7;
+}
+
+::selection,
+::-moz-selection {
+  background: rgba(188, 202, 218, 0.82);
+  color: #0f172a;
+}
+
+textarea::selection,
+textarea::-moz-selection,
+input::selection,
+input::-moz-selection,
+.manuscript-font::selection,
+.manuscript-font::-moz-selection {
+  background: rgba(182, 197, 214, 0.9);
+  color: #0f172a;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading), serif;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-weight: 700;
+}
+
+textarea,
+input,
+select {
+  outline: none;
+}
+
+textarea,
+input[type="text"],
+input[type="number"],
+input[type="password"],
+select {
+  display: block;
+  width: 100%;
+  border-radius: 0.6rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--text);
+  padding: 0.75rem 0.9rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+textarea::placeholder,
+input::placeholder {
+  color: rgba(91, 102, 118, 0.9);
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: rgba(var(--accent-rgb), 0.52);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+
+* {
+  scrollbar-color: rgba(var(--accent-rgb), 0.35) rgba(31, 41, 55, 0.08);
+}
+
+.glass-divider {
+  border-top: 1px solid var(--line);
+}
+
+.panel-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.soft-shadow {
+  box-shadow: 0 24px 60px var(--shadow);
+}
+
+.workspace-canvas {
+  background: linear-gradient(180deg, #f6f8fb 0%, #eef2f7 100%);
+}
+
+.paper-sheet {
+  background: #ffffff;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  box-shadow:
+    0 20px 40px rgba(15, 23, 42, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.manuscript-font {
+  font-family: var(--font-manuscript), serif;
+}
+
+.storyforge-spinner {
+  display: inline-block;
+  height: 0.9rem;
+  width: 0.9rem;
+  border-radius: 999px;
+  border: 2px solid rgba(var(--accent-rgb), 0.2);
+  border-top-color: var(--accent);
+  animation: storyforge-spin 0.7s linear infinite;
+}
+
+.storyforge-inline-preview {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 253, 0.98)),
+    linear-gradient(180deg, rgba(43, 87, 154, 0.025), transparent 20%);
+}
+
+.storyforge-inline-added,
+.storyforge-inline-removed {
+  position: relative;
+  border-radius: 0.24rem;
+  transition: background-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.storyforge-inline-added {
+  color: #17673b;
+  background: rgba(35, 136, 79, 0.14);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 0 1px rgba(35, 136, 79, 0.08),
+    0 4px 12px rgba(35, 136, 79, 0.16);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.65);
+  opacity: 0.94;
+}
+
+.storyforge-inline-removed {
+  color: #9f1d16;
+  background: rgba(180, 35, 24, 0.11);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(180, 35, 24, 0.08),
+    0 4px 10px rgba(180, 35, 24, 0.12);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: rgba(159, 29, 22, 0.95);
+  opacity: 0.72;
+}
+
+@keyframes storyforge-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
