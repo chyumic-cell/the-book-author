@@ -164,6 +164,20 @@ select:focus {
   animation: storyforge-spin 0.7s linear infinite;
 }
 
+.brand-beta-sup {
+  font-family: var(--font-tech-brand), "Segoe UI", sans-serif;
+  font-size: 0.54em;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow:
+    0 0 10px rgba(var(--accent-rgb), 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+  vertical-align: super;
+}
+
 .storyforge-inline-preview {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 253, 0.98)),

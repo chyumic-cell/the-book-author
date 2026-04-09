@@ -10,9 +10,9 @@ export default async function SignUpPage() {
 
   return (
       <BetaShell
-        intro={`Create a ${APP_NAME} private-beta account to access downloads, support, feedback, and policy-gated beta features. During this phase, ${APP_NAME} is designed so user writing data stays on the user's own device rather than inside a shared hosted manuscript database.`}
+        intro={`Create an account for ${APP_NAME} to access downloads, support, feedback, and policy-gated features. ${APP_NAME} is designed so user writing data stays on the user's own device rather than inside a shared hosted manuscript database.`}
         session={session}
-        title={`Create a ${APP_NAME} Beta Account`}
+        title="Create account"
       >
       <AuthForm mode="sign-up" />
     </BetaShell>

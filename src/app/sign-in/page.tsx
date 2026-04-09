@@ -10,9 +10,9 @@ export default async function SignInPage() {
 
   return (
       <BetaShell
-        intro={`Sign in to the ${APP_NAME} private-beta portal. This portal handles access, policies, support, moderation, and downloads while the actual writing data remains on each user's device in phase one.`}
+        intro={`Sign in to ${APP_NAME} to access downloads, policies, feedback, and account-managed features while your actual writing data remains on each user's own device.`}
         session={session}
-        title={`${APP_NAME} Private Beta Access`}
+        title="Sign in"
       >
       <AuthForm mode="sign-in" />
     </BetaShell>

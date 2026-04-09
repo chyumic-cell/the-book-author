@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BetaShell } from "@/components/beta/beta-shell";
+import { AppBrandMark } from "@/components/brand/app-brand-mark";
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { ProjectLibraryGrid } from "@/components/storyforge/project-library-grid";
 import { Card } from "@/components/ui/card";
@@ -18,24 +19,26 @@ export default async function HomePage() {
 
     return (
       <BetaShell
-        intro={`${APP_NAME} is currently running as a local-first private beta. Use this portal to create your beta account, accept the publishing terms, download the app builds, install the mobile web app, send feedback, and manage moderation or export oversight without placing everyone's manuscripts inside one shared cloud library.`}
+        intro={`${APP_NAME} is a local-first writing platform. Use this site to create your account, review the publishing terms, download the desktop build, install the mobile web app, send feedback, and manage access without placing everyone's manuscripts inside one shared cloud library.`}
         session={session}
-        title={`${APP_NAME} Private Beta Portal`}
+        title={APP_NAME}
       >
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card className="grid gap-5">
             <div className="flex flex-wrap gap-2">
               <Chip>Local-first writing</Chip>
               <Chip>Per-user AI keys</Chip>
-              <Chip>Private-beta access</Chip>
+              <Chip>Account-based access</Chip>
             </div>
             <div className="grid gap-3">
-              <h2 className="text-3xl font-semibold">What {APP_NAME} does</h2>
+              <h2 className="text-3xl font-semibold">
+                What <AppBrandMark betaClassName="text-[0.46em]" /> does
+              </h2>
               <p className="text-sm leading-7 text-[var(--muted)]">
                 {APP_NAME} is a professional writing environment for planning, outlining, drafting, revising, tracking canon, and exporting full-length books with optional AI assistance.
               </p>
               <p className="text-sm leading-7 text-[var(--muted)]">
-                In this first hosted-beta phase, the public site manages access, policy acceptance, downloads, moderation, feedback, and export oversight, while your actual working library is meant to live on your own computer or phone.
+                The hosted site manages access, policy acceptance, downloads, moderation, feedback, and export oversight, while your actual working library is meant to live on your own computer or phone.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -43,7 +46,7 @@ export default async function HomePage() {
                 className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
                 href={session ? "/downloads" : "/sign-up"}
               >
-                {session ? "Open downloads" : "Join the beta"}
+                {session ? "Open downloads" : "Create account"}
               </Link>
               <Link
                 className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
@@ -57,7 +60,7 @@ export default async function HomePage() {
           <Card className="grid gap-4">
             <Chip>How access works</Chip>
             <ul className="grid gap-3 text-sm text-[var(--muted)]">
-              <li>Create a {APP_NAME} beta account with a username and password.</li>
+              <li>Create a {APP_NAME} account with a username and password.</li>
               <li>Accept the {APP_NAME} Terms and Publishing Policy before access is activated.</li>
               <li>Download the desktop app or install the mobile web app to your home screen.</li>
               <li>Bring your own OpenRouter or OpenAI key. {APP_NAME} does not bundle your personal key into public downloads.</li>

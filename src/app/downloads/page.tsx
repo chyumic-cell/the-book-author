@@ -14,13 +14,13 @@ export default async function DownloadsPage() {
 
   return (
       <BetaShell
-        intro={`Download ${APP_NAME} for desktop, or install the mobile web app to your home screen. In this first hosted-beta phase, actual book data is intended to stay on the user's own computer or phone instead of inside a shared cloud manuscript database.`}
+        intro={`Download ${APP_NAME} for desktop, or install the mobile web app to your home screen. Actual book data is intended to stay on the user's own computer or phone instead of inside a shared cloud manuscript database.`}
         session={session}
-        title={`${APP_NAME} Downloads and Device Setup`}
+        title="Downloads and device setup"
       >
       <Card className="grid gap-4">
         <div className="flex flex-wrap gap-2">
-          <Chip>Local-first beta</Chip>
+          <Chip>Local-first writing</Chip>
           <Chip>Bring your own AI key</Chip>
         </div>
         <div className="grid gap-3">
@@ -45,7 +45,7 @@ export default async function DownloadsPage() {
           home screen. The installed icon uses your logo and behaves like an app shortcut.
         </p>
         <p className="text-xs leading-6 text-[var(--muted)]">
-          In phase one, the Android install is a Progressive Web App that stores the installed shell on the device rather than a Play Store package.
+          The Android install is a Progressive Web App that stores the installed shell on the device rather than a Play Store package.
         </p>
       </Card>
 
@@ -56,7 +56,7 @@ export default async function DownloadsPage() {
           iOS uses the apple-touch icon and launches it as a standalone web app.
         </p>
         <p className="text-xs leading-6 text-[var(--muted)]">
-          In phase one, the iPhone install is a home-screen web app rather than an App Store package.
+          The iPhone install is a home-screen web app rather than an App Store package.
         </p>
       </Card>
 

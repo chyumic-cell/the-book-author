@@ -19,9 +19,9 @@ export default async function TermsPage() {
 
   return (
       <BetaShell
-        intro={`These are the current private-beta ${APP_NAME} Terms and Publishing Policy. Users must accept them before a ${APP_NAME} beta account can be created.`}
+        intro={`These are the current ${APP_NAME} Terms and Publishing Policy. Users must accept them before an account can be created.`}
         session={session}
-        title={`${APP_NAME} Terms and Publishing Policy`}
+        title="Terms and publishing policy"
       >
       <Card className="grid gap-4">
         <div className="flex flex-wrap gap-2">

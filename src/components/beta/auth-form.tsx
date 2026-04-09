@@ -61,8 +61,8 @@ export function AuthForm({
         <h1 className="text-4xl font-semibold">{mode === "sign-in" ? `Sign in to ${APP_NAME}` : `Create your ${APP_NAME} account`}</h1>
         <p className="text-sm text-[var(--muted)]">
           {mode === "sign-in"
-            ? `Use your ${APP_NAME} username and password to access the private-beta portal.`
-            : `Create a username and password for the private-beta portal. You will be asked to accept the ${APP_NAME} Terms and Publishing Policy before the account is created.`}
+            ? `Use your ${APP_NAME} username and password to access your account.`
+            : `Create a username and password for ${APP_NAME}. You will be asked to accept the ${APP_NAME} Terms and Publishing Policy before the account is created.`}
         </p>
       </div>
 
@@ -89,7 +89,7 @@ export function AuthForm({
           />
         </Field>
 
-        <Field label="Password" hint="For the beta, passwords must be at least 8 characters long.">
+        <Field label="Password" hint="Passwords must be at least 8 characters long.">
           <input
             className="rounded-xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm outline-none transition focus:border-[rgba(var(--accent-rgb),0.35)] focus:ring-2 focus:ring-[rgba(var(--accent-rgb),0.12)]"
             onChange={(event) => setPassword(event.target.value)}

@@ -46,9 +46,9 @@ export default async function AdminPage({
 
   return (
     <BetaShell
-      intro={`This admin view is the ${APP_NAME} private-beta operations console. It shows user accounts, roles, plans, bans, feedback submissions, and mirrored export records.`}
+      intro={`This admin view is the ${APP_NAME} operations console. It shows user accounts, roles, plans, bans, feedback submissions, and mirrored export records.`}
       session={session}
-      title={`${APP_NAME} Admin`}
+      title="Admin"
     >
       <Card className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">

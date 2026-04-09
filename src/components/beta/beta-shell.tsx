@@ -1,11 +1,11 @@
 import Link from "next/link";
 
+import { AppBrandMark } from "@/components/brand/app-brand-mark";
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { canViewAdminConsole } from "@/lib/beta-auth";
 import type { BetaSessionRecord } from "@/lib/beta-auth";
-import { APP_NAME } from "@/lib/brand";
 import { getStoryForgeOwnerName } from "@/lib/hosted-beta-config";
 
 export function BetaShell({
@@ -25,7 +25,9 @@ export function BetaShell({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Chip>{APP_NAME} Private Beta</Chip>
+              <Chip>
+                <AppBrandMark className="items-center" betaClassName="text-[0.58em]" />
+              </Chip>
               <Chip>Copyright (c) 2026 {getStoryForgeOwnerName()}</Chip>
             </div>
             <div className="grid gap-2">

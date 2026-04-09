@@ -14,9 +14,9 @@ export default async function AccountPage() {
 
   return (
       <BetaShell
-        intro={`This is your ${APP_NAME} private-beta account dashboard. Use it to confirm your access status, review the current beta model, and reach downloads, feedback, and the policy pages.`}
+        intro={`This is your ${APP_NAME} account dashboard. Use it to confirm your access status, reach downloads, send feedback, and review the current policies.`}
         session={session}
-        title={`Your ${APP_NAME} Account`}
+        title="Your account"
       >
       <Card className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -28,10 +28,10 @@ export default async function AccountPage() {
           <h2 className="text-2xl font-semibold">Account status</h2>
           <p className="text-sm leading-7 text-[var(--muted)]">
             Signed in as <strong className="text-[var(--text)]">{session.user.displayName}</strong>. Your {APP_NAME}
-            beta account is active and your terms acceptance is recorded under the current beta policy version.
+            account is active and your terms acceptance is recorded under the current policy version.
           </p>
           <p className="text-sm leading-7 text-[var(--muted)]">
-            Phase-one private beta is local-first: keep your real projects on your own device. The hosted site currently
+            {APP_NAME} is local-first: keep your real projects on your own device. The hosted site currently
             manages access, downloads, feedback, moderation, and policy acceptance.
           </p>
         </div>

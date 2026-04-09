@@ -10,9 +10,9 @@ export default async function FeedbackPage() {
 
   return (
       <BetaShell
-        intro={`Feedback goes straight into the ${APP_NAME} beta inbox so product problems, UX pain, and broken flows can be tracked cleanly.`}
+        intro={`Feedback goes straight into the ${APP_NAME} support inbox so product problems, UX pain, and broken flows can be tracked cleanly.`}
         session={session}
-        title={`${APP_NAME} Feedback`}
+        title="Feedback"
       >
       <FeedbackForm />
     </BetaShell>
