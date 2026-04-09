@@ -1581,8 +1581,6 @@ export function ProjectWorkspace({
         showInspector={shouldShowInspector}
       />
 
-      <AppLegalNotice className="mt-3 shrink-0" />
-
       <div
         className={cn(
           "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
@@ -1764,6 +1762,8 @@ export function ProjectWorkspace({
           </div>
         ) : null}
       </div>
+
+      <AppLegalNotice className="mt-3 shrink-0" />
 
       <ProjectCopilotBar
         activeAiRole={activeAiRole}
