@@ -27,7 +27,7 @@ export default async function AccountPage() {
         <div className="grid gap-2">
           <h2 className="text-2xl font-semibold">Account status</h2>
           <p className="text-sm leading-7 text-[var(--muted)]">
-            Signed in as <strong className="text-[var(--text)]">{session.user.displayName}</strong>. Your {APP_NAME}
+            Signed in as <strong className="text-[var(--text)]">{session.user.displayName}</strong>. Your {APP_NAME}{" "}
             account is active and your terms acceptance is recorded under the current policy version.
           </p>
           <p className="text-sm leading-7 text-[var(--muted)]">
