@@ -22,6 +22,7 @@ export default async function DownloadsPage() {
         <div className="flex flex-wrap gap-2">
           <Chip>Local-first writing</Chip>
           <Chip>Bring your own AI key</Chip>
+          <Chip>Use in browser too</Chip>
         </div>
         <div className="grid gap-3">
           <h2 className="text-2xl font-semibold">{APP_NAME} - PC</h2>
@@ -35,18 +36,25 @@ export default async function DownloadsPage() {
           >
             Download {APP_NAME} - PC
           </a>
+          <Link className="font-medium text-[var(--accent)] underline" href="/">
+            Open the web app now
+          </Link>
         </div>
       </Card>
 
       <Card className="grid gap-4">
         <h2 className="text-2xl font-semibold">{APP_NAME} - Android</h2>
         <p className="text-sm leading-7 text-[var(--muted)]">
-          Open the {APP_NAME} site in Chrome on Android, then use the install banner or browser menu to add it to your
-          home screen. The installed icon uses your logo and behaves like an app shortcut.
+          Open the {APP_NAME} site in Chrome on Android, then use the install banner or the browser menu to add it to your
+          home screen. If Chrome does not show the banner automatically, open the browser menu and tap <strong>Install app</strong> or{" "}
+          <strong>Add to Home screen</strong>.
         </p>
         <p className="text-xs leading-6 text-[var(--muted)]">
           The Android install is a Progressive Web App that stores the installed shell on the device rather than a Play Store package.
         </p>
+        <Link className="font-medium text-[var(--accent)] underline" href="/">
+          Open the mobile web app
+        </Link>
       </Card>
 
       <Card className="grid gap-4">
@@ -58,6 +66,9 @@ export default async function DownloadsPage() {
         <p className="text-xs leading-6 text-[var(--muted)]">
           The iPhone install is a home-screen web app rather than an App Store package.
         </p>
+        <Link className="font-medium text-[var(--accent)] underline" href="/">
+          Open the mobile web app
+        </Link>
       </Card>
 
       <Card className="grid gap-4">

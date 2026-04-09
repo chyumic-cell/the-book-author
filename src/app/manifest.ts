@@ -8,7 +8,9 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: APP_SHORT_NAME,
     description:
       "AI-assisted fiction studio for planning, outlining, and drafting long-form books. Copyright (c) 2026 Michael William Polevoy.",
+    id: "/",
     start_url: "/",
+    scope: "/",
     display: "standalone",
     background_color: "#f3ede3",
     theme_color: "#355d9a",

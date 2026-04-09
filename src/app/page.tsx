@@ -13,9 +13,97 @@ import { listProjects } from "@/lib/project-data";
 
 export const dynamic = "force-dynamic";
 
+function AppHome({
+  hosted,
+  projects,
+}: {
+  hosted: boolean;
+  projects: Awaited<ReturnType<typeof listProjects>>;
+}) {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-10">
+      <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        <Card className="relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.12)] via-transparent to-[rgba(53,100,77,0.12)]" />
+          <div className="relative grid gap-6">
+            <div className="flex flex-wrap gap-2">
+              <Chip>Tailored Novel Atelier</Chip>
+              {hosted ? <Chip>Hosted web workspace</Chip> : null}
+            </div>
+            <div className="grid gap-4">
+              <h1 className="max-w-3xl text-5xl leading-[1.02] tracking-tight">
+                Build books in a sunlit library workspace that remembers the story without swallowing the whole manuscript.
+              </h1>
+              <p className="max-w-3xl text-lg text-[var(--muted)]">
+                {APP_NAME} blends a manuscript studio, story bible, developmental editor, and optional AI collaborator into one polished environment. Write by hand, co-write selectively, or let the system draft while structured memory keeps canon, continuity, and momentum intact.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
+                href="/projects/new"
+              >
+                Start a New Book
+              </Link>
+              <Link
+                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
+                href="/account"
+              >
+                Open account
+              </Link>
+              <Link
+                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
+                href="/downloads"
+              >
+                Install on phone
+              </Link>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="grid gap-4">
+          <Chip>What It Remembers</Chip>
+          <ul className="grid gap-3 text-sm text-[var(--muted)]">
+            <li>Long-term canon: character arcs, world rules, promises, foreshadowing, and major plot state.</li>
+            <li>Short-term context: recent summaries, emotional tone, active objects, injuries, and scene atmosphere.</li>
+            <li>User intent: plot direction, themes, prose preferences, and current chapter goals.</li>
+            <li>Guidance: chapter-level tension, scene causality, emotional motion, and reader momentum.</li>
+          </ul>
+        </Card>
+      </section>
+
+      <section className="grid gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl">Projects</h2>
+            <p className="text-sm text-[var(--muted)]">
+              Open an existing manuscript workspace or start a fresh book.
+            </p>
+          </div>
+          <Link
+            className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 text-sm font-semibold text-[var(--text)] hover:bg-white"
+            href="/projects/new"
+          >
+            New Project
+          </Link>
+        </div>
+
+        <ProjectLibraryGrid initialProjects={projects} />
+      </section>
+
+      <AppLegalNotice />
+    </main>
+  );
+}
+
 export default async function HomePage() {
   if (isHostedBetaEnabled()) {
     const session = await getOptionalBetaSession();
+
+    if (session) {
+      const projects = await listProjects();
+      return <AppHome hosted projects={projects} />;
+    }
 
     return (
       <BetaShell
@@ -73,72 +161,5 @@ export default async function HomePage() {
   }
 
   const projects = await listProjects();
-
-  return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-10">
-      <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-        <Card className="relative overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.12)] via-transparent to-[rgba(53,100,77,0.12)]" />
-          <div className="relative grid gap-6">
-            <Chip>Tailored Novel Atelier</Chip>
-            <div className="grid gap-4">
-              <h1 className="max-w-3xl text-5xl leading-[1.02] tracking-tight">
-                Build books in a sunlit library workspace that remembers the story without swallowing the whole manuscript.
-              </h1>
-              <p className="max-w-3xl text-lg text-[var(--muted)]">
-                {APP_NAME} blends a manuscript studio, story bible, developmental editor, and optional AI collaborator into one polished environment. Write by hand, co-write selectively, or let the system draft while structured memory keeps canon, continuity, and momentum intact.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
-                href="/projects/new"
-              >
-                Start a New Book
-              </Link>
-              {projects[0] ? (
-                <Link
-                  className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
-                  href={`/projects/${projects[0].id}`}
-                >
-                  Open Demo Workspace
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        </Card>
-
-        <Card className="grid gap-4">
-          <Chip>What It Remembers</Chip>
-          <ul className="grid gap-3 text-sm text-[var(--muted)]">
-            <li>Long-term canon: character arcs, world rules, promises, foreshadowing, and major plot state.</li>
-            <li>Short-term context: recent summaries, emotional tone, active objects, injuries, and scene atmosphere.</li>
-            <li>User intent: plot direction, themes, prose preferences, and current chapter goals.</li>
-            <li>Guidance: chapter-level tension, scene causality, emotional motion, and reader momentum.</li>
-          </ul>
-        </Card>
-      </section>
-
-      <section className="grid gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl">Projects</h2>
-            <p className="text-sm text-[var(--muted)]">
-              Open the seeded demo or start a fresh manuscript workspace.
-            </p>
-          </div>
-          <Link
-            className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 text-sm font-semibold text-[var(--text)] hover:bg-white"
-            href="/projects/new"
-          >
-            New Project
-          </Link>
-        </div>
-
-        <ProjectLibraryGrid initialProjects={projects} />
-      </section>
-
-      <AppLegalNotice />
-    </main>
-  );
+  return <AppHome hosted={false} projects={projects} />;
 }

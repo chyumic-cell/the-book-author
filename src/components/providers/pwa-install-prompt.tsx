@@ -39,12 +39,21 @@ function isIosBrowser() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+function isAndroidBrowser() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  return /android/i.test(navigator.userAgent);
+}
+
 export function PwaInstallPrompt() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [hiddenForSession, setHiddenForSession] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [isInstallable, setIsInstallable] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -55,6 +64,7 @@ export function PwaInstallPrompt() {
     const refreshState = () => {
       setInstalled(isStandaloneDisplay());
       setIsIos(isIosBrowser());
+      setIsAndroid(isAndroidBrowser());
       setIsMobile(isMobileLikeDevice());
     };
 
@@ -82,8 +92,8 @@ export function PwaInstallPrompt() {
       return false;
     }
 
-    return isInstallable || isIos;
-  }, [hiddenForSession, installed, isInstallable, isIos, isMobile]);
+    return isInstallable || isIos || isAndroid;
+  }, [hiddenForSession, installed, isInstallable, isIos, isAndroid, isMobile]);
 
   async function handleInstall() {
     if (!installEvent) {
@@ -121,6 +131,11 @@ export function PwaInstallPrompt() {
             {isIos && !isInstallable ? (
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
                 On iPhone or iPad, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.
+              </p>
+            ) : null}
+            {isAndroid && !isInstallable ? (
+              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                On Android, open the browser menu and tap <strong>Install app</strong> or <strong>Add to Home screen</strong> if the install banner does not appear.
               </p>
             ) : null}
           </div>

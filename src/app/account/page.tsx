@@ -31,11 +31,13 @@ export default async function AccountPage() {
             account is active and your terms acceptance is recorded under the current policy version.
           </p>
           <p className="text-sm leading-7 text-[var(--muted)]">
-            {APP_NAME} is local-first: keep your real projects on your own device. The hosted site currently
-            manages access, downloads, feedback, moderation, and policy acceptance.
+            {APP_NAME} is still local-first, but your hosted account can now open the web workspace too. Use this page for access control, downloads, feedback, moderation, and policy acceptance.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Link className="font-medium text-[var(--accent)] underline" href="/">
+            Open web app
+          </Link>
           <Link className="font-medium text-[var(--accent)] underline" href="/downloads">
             Open downloads
           </Link>

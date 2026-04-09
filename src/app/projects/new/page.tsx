@@ -1,16 +1,15 @@
-import { redirect } from "next/navigation";
-
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { NewProjectForm } from "@/components/storyforge/new-project-form";
 import { Card } from "@/components/ui/card";
+import { requireBetaSession } from "@/lib/beta-auth";
 import { APP_NAME } from "@/lib/brand";
 import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
 
-export default function NewProjectPage() {
+export default async function NewProjectPage() {
   if (isHostedBetaEnabled()) {
-    redirect("/downloads");
+    await requireBetaSession();
   }
 
   return (

@@ -1,6 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { ProjectWorkspace } from "@/components/storyforge/project-workspace";
+import { requireBetaSession } from "@/lib/beta-auth";
 import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import { getAiModeLabel } from "@/lib/openai";
 import { getProjectWorkspace, listProjects } from "@/lib/project-data";
@@ -13,7 +14,7 @@ export default async function ProjectPage({
   params: Promise<{ projectId: string }>;
 }) {
   if (isHostedBetaEnabled()) {
-    redirect("/downloads");
+    await requireBetaSession();
   }
 
   const { projectId } = await params;

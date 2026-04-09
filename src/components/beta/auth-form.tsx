@@ -46,7 +46,7 @@ export function AuthForm({
         throw new Error(json.error || "Could not sign in.");
       }
 
-      router.push("/account");
+      router.push("/");
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Something went wrong.");
