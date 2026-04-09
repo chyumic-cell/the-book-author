@@ -31,7 +31,7 @@ export type BetaSessionRecord = {
   expiresAt: string;
 };
 
-const SESSION_COOKIE_NAME = "storyforge_beta_session";
+const SESSION_COOKIE_NAME = "the_book_author_beta_session";
 const SESSION_TTL_DAYS = 30;
 
 function normalizeUsername(value: string) {

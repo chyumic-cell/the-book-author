@@ -29,16 +29,16 @@ In this phase:
 
 ### Vercel
 
-- `STORYFORGE_HOSTED_BETA=true`
-- `NEXT_PUBLIC_STORYFORGE_HOSTED_BETA=true`
+- `THE_BOOK_AUTHOR_HOSTED_BETA=true`
+- `NEXT_PUBLIC_THE_BOOK_AUTHOR_HOSTED_BETA=true`
 - `DATABASE_URL=<your Neon Postgres connection string>`
-  - or `STORYFORGE_BETA_DATABASE_URL=<your Neon Postgres connection string>`
+  - or `THE_BOOK_AUTHOR_BETA_DATABASE_URL=<your Neon Postgres connection string>`
 - `NEXT_PUBLIC_APP_URL=https://your-project.vercel.app`
-- `STORYFORGE_APP_URL=https://your-project.vercel.app`
-- `STORYFORGE_OWNER_NAME=Michael William Polevoy`
-- `STORYFORGE_OWNER_USERNAMES=michael,mwpolevoy,the-book-author-owner`
+- `THE_BOOK_AUTHOR_APP_URL=https://your-project.vercel.app`
+- `THE_BOOK_AUTHOR_OWNER_NAME=Michael William Polevoy`
+- `THE_BOOK_AUTHOR_OWNER_USERNAMES=michael,mwpolevoy,the-book-author-owner`
 - `OPENROUTER_SETUP_URL=https://openrouter.ai/keys`
-- `STORYFORGE_SUPPORT_EMAIL=<optional support email>`
+- `THE_BOOK_AUTHOR_SUPPORT_EMAIL=<optional support email>`
 
 ## Free deployment path: Vercel + Neon
 

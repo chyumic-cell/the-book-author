@@ -10,7 +10,7 @@ import { syncChapterToStoryState } from "@/lib/story-sync";
 import { updateChapter } from "@/lib/story-service";
 import type { AiAutopilotMode, AutopilotRunRecord, ProjectWorkspace } from "@/types/storyforge";
 
-const autopilotConfigRoot = process.env.STORYFORGE_CONFIG_DIR || process.cwd();
+const autopilotConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
 const autopilotConfigPath = path.join(autopilotConfigRoot, ".the-book-author.autopilot.json");
 
 type AutopilotStore = {

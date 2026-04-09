@@ -11,11 +11,11 @@ function splitCsv(value: string | undefined) {
 }
 
 export function isHostedBetaEnabled() {
-  return process.env.STORYFORGE_HOSTED_BETA === "true";
+  return (process.env.THE_BOOK_AUTHOR_HOSTED_BETA ?? process.env.STORYFORGE_HOSTED_BETA) === "true";
 }
 
 export function getHostedBetaDatabaseUrl() {
-  const explicit = process.env.STORYFORGE_BETA_DATABASE_URL?.trim();
+  const explicit = (process.env.THE_BOOK_AUTHOR_BETA_DATABASE_URL ?? process.env.STORYFORGE_BETA_DATABASE_URL)?.trim();
   if (explicit) {
     return explicit;
   }
@@ -29,17 +29,18 @@ export function getHostedBetaDatabaseUrl() {
 }
 
 export function getStoryForgeOwnerName() {
-  return process.env.STORYFORGE_OWNER_NAME?.trim() || "Michael William Polevoy";
+  return (process.env.THE_BOOK_AUTHOR_OWNER_NAME ?? process.env.STORYFORGE_OWNER_NAME)?.trim() || "Michael William Polevoy";
 }
 
 export function getStoryForgeOwnerUsernames() {
-  const configured = splitCsv(process.env.STORYFORGE_OWNER_USERNAMES);
-  return configured.length > 0 ? configured : ["michael", "mwpolevoy", "storyforge-owner"];
+  const configured = splitCsv(process.env.THE_BOOK_AUTHOR_OWNER_USERNAMES ?? process.env.STORYFORGE_OWNER_USERNAMES);
+  return configured.length > 0 ? configured : ["michael", "mwpolevoy", "the-book-author-owner"];
 }
 
 export function getHostedSiteUrl() {
   return (
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.THE_BOOK_AUTHOR_APP_URL?.trim() ||
     process.env.STORYFORGE_APP_URL?.trim() ||
     "http://localhost:3000"
   );
@@ -50,5 +51,5 @@ export function getOpenRouterKeysUrl() {
 }
 
 export function getSupportEmailAddress() {
-  return process.env.STORYFORGE_SUPPORT_EMAIL?.trim() || "";
+  return (process.env.THE_BOOK_AUTHOR_SUPPORT_EMAIL ?? process.env.STORYFORGE_SUPPORT_EMAIL)?.trim() || "";
 }

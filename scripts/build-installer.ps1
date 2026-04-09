@@ -26,6 +26,7 @@ $includePaths = @(
   "Launch The Book Author.cmd",
   "The Book Author Server.cmd",
   "Stop The Book Author.cmd",
+  "public",
   "runtime",
   "prisma",
   "exports",
@@ -99,8 +100,8 @@ if (Test-Path $runtimeEnvPath) {
     'OPENROUTER_SITE_URL="http://localhost:3000"',
     'OPENROUTER_APP_NAME="The Book Author"',
     'OPENROUTER_SETUP_URL="https://openrouter.ai/keys"',
-    'STORYFORGE_DEFAULT_PROVIDER="OPENROUTER"',
-    'STORYFORGE_REQUIRE_PERSONAL_AI_KEY="true"',
+    'THE_BOOK_AUTHOR_DEFAULT_PROVIDER="OPENROUTER"',
+    'THE_BOOK_AUTHOR_REQUIRE_PERSONAL_AI_KEY="true"',
     'USE_MOCK_AI="false"'
   ) -Encoding ASCII
 }
@@ -128,20 +129,20 @@ set "SELF_PATH=%~f0"
 set "WORK_DIR=%TEMP%\The-Book-Author-Installer-%RANDOM%%RANDOM%"
 set "PAYLOAD_ZIP=%WORK_DIR%\the-book-author-payload.zip"
 set "EXPAND_DIR=%WORK_DIR%\The-Book-Author"
-set "INSTALL_DIR=%STORYFORGE_INSTALL_DIR%"
+set "INSTALL_DIR=%THE_BOOK_AUTHOR_INSTALL_DIR%"
 if not defined INSTALL_DIR set "INSTALL_DIR=%LOCALAPPDATA%\The Book Author"
-set "SHORTCUT_DIR=%STORYFORGE_SHORTCUT_DIR%"
+set "SHORTCUT_DIR=%THE_BOOK_AUTHOR_SHORTCUT_DIR%"
 if not defined SHORTCUT_DIR set "SHORTCUT_DIR=%USERPROFILE%\Desktop"
 set "DESKTOP_SHORTCUT=%SHORTCUT_DIR%\The Book Author.lnk"
 set "SHOULD_LAUNCH=1"
-if /I "%STORYFORGE_SKIP_LAUNCH%"=="1" set "SHOULD_LAUNCH=0"
+if /I "%THE_BOOK_AUTHOR_SKIP_LAUNCH%"=="1" set "SHOULD_LAUNCH=0"
 
 echo Preparing The Book Author installer...
 if exist "%WORK_DIR%" rmdir /s /q "%WORK_DIR%" >nul 2>nul
 mkdir "%WORK_DIR%" >nul 2>nul
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$source = $env:SELF_PATH; $output = $env:PAYLOAD_ZIP; $marker = '__STORYFORGE_PAYLOAD_BELOW__'; $content = Get-Content -LiteralPath $source -Raw; $index = $content.LastIndexOf($marker); if ($index -lt 0) { throw 'Installer payload marker was not found.' }; $payload = [regex]::Replace($content.Substring($index + $marker.Length), '\s', ''); [System.IO.File]::WriteAllBytes($output, [System.Convert]::FromBase64String($payload))"
+  "$source = $env:SELF_PATH; $output = $env:PAYLOAD_ZIP; $marker = '__THE_BOOK_AUTHOR_PAYLOAD_BELOW__'; $content = Get-Content -LiteralPath $source -Raw; $index = $content.LastIndexOf($marker); if ($index -lt 0) { throw 'Installer payload marker was not found.' }; $payload = [regex]::Replace($content.Substring($index + $marker.Length), '\s', ''); [System.IO.File]::WriteAllBytes($output, [System.Convert]::FromBase64String($payload))"
 if errorlevel 1 (
   echo The Book Author payload could not be unpacked.
   rmdir /s /q "%WORK_DIR%" >nul 2>nul
@@ -171,7 +172,7 @@ if errorlevel 8 (
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch The Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\runtime\public\storyforge-icon.ico'; $shortcut.Save()"
+  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch The Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\public\the-book-author-icon.ico'; $shortcut.Save()"
 if errorlevel 1 (
   echo The Book Author installed, but the desktop shortcut could not be created.
 )
@@ -192,7 +193,7 @@ if "%SHOULD_LAUNCH%"=="1" (
 rmdir /s /q "%WORK_DIR%" >nul 2>nul
 exit /b 0
 
-__STORYFORGE_PAYLOAD_BELOW__
+__THE_BOOK_AUTHOR_PAYLOAD_BELOW__
 '@
 
 Set-Content -Path $installerPath -Value $installerHeader -Encoding ASCII

@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 export function FeedbackButton() {
   const pathname = usePathname();
-  const hostedBetaEnabled = process.env.NEXT_PUBLIC_STORYFORGE_HOSTED_BETA === "true";
+  const hostedBetaEnabled =
+    (process.env.NEXT_PUBLIC_THE_BOOK_AUTHOR_HOSTED_BETA ?? process.env.NEXT_PUBLIC_STORYFORGE_HOSTED_BETA) === "true";
   const betaPath = /^\/(downloads|sign-in|sign-up|terms|account|admin|feedback)(\/|$)/.test(pathname);
 
   if (!hostedBetaEnabled || !betaPath || pathname === "/feedback") {

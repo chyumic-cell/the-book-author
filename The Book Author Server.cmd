@@ -9,7 +9,7 @@ if not exist "%NODE_DIR%\node.exe" set "NODE_DIR=C:\Users\pc1\Documents\.tooling
 set "PATH=%NODE_DIR%;%PATH%"
 set "APP_DIR_URL=%APP_DIR:\=/%"
 set "DATABASE_URL=file:%APP_DIR_URL%/prisma/dev.db"
-set "STORYFORGE_CONFIG_DIR=%APP_DIR%"
+set "THE_BOOK_AUTHOR_CONFIG_DIR=%APP_DIR%"
 
 if exist "%APP_DIR%\.next\standalone\server.js" (
   if exist "%APP_DIR%\.next\static" (

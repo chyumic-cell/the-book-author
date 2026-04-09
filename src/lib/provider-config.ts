@@ -8,11 +8,12 @@ import type { ProviderKind, ProviderSettingsRecord } from "@/types/storyforge";
 import { APP_NAME } from "@/lib/brand";
 import { providerModelSwitchSchema, providerSettingsSchema } from "@/lib/schemas";
 
-const providerConfigRoot = process.env.STORYFORGE_CONFIG_DIR || process.cwd();
+const providerConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
 const providerConfigPath = path.join(providerConfigRoot, ".the-book-author.providers.json");
 
 export const OPENROUTER_SETUP_URL = process.env.OPENROUTER_SETUP_URL ?? "https://openrouter.ai/keys";
-const REQUIRE_PERSONAL_AI_KEY = process.env.STORYFORGE_REQUIRE_PERSONAL_AI_KEY === "true";
+const REQUIRE_PERSONAL_AI_KEY =
+  (process.env.THE_BOOK_AUTHOR_REQUIRE_PERSONAL_AI_KEY ?? process.env.STORYFORGE_REQUIRE_PERSONAL_AI_KEY) === "true";
 
 type ProviderSecrets = {
   activeProvider: ProviderKind;
@@ -69,7 +70,9 @@ function normalizeProviderKind(value: string | undefined | null): ProviderKind |
   }
 }
 
-const envDefaultProvider = normalizeProviderKind(process.env.STORYFORGE_DEFAULT_PROVIDER);
+const envDefaultProvider = normalizeProviderKind(
+  process.env.THE_BOOK_AUTHOR_DEFAULT_PROVIDER ?? process.env.STORYFORGE_DEFAULT_PROVIDER,
+);
 const envUseMockValue = (process.env.USE_MOCK_AI ?? "").trim().toLowerCase();
 
 const defaultSecrets: ProviderSecrets = {

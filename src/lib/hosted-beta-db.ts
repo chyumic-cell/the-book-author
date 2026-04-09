@@ -12,7 +12,9 @@ let initPromise: Promise<void> | null = null;
 function getSql() {
   const url = getHostedBetaDatabaseUrl();
   if (!url) {
-    throw new Error("Hosted beta database is not configured. Set STORYFORGE_BETA_DATABASE_URL to a Neon Postgres connection string.");
+    throw new Error(
+      "Hosted beta database is not configured. Set THE_BOOK_AUTHOR_BETA_DATABASE_URL to a Neon Postgres connection string.",
+    );
   }
 
   if (!sqlSingleton) {

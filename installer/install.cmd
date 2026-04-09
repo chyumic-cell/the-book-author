@@ -3,14 +3,14 @@ setlocal
 
 set "TEMP_DIR=%~dp0"
 if "%TEMP_DIR:~-1%"=="\" set "TEMP_DIR=%TEMP_DIR:~0,-1%"
-set "PAYLOAD_ZIP=%TEMP_DIR%\storyforge-payload.zip"
-set "INSTALL_DIR=%STORYFORGE_INSTALL_DIR%"
+set "PAYLOAD_ZIP=%TEMP_DIR%\the-book-author-payload.zip"
+set "INSTALL_DIR=%THE_BOOK_AUTHOR_INSTALL_DIR%"
 if not defined INSTALL_DIR set "INSTALL_DIR=%LOCALAPPDATA%\The Book Author"
-set "SHORTCUT_DIR=%STORYFORGE_SHORTCUT_DIR%"
+set "SHORTCUT_DIR=%THE_BOOK_AUTHOR_SHORTCUT_DIR%"
 if not defined SHORTCUT_DIR set "SHORTCUT_DIR=%USERPROFILE%\Desktop"
 set "DESKTOP_SHORTCUT=%SHORTCUT_DIR%\The Book Author.lnk"
 set "SHOULD_LAUNCH=1"
-if /I "%STORYFORGE_SKIP_LAUNCH%"=="1" set "SHOULD_LAUNCH=0"
+if /I "%THE_BOOK_AUTHOR_SKIP_LAUNCH%"=="1" set "SHOULD_LAUNCH=0"
 
 echo Installing The Book Author...
 
@@ -36,7 +36,7 @@ if errorlevel 1 (
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch The Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\runtime\public\storyforge-icon.ico'; $shortcut.Save()"
+  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch The Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\public\the-book-author-icon.ico'; $shortcut.Save()"
 
 echo The Book Author was installed to:
 echo %INSTALL_DIR%
