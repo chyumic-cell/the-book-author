@@ -21,7 +21,7 @@ export default async function HomePage() {
       <BetaShell
         intro={`${APP_NAME} is a local-first writing platform. Use this site to create your account, review the publishing terms, download the desktop build, install the mobile web app, send feedback, and manage access without placing everyone's manuscripts inside one shared cloud library.`}
         session={session}
-        title={APP_NAME}
+        title={<AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.44em]" />}
       >
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card className="grid gap-5">

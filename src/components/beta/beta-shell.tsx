@@ -16,7 +16,7 @@ export function BetaShell({
 }: {
   children: React.ReactNode;
   session: BetaSessionRecord | null;
-  title: string;
+  title: React.ReactNode;
   intro: string;
 }) {
   return (

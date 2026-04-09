@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { AppBrandMark } from "@/components/brand/app-brand-mark";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { APP_NAME } from "@/lib/brand";
@@ -497,7 +498,11 @@ export function WorkspaceMenuBar({
         data-testid="workspace-ribbon-tabs"
       >
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-2 text-xl font-semibold text-white">{APP_NAME}</span>
+          <AppBrandMark
+            className="mr-3 items-center text-white"
+            nameClassName="text-xl text-white"
+            betaClassName="text-[0.52em] text-white"
+          />
           {RIBBON_TABS.map((tab) => (
             <RibbonTabButton
               key={tab.id}
