@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { PrismaClient as LocalPrismaClient } from "@prisma/client";
 import { PrismaClient as HostedPrismaClient } from "@/generated/hosted-prisma";
+import { getHostedBetaDatabaseUrl } from "@/lib/hosted-beta-config";
 
 type AppPrismaClient = LocalPrismaClient;
 
@@ -29,14 +30,18 @@ function normalizeSqliteUrl(databaseUrl: string | undefined) {
   return `file:${path.resolve(process.cwd(), rawPath).replace(/\\/g, "/")}`;
 }
 
-process.env.DATABASE_URL = normalizeSqliteUrl(process.env.DATABASE_URL);
+const effectiveDatabaseUrl = normalizeSqliteUrl(process.env.DATABASE_URL ?? getHostedBetaDatabaseUrl());
+
+if (effectiveDatabaseUrl) {
+  process.env.DATABASE_URL = effectiveDatabaseUrl;
+}
 
 function isHostedDatabaseUrl(databaseUrl: string | undefined) {
   return /^postgres(ql)?:\/\//i.test((databaseUrl ?? "").trim());
 }
 
 function createPrismaClient(): AppPrismaClient {
-  if (isHostedDatabaseUrl(process.env.DATABASE_URL)) {
+  if (isHostedDatabaseUrl(effectiveDatabaseUrl)) {
     return new HostedPrismaClient({
       log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
     }) as unknown as AppPrismaClient;

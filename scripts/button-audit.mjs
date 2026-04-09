@@ -145,15 +145,29 @@ async function testFileRibbon(page, projectUrl) {
   await jsClick(ribbonButton(page, "Save As Backup").first());
   await pagePause(500);
 
-  for (const label of ["PDF", "EPUB", "Markdown", "TXT", "Backup JSON"]) {
+  const exportFormats = [
+    { label: "PDF", format: "pdf" },
+    { label: "EPUB", format: "epub" },
+    { label: "Markdown", format: "md" },
+    { label: "TXT", format: "txt" },
+    { label: "Backup JSON", format: "json" },
+  ];
+
+  for (const { label, format } of exportFormats) {
     const link = ribbonLink(page, label);
     await link.waitFor({ timeout: 10000 });
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/projects/") &&
+        response.url().includes(`/export?format=${format}`) &&
+        response.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await link.evaluate((node) => node.click());
-    await pagePause(700);
-    if (!/\/projects\//.test(page.url())) {
-      await openAuditProject(page, projectUrl);
-      await openRibbon(page, "File");
-    }
+    const response = await responsePromise;
+    assert.equal(response.ok(), true, `${label} export did not return success`);
+    await openAuditProject(page, projectUrl);
+    await openRibbon(page, "File");
   }
 
   await ribbonLink(page, "Open Library").click();
