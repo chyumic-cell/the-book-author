@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BetaShell } from "@/components/beta/beta-shell";
+import { PwaDownloadActions } from "@/components/providers/pwa-download-actions";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { requireBetaSession } from "@/lib/beta-auth";
@@ -24,6 +25,10 @@ export default async function DownloadsPage() {
           <Chip>Bring your own AI key</Chip>
           <Chip>Use in browser too</Chip>
         </div>
+        <PwaDownloadActions />
+      </Card>
+
+      <Card className="grid gap-4">
         <div className="grid gap-3">
           <h2 className="text-2xl font-semibold">{APP_NAME} - PC</h2>
           <p className="text-sm leading-7 text-[var(--muted)]">
@@ -49,12 +54,7 @@ export default async function DownloadsPage() {
           home screen. If Chrome does not show the banner automatically, open the browser menu and tap <strong>Install app</strong> or{" "}
           <strong>Add to Home screen</strong>.
         </p>
-        <p className="text-xs leading-6 text-[var(--muted)]">
-          The Android install is a Progressive Web App that stores the installed shell on the device rather than a Play Store package.
-        </p>
-        <Link className="font-medium text-[var(--accent)] underline" href="/">
-          Open the mobile web app
-        </Link>
+        <PwaDownloadActions />
       </Card>
 
       <Card className="grid gap-4">
@@ -63,12 +63,7 @@ export default async function DownloadsPage() {
           Open the {APP_NAME} site in Safari on iPhone or iPad, tap the Share button, then choose <strong>Add to Home Screen</strong>.
           iOS uses the apple-touch icon and launches it as a standalone web app.
         </p>
-        <p className="text-xs leading-6 text-[var(--muted)]">
-          The iPhone install is a home-screen web app rather than an App Store package.
-        </p>
-        <Link className="font-medium text-[var(--accent)] underline" href="/">
-          Open the mobile web app
-        </Link>
+        <PwaDownloadActions />
       </Card>
 
       <Card className="grid gap-4">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BetaShell } from "@/components/beta/beta-shell";
+import { PwaDownloadActions } from "@/components/providers/pwa-download-actions";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { canViewAdminConsole, requireBetaSession } from "@/lib/beta-auth";
@@ -56,6 +57,14 @@ export default async function AccountPage() {
             Get your own OpenRouter key
           </Link>
         </div>
+      </Card>
+
+      <Card className="grid gap-4">
+        <h2 className="text-2xl font-semibold">Open or install the app</h2>
+        <p className="text-sm leading-7 text-[var(--muted)]">
+          Use the hosted web workspace right away, or install the phone web app to your home screen if your browser supports it.
+        </p>
+        <PwaDownloadActions />
       </Card>
 
       <Card className="grid gap-4">

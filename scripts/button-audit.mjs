@@ -341,7 +341,7 @@ async function openContextMenuForField(page, locator, labelText, selection = tru
 }
 
 async function waitForInlinePreview(page) {
-  await page.getByTestId("inline-ai-preview").waitFor({ timeout: 180000 });
+  await page.getByTestId("inline-ai-preview").waitFor({ timeout: 300000 });
 }
 
 async function resolveInlinePreview(page, buttonName) {
