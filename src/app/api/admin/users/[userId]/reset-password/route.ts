@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { updateBetaUserBan } from "@/lib/beta-auth";
 import { getHostedSiteUrl } from "@/lib/hosted-beta-config";
+import { resetBetaUserPassword } from "@/lib/beta-auth";
 import { assertSameOrigin } from "@/lib/request-security";
 
 function redirectToAdmin(message: string, key: "success" | "error") {
@@ -16,17 +16,12 @@ export async function POST(
 ) {
   assertSameOrigin(request);
   const formData = await request.formData();
-  const action = String(formData.get("action") ?? "").trim().toLowerCase();
-  const reason = String(formData.get("reason") ?? "");
   const { userId } = await context.params;
 
   try {
-    await updateBetaUserBan(userId, {
-      banned: action === "ban",
-      reason,
-    });
-    return redirectToAdmin(action === "ban" ? "User banned." : "User restored.", "success");
+    await resetBetaUserPassword(userId, String(formData.get("password") ?? ""));
+    return redirectToAdmin("Password reset successfully.", "success");
   } catch (error) {
-    return redirectToAdmin(error instanceof Error ? error.message : "Could not update the user ban.", "error");
+    return redirectToAdmin(error instanceof Error ? error.message : "Could not reset the password.", "error");
   }
 }

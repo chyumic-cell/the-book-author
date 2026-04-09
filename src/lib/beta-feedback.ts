@@ -46,7 +46,7 @@ export async function createFeedbackSubmission(input: { subject: string; message
 }
 
 export async function listFeedbackSubmissions() {
-  await requireBetaSession({ admin: true });
+  await requireBetaSession({ minimumRole: "VIEWER" });
 
   return runHostedBetaQuery(async (sql) => {
     const rows = asRowArray(await sql`

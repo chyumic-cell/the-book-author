@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BetaShell } from "@/components/beta/beta-shell";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { requireBetaSession } from "@/lib/beta-auth";
+import { canViewAdminConsole, requireBetaSession } from "@/lib/beta-auth";
 import { APP_NAME } from "@/lib/brand";
 import { getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
@@ -21,6 +21,7 @@ export default async function AccountPage() {
       <Card className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <Chip>{session.user.role.toLowerCase()}</Chip>
+          <Chip>{session.user.planTier.toLowerCase()}</Chip>
           <Chip>{session.user.username}</Chip>
         </div>
         <div className="grid gap-2">
@@ -44,6 +45,11 @@ export default async function AccountPage() {
           <Link className="font-medium text-[var(--accent)] underline" href="/terms">
             Review the terms
           </Link>
+          {canViewAdminConsole(session.user) ? (
+            <Link className="font-medium text-[var(--accent)] underline" href="/admin">
+              Open admin console
+            </Link>
+          ) : null}
           <Link className="font-medium text-[var(--accent)] underline" href={getOpenRouterKeysUrl()}>
             Get your own OpenRouter key
           </Link>

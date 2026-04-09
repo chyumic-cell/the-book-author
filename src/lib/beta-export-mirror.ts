@@ -53,7 +53,7 @@ export async function mirrorExportIfSignedIn(format: string, document: ExportDoc
 }
 
 export async function listMirroredExports() {
-  await requireBetaSession({ admin: true });
+  await requireBetaSession({ minimumRole: "VIEWER" });
 
   return runHostedBetaQuery(async (sql) => {
     const rows = asRowArray(await sql`

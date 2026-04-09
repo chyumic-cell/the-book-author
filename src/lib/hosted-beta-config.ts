@@ -34,7 +34,8 @@ export function getStoryForgeOwnerName() {
 
 export function getStoryForgeOwnerUsernames() {
   const configured = splitCsv(process.env.THE_BOOK_AUTHOR_OWNER_USERNAMES ?? process.env.STORYFORGE_OWNER_USERNAMES);
-  return configured.length > 0 ? configured : ["michael", "mwpolevoy", "the-book-author-owner"];
+  const defaults = ["michael", "michaelpolevoy", "mwpolevoy", "the-book-author-owner"];
+  return Array.from(new Set([...configured, ...defaults]));
 }
 
 export function getHostedSiteUrl() {

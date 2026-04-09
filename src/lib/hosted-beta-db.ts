@@ -40,7 +40,8 @@ export async function ensureHostedBetaSchema() {
           display_name TEXT NOT NULL,
           password_hash TEXT NOT NULL,
           password_salt TEXT NOT NULL,
-          role TEXT NOT NULL DEFAULT 'USER',
+          role TEXT NOT NULL DEFAULT 'CUSTOMER',
+          plan_tier TEXT NOT NULL DEFAULT 'FREE',
           status TEXT NOT NULL DEFAULT 'ACTIVE',
           terms_version TEXT NOT NULL,
           terms_accepted_at TIMESTAMPTZ NOT NULL,
@@ -50,6 +51,17 @@ export async function ensureHostedBetaSchema() {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           last_login_at TIMESTAMPTZ
         )
+      `;
+
+      await sql`ALTER TABLE beta_users ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'FREE'`;
+      await sql`UPDATE beta_users SET role = 'OWNER' WHERE role = 'ADMIN'`;
+      await sql`UPDATE beta_users SET role = 'CUSTOMER' WHERE role = 'USER'`;
+      await sql`
+        UPDATE beta_users
+        SET plan_tier = CASE
+          WHEN role = 'CUSTOMER' THEN COALESCE(NULLIF(plan_tier, ''), 'FREE')
+          ELSE 'INTERNAL'
+        END
       `;
 
       await sql`

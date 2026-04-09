@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
+import { canViewAdminConsole } from "@/lib/beta-auth";
 import type { BetaSessionRecord } from "@/lib/beta-auth";
 import { APP_NAME } from "@/lib/brand";
 import { getStoryForgeOwnerName } from "@/lib/hosted-beta-config";
@@ -19,7 +20,7 @@ export function BetaShell({
   intro: string;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-6 py-8 lg:px-10">
+    <main className="mx-auto flex h-screen min-h-screen w-full max-w-7xl flex-col gap-6 overflow-y-auto px-6 py-8 lg:px-10">
       <Card className="grid gap-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-2">
@@ -60,7 +61,7 @@ export function BetaShell({
                 >
                   Account
                 </Link>
-                {session.user.role === "ADMIN" ? (
+                {canViewAdminConsole(session.user) ? (
                   <Link
                     className="inline-flex items-center justify-center rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text)] transition hover:border-[color:rgba(var(--accent-rgb),0.35)] hover:bg-[color:var(--panel-soft)]"
                     href="/admin"
