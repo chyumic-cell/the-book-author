@@ -107,7 +107,7 @@ export default async function HomePage() {
 
     return (
       <BetaShell
-        intro={`${APP_NAME} is a local-first writing platform. Use this site to create your account, review the publishing terms, download the desktop build, install the mobile web app, send feedback, and manage access without placing everyone's manuscripts inside one shared cloud library.`}
+        intro={`${APP_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting books with optional AI help. Use this site to sign in, open the web workspace, install the app to your phone home screen, review the publishing terms, and send feedback.`}
         session={session}
         title={<AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.44em]" />}
       >
@@ -126,15 +126,15 @@ export default async function HomePage() {
                 {APP_NAME} is a professional writing environment for planning, outlining, drafting, revising, tracking canon, and exporting full-length books with optional AI assistance.
               </p>
               <p className="text-sm leading-7 text-[var(--muted)]">
-                The hosted site manages access, policy acceptance, downloads, moderation, feedback, and export oversight, while your actual working library is meant to live on your own computer or phone.
+                Sign in to open the live web workspace, install it to your phone home screen, or use the desktop build when you want a local Windows app.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Link
                 className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
-                href={session ? "/downloads" : "/sign-up"}
+                href={session ? "/" : "/sign-up"}
               >
-                {session ? "Open downloads" : "Create account"}
+                {session ? "Open the app" : "Create account"}
               </Link>
               <Link
                 className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"

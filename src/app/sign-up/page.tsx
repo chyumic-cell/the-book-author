@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function SignUpPage() {
   const session = await getOptionalBetaSession();
 
-  return (
+    return (
       <BetaShell
-        intro={`Create an account for ${APP_NAME} to access downloads, support, feedback, and policy-gated features. ${APP_NAME} is designed so user writing data stays on the user's own device rather than inside a shared hosted manuscript database.`}
+        intro={`Create an account for ${APP_NAME} to open the web workspace, install the mobile app, reach downloads and support, and accept the publishing terms before you begin.`}
         session={session}
         title="Create account"
       >

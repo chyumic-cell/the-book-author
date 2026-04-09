@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function SignInPage() {
   const session = await getOptionalBetaSession();
 
-  return (
+    return (
       <BetaShell
-        intro={`Sign in to ${APP_NAME} to access downloads, policies, feedback, and account-managed features while your actual writing data remains on each user's own device.`}
+        intro={`Sign in to ${APP_NAME} to open the web workspace, reach your account tools, install the app to your phone home screen, and manage downloads, policies, and feedback.`}
         session={session}
         title="Sign in"
       >

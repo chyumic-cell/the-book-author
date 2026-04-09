@@ -84,21 +84,21 @@ const defaultSecrets: ProviderSecrets = {
         ? false
         : !REQUIRE_PERSONAL_AI_KEY,
   openai: {
-    apiKey: process.env.OPENAI_API_KEY ?? "",
-    model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+    apiKey: (process.env.OPENAI_API_KEY ?? "").trim(),
+    model: (process.env.OPENAI_MODEL ?? "gpt-4.1-mini").trim(),
   },
   openrouter: {
-    apiKey: process.env.OPENROUTER_API_KEY ?? "",
-    model: process.env.OPENROUTER_MODEL ?? "openrouter/auto",
-    baseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-    siteUrl: process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
-    appName: process.env.OPENROUTER_APP_NAME ?? APP_NAME,
+    apiKey: (process.env.OPENROUTER_API_KEY ?? "").trim(),
+    model: (process.env.OPENROUTER_MODEL ?? "openrouter/auto").trim(),
+    baseUrl: (process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").trim(),
+    siteUrl: (process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000").trim(),
+    appName: (process.env.OPENROUTER_APP_NAME ?? APP_NAME).trim(),
   },
   custom: {
-    apiKey: process.env.CUSTOM_AI_API_KEY ?? "",
-    label: process.env.CUSTOM_AI_LABEL ?? "Custom compatible API",
-    baseUrl: process.env.CUSTOM_AI_BASE_URL ?? "",
-    model: process.env.CUSTOM_AI_MODEL ?? "",
+    apiKey: (process.env.CUSTOM_AI_API_KEY ?? "").trim(),
+    label: (process.env.CUSTOM_AI_LABEL ?? "Custom compatible API").trim(),
+    baseUrl: (process.env.CUSTOM_AI_BASE_URL ?? "").trim(),
+    model: (process.env.CUSTOM_AI_MODEL ?? "").trim(),
   },
 };
 
