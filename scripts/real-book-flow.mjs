@@ -49,8 +49,22 @@ async function signInIfNeeded(page) {
 }
 
 async function requestJson(api, path, init) {
-  const response = await api.fetch(new URL(path, base), init);
-  const payload = await response.json();
+  const response = await api.fetch(new URL(path, base).toString(), init);
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`Empty response from ${path} (${response.status})`);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch (error) {
+    throw new Error(
+      `Non-JSON response from ${path} (${response.status}): ${text.slice(0, 400)}`,
+      { cause: error },
+    );
+  }
+
   if (!response.ok || payload.ok === false) {
     throw new Error(payload?.error || `Request failed: ${response.status}`);
   }
@@ -66,7 +80,7 @@ async function patchProject(api, projectId, patch) {
   const data = await requestJson(api, `/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
+    data: patch,
   });
   return data.project;
 }
@@ -75,7 +89,7 @@ async function patchChapter(api, chapterId, patch) {
   const data = await requestJson(api, `/api/chapters/${chapterId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
+    data: patch,
   });
   return data.project;
 }

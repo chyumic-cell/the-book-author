@@ -736,6 +736,9 @@ export function ChaptersTab({
     }
 
     if (pendingSuggestionTargetRef.current) {
+      if (!pendingSuggestionTarget) {
+        setPendingSuggestionTarget(pendingSuggestionTargetRef.current);
+      }
       return;
     }
 
@@ -753,7 +756,7 @@ export function ChaptersTab({
       applyMode: "replace-draft",
       sourceText,
     });
-  }, [editor, pendingFieldKey, pendingSuggestion]);
+  }, [editor, pendingFieldKey, pendingSuggestion, pendingSuggestionTarget]);
 
   useEffect(() => {
     async function loadModelControls() {
@@ -1086,15 +1089,16 @@ export function ChaptersTab({
   }
 
   function getSuggestionPreview(fieldKey: AssistFieldKey) {
-    if (!pendingSuggestion || !pendingSuggestionTarget || pendingSuggestionTarget.fieldKey !== fieldKey) {
+    const target = pendingSuggestionTarget ?? pendingSuggestionTargetRef.current;
+    if (!pendingSuggestion || !target || target.fieldKey !== fieldKey) {
       return null;
     }
 
     return {
       actionType: pendingSuggestion.run.actionType,
       fieldLabel: FIELD_LABELS[fieldKey],
-      segments: buildInlineSuggestionSegments(pendingSuggestionTarget, pendingSuggestion.run.suggestion),
-      target: pendingSuggestionTarget,
+      segments: buildInlineSuggestionSegments(target, pendingSuggestion.run.suggestion),
+      target,
     };
   }
 
