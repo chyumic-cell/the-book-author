@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     "dist/**",
     "runtime/**",
     ".tmp-pdf/**",
+    "src/generated/**",
   ]),
 ]);
 

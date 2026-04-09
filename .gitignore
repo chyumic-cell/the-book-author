@@ -36,6 +36,7 @@ yarn-error.log*
 next-start.out.log
 next-start.err.log
 .tmp-ai-debug.ts
+.vercel-env*
 
 # local runtime / packaged artifacts
 /runtime/
@@ -43,6 +44,7 @@ next-start.err.log
 /exports/
 /.tools/
 /.tmp-pdf/
+/src/generated/
 /src/app/downloads/*.cmd
 
 # local data

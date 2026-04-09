@@ -1,0 +1,740 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/hosted-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GuidanceIntensity {
+  LIGHT
+  STRONG
+  AGGRESSIVE
+}
+
+enum ChapterStatus {
+  PLANNED
+  OUTLINED
+  DRAFTING
+  COMPLETE
+  REVISED
+}
+
+enum PlotThreadStatus {
+  ACTIVE
+  DORMANT
+  RESOLVED
+}
+
+enum MemoryCategory {
+  CHARACTER
+  RELATIONSHIP
+  WORLD_RULE
+  LOCATION
+  SYSTEM
+  PLOT_POINT
+  TIMELINE
+  THEME
+  THREAD
+  FORESHADOWING
+  TONE_RULE
+  READER_PROMISE
+  SCENE_STATE
+  OBJECT
+  EMOTION
+  CONFLICT
+  MICRO_QUESTION
+}
+
+enum MemoryStatus {
+  ACTIVE
+  CANDIDATE
+  PROMOTED
+  STALE
+  RESOLVED
+}
+
+enum MemorySourceType {
+  USER_AUTHORED
+  EXTRACTED
+  PROMOTED
+  IMPORTED
+  SYSTEM
+}
+
+enum SummaryKind {
+  CORE
+  BRIDGE
+  MEMORY
+}
+
+enum ContinuitySeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ContinuityIssueStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+}
+
+enum AssistMode {
+  FREE_WRITE
+  CO_WRITE
+  FULL_AUTHOR
+  COACH
+}
+
+enum AiRole {
+  GHOSTWRITER
+  COWRITER
+  STORY_DOCTOR
+  DEVELOPMENTAL_EDITOR
+  OUTLINE_ARCHITECT
+  BRAINSTORM_PARTNER
+  WRITING_COACH
+  BETA_READER
+}
+
+enum IdeaEntryType {
+  WHAT_IF
+  CONCEPT
+  CHARACTER_SEED
+  WORLD_SEED
+  PLOT_VARIANT
+  TITLE
+  PITCH
+}
+
+enum NoteStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum WorkingNoteType {
+  SANDBOX
+  IDEA
+  ALT_PLOT
+  UNUSED_SCENE
+  QUESTION
+  RESEARCH
+}
+
+enum StructureBeatType {
+  OPENING_DISTURBANCE
+  FIRST_DOORWAY
+  MIDPOINT
+  SECOND_DOORWAY
+  CLIMAX
+  RESOLUTION
+}
+
+enum StructureBeatStatus {
+  PLANNED
+  LOCKED
+  ACHIEVED
+}
+
+enum SceneOutcomeType {
+  SETBACK
+  PROGRESS
+  REVELATION
+  COMPLICATION
+  DECISION
+  CLIFFHANGER
+}
+
+enum ContinuityCheckMode {
+  QUICK
+  CHAPTER
+  ARC
+  FULL_BOOK
+  PRE_GENERATION
+  POST_GENERATION
+}
+
+enum AssistActionType {
+  CONTINUE
+  EXPAND
+  TIGHTEN
+  REPHRASE
+  IMPROVE_PROSE
+  SHARPEN_VOICE
+  ADD_TENSION
+  ADD_DIALOGUE
+  DESCRIPTION_TO_DIALOGUE
+  CUSTOM_EDIT
+  NEXT_BEATS
+  COACH
+  OUTLINE
+  DRAFT
+  REVISE
+}
+
+enum AssistRunStatus {
+  PREVIEW
+  APPLIED
+  DISCARDED
+}
+
+enum RelationshipKind {
+  ALLY
+  ROMANTIC
+  RIVAL
+  FAMILY
+  MENTOR
+  ENEMY
+  POLITICAL
+  MYSTERY
+}
+
+model Project {
+  id                   String               @id @default(cuid())
+  seriesId             String?
+  seriesOrder          Int?
+  title                String
+  slug                 String               @unique
+  premise              String
+  oneLineHook          String?
+  status               ProjectStatus        @default(ACTIVE)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  series               Series?              @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  bookSettings         BookSettings?
+  styleProfile         StyleProfile?
+  generationPresets    GenerationPreset[]
+  characters           Character[]
+  relationships        Relationship[]
+  locations            Location[]
+  factions             Faction[]
+  timelineEvents       TimelineEvent[]
+  plotThreads          PlotThread[]
+  chapters             Chapter[]
+  chapterSummaries     ChapterSummary[]
+  ideaEntries          IdeaEntry[]
+  workingNotes         WorkingNote[]
+  structureBeats       StructureBeat[]
+  sceneCards           SceneCard[]
+  longTermMemoryItems  LongTermMemoryItem[]
+  shortTermMemoryItems ShortTermMemoryItem[]
+  continuityIssues     ContinuityIssue[]
+  assistRuns           AiAssistRun[]
+}
+
+model Series {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  projects    Project[]
+}
+
+model BookSettings {
+  id                  String   @id @default(cuid())
+  projectId           String   @unique
+  authorName          String   @default("")
+  seriesName          String   @default("")
+  seriesOrder         Int?
+  genre               String
+  tone                String
+  audience            String
+  themes              Json?
+  pointOfView         String
+  tense               String
+  targetChapterLength Int      @default(2200)
+  targetBookLength    Int      @default(90000)
+  storyBrief          String
+  plotDirection       String
+  pacingNotes         String?
+  romanceLevel        Int      @default(2)
+  darknessLevel       Int      @default(2)
+  proseStyle          String?
+  comparableTitles    Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model StyleProfile {
+  id                        String            @id @default(cuid())
+  projectId                 String            @unique
+  guidanceIntensity         GuidanceIntensity @default(STRONG)
+  proseDensity              Int               @default(3)
+  pacing                    Int               @default(3)
+  darkness                  Int               @default(2)
+  romanceIntensity          Int               @default(2)
+  humorLevel                Int               @default(2)
+  actionFrequency           Int               @default(3)
+  mysteryDensity            Int               @default(3)
+  dialogueDescriptionRatio  Int               @default(5)
+  literaryCommercialBalance Int               @default(6)
+  aestheticGuide            String?
+  styleGuide                String?
+  voiceRules                Json?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  project                   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model GenerationPreset {
+  id                        String            @id @default(cuid())
+  projectId                 String
+  name                      String
+  description               String
+  genre                     String
+  proseDensity              Int               @default(3)
+  pacing                    Int               @default(3)
+  darkness                  Int               @default(2)
+  romanceIntensity          Int               @default(2)
+  humorLevel                Int               @default(2)
+  actionFrequency           Int               @default(3)
+  mysteryDensity            Int               @default(3)
+  dialogueDescriptionRatio  Int               @default(5)
+  literaryCommercialBalance Int               @default(6)
+  guidanceIntensity         GuidanceIntensity @default(STRONG)
+  isBuiltIn                 Boolean           @default(false)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  project                   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Character {
+  id                    String                    @id @default(cuid())
+  projectId             String
+  name                  String
+  role                  String?
+  archetype             String?
+  summary               String
+  goal                  String?
+  fear                  String?
+  secret                String?
+  wound                 String?
+  quirks                Json?
+  notes                 String?
+  tags                  Json?
+  quickProfile          Json?
+  dossier               Json?
+  currentState          Json?
+  customFields          Json?
+  pinnedFields          Json?
+  povEligible           Boolean                   @default(false)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  project               Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  outgoingRelationships Relationship[]            @relation("RelationshipSource")
+  incomingRelationships Relationship[]            @relation("RelationshipTarget")
+  povChapters           Chapter[]                 @relation("ChapterPovCharacter")
+  scenePovCards         SceneCard[]               @relation("ScenePovCharacter")
+  longTermLinks         LongTermMemoryCharacter[]
+  shortTermLinks        ShortTermMemoryCharacter[]
+}
+
+model Relationship {
+  id                String           @id @default(cuid())
+  projectId         String
+  sourceCharacterId String
+  targetCharacterId String
+  kind              RelationshipKind
+  description       String
+  tension           String?
+  status            String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  project           Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceCharacter   Character        @relation("RelationshipSource", fields: [sourceCharacterId], references: [id], onDelete: Cascade)
+  targetCharacter   Character        @relation("RelationshipTarget", fields: [targetCharacterId], references: [id], onDelete: Cascade)
+}
+
+model Location {
+  id             String                    @id @default(cuid())
+  projectId      String
+  name           String
+  summary        String
+  atmosphere     String?
+  rules          String?
+  notes          String?
+  tags           Json?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  longTermLinks  LongTermMemoryLocation[]
+  shortTermLinks ShortTermMemoryLocation[]
+}
+
+model Faction {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  summary   String
+  agenda    String?
+  resources String?
+  notes     String?
+  tags      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model TimelineEvent {
+  id              String   @id @default(cuid())
+  projectId       String
+  label           String
+  description     String
+  orderIndex      Int
+  occursAtChapter Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model PlotThread {
+  id                 String                     @id @default(cuid())
+  projectId          String
+  title              String
+  summary            String
+  status             PlotThreadStatus          @default(ACTIVE)
+  heat               Int                       @default(3)
+  promisedPayoff     String?
+  lastTouchedChapter Int?
+  progressMarkers    Json?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  project            Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  longTermLinks      LongTermMemoryPlotThread[]
+  shortTermLinks     ShortTermMemoryPlotThread[]
+}
+
+model Chapter {
+  id                   String                @id @default(cuid())
+  projectId            String
+  number               Int
+  title                String
+  purpose              String
+  povCharacterId       String?
+  currentBeat          String?
+  targetWordCount      Int?
+  keyBeats             Json?
+  requiredInclusions   Json?
+  forbiddenElements    Json?
+  desiredMood          String?
+  sceneList            Json?
+  outline              String?
+  draft                String?
+  notes                String?
+  status               ChapterStatus         @default(PLANNED)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  povCharacter         Character?            @relation("ChapterPovCharacter", fields: [povCharacterId], references: [id], onDelete: SetNull)
+  summaries            ChapterSummary[]
+  workingNotes         WorkingNote[]
+  structureBeats       StructureBeat[]
+  sceneCards           SceneCard[]
+  continuityIssues     ContinuityIssue[]
+  assistRuns           AiAssistRun[]
+  longTermMemoryItems  LongTermMemoryItem[]
+  shortTermMemoryItems ShortTermMemoryItem[]
+
+  @@unique([projectId, number])
+}
+
+model ChapterSummary {
+  id                  String      @id @default(cuid())
+  projectId           String
+  chapterId           String
+  kind                SummaryKind @default(CORE)
+  summary             String
+  bridgeText          String?
+  emotionalTone       String?
+  unresolvedQuestions Json?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  project             Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapter             Chapter     @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+model LongTermMemoryItem {
+  id               String                    @id @default(cuid())
+  projectId        String
+  relatedChapterId String?
+  title            String
+  content          String
+  category         MemoryCategory
+  tags             Json?
+  relevanceScore   Float                     @default(0.5)
+  durabilityScore  Float                     @default(0.5)
+  status           MemoryStatus              @default(ACTIVE)
+  sourceType       MemorySourceType          @default(EXTRACTED)
+  promotionReason  String?
+  timesReinforced  Int                       @default(0)
+  isPinned         Boolean                   @default(false)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  project          Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  relatedChapter   Chapter?                  @relation(fields: [relatedChapterId], references: [id], onDelete: SetNull)
+  characters       LongTermMemoryCharacter[]
+  locations        LongTermMemoryLocation[]
+  plotThreads      LongTermMemoryPlotThread[]
+}
+
+model ShortTermMemoryItem {
+  id               String                     @id @default(cuid())
+  projectId        String
+  relatedChapterId String?
+  title            String
+  content          String
+  category         MemoryCategory
+  tags             Json?
+  relevanceScore   Float                      @default(0.5)
+  durabilityScore  Float                      @default(0.4)
+  status           MemoryStatus               @default(CANDIDATE)
+  sourceType       MemorySourceType           @default(EXTRACTED)
+  promotionReason  String?
+  timesReinforced  Int                        @default(0)
+  isPinned         Boolean                    @default(false)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  project          Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  relatedChapter   Chapter?                   @relation(fields: [relatedChapterId], references: [id], onDelete: SetNull)
+  characters       ShortTermMemoryCharacter[]
+  locations        ShortTermMemoryLocation[]
+  plotThreads      ShortTermMemoryPlotThread[]
+}
+
+model LongTermMemoryCharacter {
+  memoryItemId String
+  characterId  String
+  memoryItem   LongTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  character    Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, characterId])
+}
+
+model LongTermMemoryLocation {
+  memoryItemId String
+  locationId   String
+  memoryItem   LongTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  location     Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, locationId])
+}
+
+model LongTermMemoryPlotThread {
+  memoryItemId String
+  plotThreadId String
+  memoryItem   LongTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  plotThread   PlotThread         @relation(fields: [plotThreadId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, plotThreadId])
+}
+
+model ShortTermMemoryCharacter {
+  memoryItemId String
+  characterId  String
+  memoryItem   ShortTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  character    Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, characterId])
+}
+
+model ShortTermMemoryLocation {
+  memoryItemId String
+  locationId   String
+  memoryItem   ShortTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  location     Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, locationId])
+}
+
+model ShortTermMemoryPlotThread {
+  memoryItemId String
+  plotThreadId String
+  memoryItem   ShortTermMemoryItem @relation(fields: [memoryItemId], references: [id], onDelete: Cascade)
+  plotThread   PlotThread          @relation(fields: [plotThreadId], references: [id], onDelete: Cascade)
+
+  @@id([memoryItemId, plotThreadId])
+}
+
+model ContinuityIssue {
+  id               String                @id @default(cuid())
+  projectId        String
+  chapterId        String?
+  severity         ContinuitySeverity
+  confidence       Float                 @default(0.55)
+  checkMode        ContinuityCheckMode   @default(CHAPTER)
+  issueType        String
+  title            String
+  description      String
+  explanation      String?
+  suggestedContext String?
+  relatedEntity    String?
+  affectedElements Json?
+  status           ContinuityIssueStatus @default(OPEN)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapter          Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+}
+
+model AiAssistRun {
+  id            String          @id @default(cuid())
+  projectId     String
+  chapterId     String
+  mode          AssistMode
+  role          AiRole          @default(COWRITER)
+  actionType    AssistActionType
+  selectionText String?
+  instruction   String?
+  contextNote   String?
+  suggestion    String
+  status        AssistRunStatus @default(PREVIEW)
+  appliedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapter       Chapter         @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+model IdeaEntry {
+  id         String        @id @default(cuid())
+  projectId  String
+  title      String
+  content    String
+  type       IdeaEntryType @default(CONCEPT)
+  status     NoteStatus    @default(ACTIVE)
+  source     String?
+  tags       Json?
+  isFavorite Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model WorkingNote {
+  id             String          @id @default(cuid())
+  projectId      String
+  linkedChapterId String?
+  title          String
+  content        String
+  type           WorkingNoteType @default(SANDBOX)
+  status         NoteStatus      @default(ACTIVE)
+  tags           Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  linkedChapter  Chapter?        @relation(fields: [linkedChapterId], references: [id], onDelete: SetNull)
+}
+
+model StructureBeat {
+  id          String              @id @default(cuid())
+  projectId   String
+  chapterId   String?
+  type        StructureBeatType
+  label       String
+  description String
+  notes       String?
+  status      StructureBeatStatus @default(PLANNED)
+  orderIndex  Int
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapter     Chapter?            @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+}
+
+model SceneCard {
+  id            String           @id @default(cuid())
+  projectId     String
+  chapterId     String?
+  povCharacterId String?
+  title         String
+  summary       String?
+  goal          String?
+  conflict      String?
+  outcome       String?
+  outcomeType   SceneOutcomeType?
+  locationHint  String?
+  orderIndex    Int
+  frozen        Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapter       Chapter?         @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  povCharacter  Character?       @relation("ScenePovCharacter", fields: [povCharacterId], references: [id], onDelete: SetNull)
+}
+
+model HostedBetaUser {
+  id                  String                     @id
+  username            String                     @unique
+  displayName         String                     @map("display_name")
+  passwordHash        String                     @map("password_hash")
+  passwordSalt        String                     @map("password_salt")
+  role                String                     @default("CUSTOMER")
+  planTier            String                     @default("FREE") @map("plan_tier")
+  status              String                     @default("ACTIVE")
+  termsVersion        String                     @map("terms_version")
+  termsAcceptedAt     DateTime                   @map("terms_accepted_at")
+  banReason           String?                    @map("ban_reason")
+  bannedAt            DateTime?                  @map("banned_at")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+  lastLoginAt         DateTime?                  @map("last_login_at")
+  sessions            HostedBetaSession[]
+  feedbackSubmissions HostedFeedbackSubmission[]
+  exportMirrors       HostedExportMirror[]
+
+  @@map("beta_users")
+}
+
+model HostedBetaSession {
+  id         String         @id
+  userId     String         @map("user_id")
+  tokenHash  String         @unique @map("token_hash")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  expiresAt  DateTime       @map("expires_at")
+  lastSeenAt DateTime       @default(now()) @map("last_seen_at")
+  user       HostedBetaUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_beta_sessions_user_id")
+  @@map("beta_sessions")
+}
+
+model HostedFeedbackSubmission {
+  id               String          @id
+  userId           String?         @map("user_id")
+  usernameSnapshot String          @map("username_snapshot")
+  subject          String
+  message          String
+  status           String          @default("OPEN")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  user             HostedBetaUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_feedback_submissions_user_id")
+  @@map("feedback_submissions")
+}
+
+model HostedExportMirror {
+  id               String          @id
+  userId           String?         @map("user_id")
+  usernameSnapshot String          @map("username_snapshot")
+  exportFormat     String          @map("export_format")
+  bookTitle        String          @map("book_title")
+  authorName       String          @map("author_name")
+  backCoverSummary String          @map("back_cover_summary")
+  exportPayloadJson String         @map("export_payload_json")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  user             HostedBetaUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_export_mirrors_user_id")
+  @@map("export_mirrors")
+}
