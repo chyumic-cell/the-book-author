@@ -572,6 +572,7 @@ export function ChaptersTab({
     fieldKey: "draft",
   });
   const pendingSuggestionTargetRef = useRef<PendingSuggestionTarget | null>(null);
+  const localClipboardRef = useRef("");
 
   const selectedChapter =
     project.chapters.find((chapter) => chapter.id === selectedChapterId) ??
@@ -909,13 +910,17 @@ export function ChaptersTab({
       return;
     }
 
+    const selectedText = getFieldValue(selectionRange.fieldKey).slice(
+      selectionRange.selectionStart,
+      selectionRange.selectionEnd,
+    );
+    localClipboardRef.current = selectedText;
+
     try {
-      await navigator.clipboard.writeText(
-        getFieldValue(selectionRange.fieldKey).slice(selectionRange.selectionStart, selectionRange.selectionEnd),
-      );
+      await navigator.clipboard.writeText(selectedText);
       toast.success("Selection copied.");
     } catch {
-      toast.error("Clipboard copy was blocked by the browser.");
+      toast.success("Selection copied inside the app.");
     } finally {
       setContextMenu(null);
     }
@@ -926,11 +931,15 @@ export function ChaptersTab({
       return;
     }
 
+    const selectedText = getFieldValue(selectionRange.fieldKey).slice(
+      selectionRange.selectionStart,
+      selectionRange.selectionEnd,
+    );
+    localClipboardRef.current = selectedText;
+
     try {
       const currentValue = getFieldValue(selectionRange.fieldKey);
-      await navigator.clipboard.writeText(
-        currentValue.slice(selectionRange.selectionStart, selectionRange.selectionEnd),
-      );
+      await navigator.clipboard.writeText(selectedText);
       const nextValue =
         currentValue.slice(0, selectionRange.selectionStart) + currentValue.slice(selectionRange.selectionEnd);
       onEditorChange({ [selectionRange.fieldKey]: nextValue } as Partial<EditorState>);
@@ -948,15 +957,48 @@ export function ChaptersTab({
       });
       toast.success("Selection cut.");
     } catch {
-      toast.error("Clipboard cut was blocked by the browser.");
+      const currentValue = getFieldValue(selectionRange.fieldKey);
+      const nextValue =
+        currentValue.slice(0, selectionRange.selectionStart) + currentValue.slice(selectionRange.selectionEnd);
+      onEditorChange({ [selectionRange.fieldKey]: nextValue } as Partial<EditorState>);
+      setSelectionRange({
+        fieldKey: selectionRange.fieldKey,
+        selectionStart: selectionRange.selectionStart,
+        selectionEnd: selectionRange.selectionStart,
+      });
+      window.requestAnimationFrame(() => {
+        restoreSelection({
+          fieldKey: selectionRange.fieldKey,
+          selectionStart: selectionRange.selectionStart,
+          selectionEnd: selectionRange.selectionStart,
+        });
+      });
+      toast.success("Selection cut inside the app.");
     } finally {
       setContextMenu(null);
     }
   }
 
   async function pasteClipboard() {
+    let clipboardText = localClipboardRef.current;
+
     try {
-      const clipboardText = await navigator.clipboard.readText();
+      const systemClipboard = await navigator.clipboard.readText();
+      if (systemClipboard) {
+        clipboardText = systemClipboard;
+        localClipboardRef.current = systemClipboard;
+      }
+    } catch {
+      // Fall back to the app-local clipboard when the browser blocks system clipboard access.
+    }
+
+    if (!clipboardText) {
+      toast.error("Clipboard paste was blocked by the browser and the app clipboard is empty.");
+      setContextMenu(null);
+      return;
+    }
+
+    try {
       const currentValue = getFieldValue(selectionRange.fieldKey);
       const nextValue =
         currentValue.slice(0, selectionRange.selectionStart) +
@@ -974,7 +1016,7 @@ export function ChaptersTab({
       });
       toast.success("Clipboard pasted.");
     } catch {
-      toast.error("Clipboard paste was blocked by the browser.");
+      toast.error("Clipboard paste failed.");
     } finally {
       setContextMenu(null);
     }
