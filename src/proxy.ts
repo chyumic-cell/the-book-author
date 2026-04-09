@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { APP_NAME } from "@/lib/brand";
 
 function isHostedBetaEnabled() {
-  return process.env.STORYFORGE_HOSTED_BETA === "true";
+  return (process.env.THE_BOOK_AUTHOR_HOSTED_BETA ?? process.env.STORYFORGE_HOSTED_BETA)?.trim() === "true";
 }
 
 function isBlockedHostedPath(pathname: string) {

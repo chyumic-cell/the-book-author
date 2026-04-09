@@ -11,7 +11,7 @@ function splitCsv(value: string | undefined) {
 }
 
 export function isHostedBetaEnabled() {
-  return (process.env.THE_BOOK_AUTHOR_HOSTED_BETA ?? process.env.STORYFORGE_HOSTED_BETA) === "true";
+  return (process.env.THE_BOOK_AUTHOR_HOSTED_BETA ?? process.env.STORYFORGE_HOSTED_BETA)?.trim() === "true";
 }
 
 export function getHostedBetaDatabaseUrl() {
