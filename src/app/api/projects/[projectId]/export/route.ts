@@ -1,6 +1,6 @@
 import { mirrorExportIfSignedIn } from "@/lib/beta-export-mirror";
 import { APP_NAME } from "@/lib/brand";
-import { buildExportDocument, exportProject } from "@/lib/export";
+import { buildExportDocumentFromProject, exportProjectWorkspace } from "@/lib/export";
 import { fail } from "@/lib/api";
 
 export async function GET(
@@ -18,11 +18,29 @@ export async function GET(
       requestedFormat === "epub"
         ? requestedFormat
         : "md";
+    const projectResponse = await fetch(new URL(`/api/projects/${projectId}`, request.url), {
+      headers: {
+        cookie: request.headers.get("cookie") ?? "",
+      },
+      cache: "no-store",
+    });
+    const projectPayload = await projectResponse.json().catch(() => null);
+    const project = projectPayload?.data?.project;
+
+    if (!projectResponse.ok || !project) {
+      return fail(
+        typeof projectPayload?.error === "string" && projectPayload.error
+          ? projectPayload.error
+          : "Project not found.",
+        projectResponse.status === 404 ? 404 : 400,
+      );
+    }
+
     if (format !== "json") {
-      const document = await buildExportDocument(projectId);
+      const document = buildExportDocumentFromProject(project);
       await mirrorExportIfSignedIn(format, document);
     }
-    const content = await exportProject(projectId, format);
+    const content = await exportProjectWorkspace(project, format);
     const body = typeof content === "string" ? content : new Uint8Array(content);
 
     return new Response(body, {

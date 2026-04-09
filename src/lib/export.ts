@@ -119,6 +119,278 @@ function renderHtmlParagraphs(content: string) {
     .join("");
 }
 
+type InlineRun = {
+  text: string;
+  italic: boolean;
+};
+
+type WrappedLine = {
+  runs: InlineRun[];
+  width: number;
+  wordCount: number;
+};
+
+function parseInlineRuns(value: string): InlineRun[] {
+  const matches = [...value.matchAll(/\*(.+?)\*/g)];
+  if (matches.length === 0) {
+    return value ? [{ text: value, italic: false }] : [];
+  }
+
+  const runs: InlineRun[] = [];
+  let index = 0;
+
+  for (const match of matches) {
+    const matchIndex = match.index ?? 0;
+    if (matchIndex > index) {
+      runs.push({ text: value.slice(index, matchIndex), italic: false });
+    }
+    runs.push({ text: match[1], italic: true });
+    index = matchIndex + match[0].length;
+  }
+
+  if (index < value.length) {
+    runs.push({ text: value.slice(index), italic: false });
+  }
+
+  return runs.filter((run) => run.text.length > 0);
+}
+
+function measureRuns(
+  runs: InlineRun[],
+  fonts: { regular: { widthOfTextAtSize: (text: string, size: number) => number }; italic: { widthOfTextAtSize: (text: string, size: number) => number } },
+  fontSize: number,
+) {
+  return runs.reduce((total, run) => {
+    const font = run.italic ? fonts.italic : fonts.regular;
+    return total + font.widthOfTextAtSize(run.text, fontSize);
+  }, 0);
+}
+
+function wrapInlineRuns(
+  runs: InlineRun[],
+  fonts: { regular: { widthOfTextAtSize: (text: string, size: number) => number }; italic: { widthOfTextAtSize: (text: string, size: number) => number } },
+  fontSize: number,
+  maxWidth: number,
+) {
+  const tokens = runs.flatMap((run) => {
+    const pieces = run.text.match(/\S+\s*|\s+/g) ?? [];
+    return pieces.map((piece) => ({
+      text: piece,
+      italic: run.italic,
+      whitespaceOnly: piece.trim().length === 0,
+    }));
+  });
+
+  const lines: WrappedLine[] = [];
+  let current: InlineRun[] = [];
+  let currentWidth = 0;
+  let currentWordCount = 0;
+
+  for (const token of tokens) {
+    const font = token.italic ? fonts.italic : fonts.regular;
+    const tokenWidth = font.widthOfTextAtSize(token.text, fontSize);
+    const nextWidth = currentWidth + tokenWidth;
+
+    if (!token.whitespaceOnly && current.length > 0 && nextWidth > maxWidth) {
+      while (current.length > 0 && current[current.length - 1].text.trim().length === 0) {
+        const trailing = current.pop();
+        if (trailing) {
+          const trailingFont = trailing.italic ? fonts.italic : fonts.regular;
+          currentWidth -= trailingFont.widthOfTextAtSize(trailing.text, fontSize);
+        }
+      }
+
+      lines.push({ runs: current, width: currentWidth, wordCount: currentWordCount });
+      current = [];
+      currentWidth = 0;
+      currentWordCount = 0;
+    }
+
+    if (token.whitespaceOnly && current.length === 0) {
+      continue;
+    }
+
+    current.push({ text: token.text, italic: token.italic });
+    currentWidth += tokenWidth;
+    if (!token.whitespaceOnly) {
+      currentWordCount += 1;
+    }
+  }
+
+  while (current.length > 0 && current[current.length - 1].text.trim().length === 0) {
+    const trailing = current.pop();
+    if (trailing) {
+      const trailingFont = trailing.italic ? fonts.italic : fonts.regular;
+      currentWidth -= trailingFont.widthOfTextAtSize(trailing.text, fontSize);
+    }
+  }
+
+  if (current.length > 0) {
+    lines.push({ runs: current, width: currentWidth, wordCount: currentWordCount });
+  }
+
+  return lines;
+}
+
+async function buildPdf(document: ExportDocument) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const pdf = await PDFDocument.create();
+  const regular = await pdf.embedFont(StandardFonts.TimesRoman);
+  const bold = await pdf.embedFont(StandardFonts.TimesRomanBold);
+  const italic = await pdf.embedFont(StandardFonts.TimesRomanItalic);
+  const fonts = { regular, italic };
+  const pageSize = { width: 595.28, height: 841.89 };
+  const margin = 60;
+  const bodyFontSize = 12;
+  const bodyLeading = 19;
+  const sectionGap = 18;
+  const paragraphGap = 8;
+  const chapterGap = 28;
+  const textWidth = pageSize.width - margin * 2;
+
+  let page = pdf.addPage([pageSize.width, pageSize.height]);
+  let cursorY = pageSize.height - margin;
+
+  const startNewPage = () => {
+    page = pdf.addPage([pageSize.width, pageSize.height]);
+    cursorY = pageSize.height - margin;
+  };
+
+  const ensureSpace = (heightNeeded: number) => {
+    if (cursorY - heightNeeded < margin) {
+      startNewPage();
+    }
+  };
+
+  const drawRuns = (
+    y: number,
+    runs: InlineRun[],
+    options?: { justifyToWidth?: number; lineWidth?: number; isLastLine?: boolean; x?: number },
+  ) => {
+    const xStart = options?.x ?? margin;
+    const justifyToWidth = options?.justifyToWidth ?? textWidth;
+    const lineWidth = options?.lineWidth ?? measureRuns(runs, fonts, bodyFontSize);
+    const words = runs.flatMap((run) => run.text.match(/\S+\s*|\s+/g) ?? []).filter((piece) => piece.trim().length > 0).length;
+    const justify =
+      !options?.isLastLine &&
+      words > 1 &&
+      lineWidth < justifyToWidth - 6;
+
+    const extraPerGap = justify ? (justifyToWidth - lineWidth) / (words - 1) : 0;
+    let x = xStart;
+    let wordsSeen = 0;
+
+    for (const run of runs) {
+      const parts = run.text.match(/\S+\s*|\s+/g) ?? [run.text];
+      for (const part of parts) {
+        if (!part) {
+          continue;
+        }
+
+        const font = run.italic ? italic : regular;
+        const text = part.replace(/\s+$/g, justify ? "" : " ");
+        if (text) {
+          page.drawText(text, {
+            x,
+            y,
+            size: bodyFontSize,
+            font,
+            color: rgb(0.12, 0.12, 0.12),
+          });
+          x += font.widthOfTextAtSize(text, bodyFontSize);
+        }
+
+        const trailingSpaces = part.match(/\s+$/)?.[0] ?? "";
+        if (trailingSpaces && !justify) {
+          x += font.widthOfTextAtSize(trailingSpaces, bodyFontSize);
+        }
+
+        if (part.trim().length > 0) {
+          wordsSeen += 1;
+          if (justify && wordsSeen < words) {
+            x += extraPerGap;
+          }
+        }
+      }
+    }
+  };
+
+  const drawParagraph = (paragraph: string, options?: { italic?: boolean; firstLineIndent?: number }) => {
+    const indent = options?.firstLineIndent ?? 18;
+    const paragraphRuns = options?.italic
+      ? [{ text: paragraph, italic: true }]
+      : parseInlineRuns(paragraph);
+    const firstLineWidth = textWidth - indent;
+    const firstLine = wrapInlineRuns(paragraphRuns, fonts, bodyFontSize, firstLineWidth);
+    const remainingText = firstLine.length <= 1
+      ? []
+      : wrapInlineRuns(
+          firstLine.slice(1).flatMap((line) => line.runs),
+          fonts,
+          bodyFontSize,
+          textWidth,
+        );
+
+    const lines = firstLine.length <= 1 ? firstLine : [firstLine[0], ...remainingText];
+    const heightNeeded = lines.length * bodyLeading + paragraphGap;
+    ensureSpace(heightNeeded);
+
+    lines.forEach((line, index) => {
+      const x = margin + (index === 0 ? indent : 0);
+      const justifyWidth = textWidth - (index === 0 ? indent : 0);
+      drawRuns(cursorY, line.runs, {
+        justifyToWidth: justifyWidth,
+        lineWidth: line.width,
+        isLastLine: index === lines.length - 1,
+        x,
+      });
+      cursorY -= bodyLeading;
+    });
+
+    cursorY -= paragraphGap;
+  };
+
+  const drawHeading = (text: string, size: number, font = bold, gapAfter = 14) => {
+    ensureSpace(size + gapAfter + 10);
+    page.drawText(text, {
+      x: margin,
+      y: cursorY,
+      size,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    cursorY -= size + gapAfter;
+  };
+
+  drawHeading(document.title, 24, bold, 18);
+  page.drawText(`by ${document.authorName}`, {
+    x: margin,
+    y: cursorY,
+    size: 13,
+    font: bold,
+    color: rgb(0.14, 0.14, 0.14),
+  });
+  cursorY -= 28;
+  drawParagraph(document.backCoverSummary, { firstLineIndent: 0 });
+  drawParagraph(document.copyrightNotice, { firstLineIndent: 0 });
+  cursorY -= sectionGap;
+
+  for (const chapter of document.chapters) {
+    if (cursorY < pageSize.height - margin - 120) {
+      startNewPage();
+    }
+
+    drawHeading(`Chapter ${chapter.number}: ${chapter.title}`, 16, bold, 16);
+    const paragraphs = chapter.content.split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean);
+    for (const paragraph of paragraphs) {
+      drawParagraph(paragraph);
+    }
+    cursorY -= chapterGap;
+  }
+
+  return pdf.save();
+}
+
 function renderXhtmlParagraphs(content: string) {
   return content
     .split(/\n{2,}/)
@@ -327,12 +599,7 @@ p:first-of-type {
   return createZipArchive(entries);
 }
 
-export async function buildExportDocument(projectId: string): Promise<ExportDocument> {
-  const project = await getProjectWorkspace(projectId);
-  if (!project) {
-    throw new Error("Project not found.");
-  }
-
+export function buildExportDocumentFromProject(project: ProjectWorkspace): ExportDocument {
   const previousChapterDrafts: string[] = [];
 
   return {
@@ -361,6 +628,15 @@ export async function buildExportDocument(projectId: string): Promise<ExportDocu
       };
     }),
   };
+}
+
+export async function buildExportDocument(projectId: string): Promise<ExportDocument> {
+  const project = await getProjectWorkspace(projectId);
+  if (!project) {
+    throw new Error("Project not found.");
+  }
+
+  return buildExportDocumentFromProject(project);
 }
 
 export function buildExportHtml(document: ExportDocument) {
@@ -439,40 +715,18 @@ export function buildExportHtml(document: ExportDocument) {
   `;
 }
 
-export async function exportProject(projectId: string, format: "md" | "txt" | "json" | "pdf" | "epub") {
-  const project = await getProjectWorkspace(projectId);
-  if (!project) {
-    throw new Error("Project not found.");
-  }
-
+export async function exportProjectWorkspace(
+  project: ProjectWorkspace,
+  format: "md" | "txt" | "json" | "pdf" | "epub",
+) {
   if (format === "json") {
     return JSON.stringify(project, null, 2);
   }
 
-  const document = await buildExportDocument(projectId);
+  const document = buildExportDocumentFromProject(project);
 
   if (format === "pdf") {
-    const html = buildExportHtml(document);
-    const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ channel: "msedge", headless: true });
-
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "load" });
-      const pdf = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: {
-          top: "0.85in",
-          right: "0.85in",
-          bottom: "0.85in",
-          left: "0.85in",
-        },
-      });
-      return pdf;
-    } finally {
-      await browser.close();
-    }
+    return buildPdf(document);
   }
 
   if (format === "epub") {
@@ -514,4 +768,13 @@ export async function exportProject(projectId: string, format: "md" | "txt" | "j
       "",
     ]),
   ].join("\n");
+}
+
+export async function exportProject(projectId: string, format: "md" | "txt" | "json" | "pdf" | "epub") {
+  const project = await getProjectWorkspace(projectId);
+  if (!project) {
+    throw new Error("Project not found.");
+  }
+
+  return exportProjectWorkspace(project, format);
 }
