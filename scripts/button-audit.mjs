@@ -71,7 +71,6 @@ function ribbonLink(page, text) {
 }
 
 async function openAuditProject(page, projectUrl) {
-  await signInIfNeeded(page);
   await page.goto(projectUrl, { waitUntil: "networkidle" });
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
@@ -163,10 +162,15 @@ async function testFileRibbon(page, projectUrl) {
         response.request().method() === "GET",
       { timeout: 30000 },
     );
+    const downloadPromise = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
     await link.evaluate((node) => node.click());
     const response = await responsePromise;
     assert.equal(response.ok(), true, `${label} export did not return success`);
-    await openAuditProject(page, projectUrl);
+    await downloadPromise;
+    await pagePause(600);
+    if (!/\/projects\//.test(page.url())) {
+      await openAuditProject(page, projectUrl);
+    }
     await openRibbon(page, "File");
   }
 
@@ -516,6 +520,8 @@ async function testCopilot(page) {
 
 async function exerciseEditableSection(page, testId) {
   const section = page.getByTestId(testId);
+  await section.waitFor({ state: "attached", timeout: 20000 });
+  await section.scrollIntoViewIfNeeded();
   await section.waitFor({ state: "visible", timeout: 20000 });
 
   await jsClick(section.getByRole("button", { name: "Expand all", exact: true }));
