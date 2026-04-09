@@ -13,16 +13,18 @@ export const dynamic = "force-dynamic";
 
 const OWNER_ROLE_OPTIONS: BetaUserRole[] = ["OWNER", "MANAGER", "VIEWER", "CUSTOMER"];
 const MANAGER_ROLE_OPTIONS: BetaUserRole[] = ["VIEWER", "CUSTOMER"];
+const ADMIN_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
 
 function formatDate(value: string) {
   if (!value) {
     return "";
   }
 
-  return new Date(value).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return ADMIN_DATE_FORMATTER.format(new Date(value));
 }
 
 function roleOptionsFor(role: BetaUserRole) {

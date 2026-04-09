@@ -3,9 +3,32 @@ import { chromium } from "playwright";
 
 const base = process.env.STORYFORGE_BASE_URL ?? "http://localhost:3000";
 const preferredProjectTitle = process.env.STORYFORGE_AUDIT_PROJECT_TITLE ?? "The Glass Meridian";
+const authUsername = process.env.STORYFORGE_USERNAME?.trim() ?? "";
+const authPassword = process.env.STORYFORGE_PASSWORD?.trim() ?? "";
 
-async function listProjects() {
-  const response = await fetch(`${base}/api/projects`);
+async function signInIfNeeded(page) {
+  if (!authUsername || !authPassword) {
+    return;
+  }
+
+  await page.goto(new URL("/sign-in", base).toString(), { waitUntil: "networkidle" });
+  if ((await page.locator('a[href="/projects/new"]').count()) > 0) {
+    return;
+  }
+  await page.getByLabel("Username").fill(authUsername);
+  await page.getByLabel("Password").fill(authPassword);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/auth/sign-in") && response.request().method() === "POST", {
+      timeout: 30000,
+    }),
+    page.getByRole("button", { name: "Sign in", exact: true }).click(),
+  ]);
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.locator('a[href="/projects/new"]').first().waitFor({ timeout: 30000 });
+}
+
+async function listProjects(api) {
+  const response = await api.get(`${base}/api/projects`);
   if (!response.ok) {
     throw new Error(`Could not load projects: ${response.status}`);
   }
@@ -14,15 +37,16 @@ async function listProjects() {
   return payload.data.projects;
 }
 
-async function resolveAuditProjectUrl() {
-  const projects = await listProjects();
+async function resolveAuditProjectUrl(page) {
+  await signInIfNeeded(page);
+  const projects = await listProjects(page.context().request);
   const project =
     projects.find((entry) => entry.title === preferredProjectTitle) ??
     projects.find((entry) => entry.title === "The Pantless Seal") ??
     projects[0];
 
   if (!project) {
-    throw new Error("No The Book Author projects are available for the button audit.");
+    return createAuditProject(page);
   }
 
   return `${base}/projects/${project.id}`;
@@ -47,6 +71,7 @@ function ribbonLink(page, text) {
 }
 
 async function openAuditProject(page, projectUrl) {
+  await signInIfNeeded(page);
   await page.goto(projectUrl, { waitUntil: "networkidle" });
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
@@ -91,7 +116,7 @@ async function setRibbonToggle(page, showLabel, hideLabel, shouldBeVisible) {
 
 async function createAuditProject(page) {
   await page.goto(base, { waitUntil: "networkidle" });
-  await page.getByRole("link", { name: /start a new book/i }).click();
+  await page.locator('a[href="/projects/new"]').first().click();
   await page.waitForURL(/\/projects\/new/, { timeout: 30000 });
 
   const stamp = Date.now();
@@ -633,13 +658,22 @@ async function testStoryBible(page) {
 
 async function testMemory(page) {
   await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Chapter Summary").first());
-  await page.getByRole("heading", { name: "Short-term memory", exact: true }).waitFor({ timeout: 20000 });
-  const promoteButtons = page.getByRole("button", { name: "Promote to long-term", exact: true });
-  if ((await promoteButtons.count()) > 0) {
-    await jsClick(promoteButtons.first());
-    await pagePause(800);
-  }
+  await jsClick(ribbonButton(page, "Summarize").first());
+  await pagePause(2000);
+  await openRibbon(page, "Review");
+  await jsClick(ribbonButton(page, "Extract Memory").first());
+  await pagePause(3000);
+
+  const projectId = page.url().split("/projects/")[1]?.split(/[?#]/)[0];
+  assert.ok(projectId, "Could not resolve project id for memory verification");
+  const response = await page.context().request.get(`${base}/api/projects/${projectId}`);
+  assert.equal(response.ok(), true, "Could not load project after memory extraction");
+  const payload = await response.json();
+  const project = payload.data.project;
+  assert.ok(
+    (project.shortTermMemoryItems?.length ?? 0) + (project.longTermMemoryItems?.length ?? 0) > 0,
+    "Memory extraction did not populate any memory items",
+  );
 }
 
 async function testContinuity(page) {
@@ -709,7 +743,7 @@ async function main() {
     }
   });
 
-  let projectUrl = await resolveAuditProjectUrl();
+  let projectUrl = await resolveAuditProjectUrl(page);
 
   try {
     console.log("AUDIT_STEP create project");

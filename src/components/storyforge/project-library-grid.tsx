@@ -11,6 +11,11 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { APP_NAME } from "@/lib/brand";
 
+const PROJECT_UPDATED_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeZone: "UTC",
+});
+
 type ProjectSummary = {
   id: string;
   title: string;
@@ -80,7 +85,7 @@ export function ProjectLibraryGrid({
 
           <div className="flex flex-wrap gap-2 text-xs text-[var(--muted)]">
             <Chip className="text-[var(--muted)]">{project.continuityIssues.length} open continuity checks</Chip>
-            <Chip className="text-[var(--muted)]">Updated {new Date(project.updatedAt).toLocaleDateString()}</Chip>
+            <Chip className="text-[var(--muted)]">Updated {PROJECT_UPDATED_FORMATTER.format(new Date(project.updatedAt))}</Chip>
             {project.series ? (
               <Chip className="text-[var(--muted)]">
                 {`${project.series.name}${project.seriesOrder ? ` - Book ${project.seriesOrder}` : ""}`}

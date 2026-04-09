@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { chromium, devices } from "playwright";
 
 const base = process.env.STORYFORGE_BASE_URL ?? "http://localhost:3000";
+const authUsername = process.env.STORYFORGE_USERNAME?.trim() ?? "";
+const authPassword = process.env.STORYFORGE_PASSWORD?.trim() ?? "";
 
 async function pagePause(ms = 500) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,8 +27,29 @@ function ribbonLink(page, text) {
   return page.getByTestId("workspace-ribbon-content").locator(`a:has-text("${text}")`).first();
 }
 
-async function requestJson(path, init) {
-  const response = await fetch(new URL(path, base), init);
+async function signInIfNeeded(page) {
+  if (!authUsername || !authPassword) {
+    return;
+  }
+
+  await page.goto(new URL("/sign-in", base).toString(), { waitUntil: "networkidle" });
+  if ((await page.locator('a[href="/projects/new"]').count()) > 0) {
+    return;
+  }
+  await page.getByLabel("Username").fill(authUsername);
+  await page.getByLabel("Password").fill(authPassword);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/auth/sign-in") && response.request().method() === "POST", {
+      timeout: 30000,
+    }),
+    page.getByRole("button", { name: "Sign in", exact: true }).click(),
+  ]);
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.locator('a[href="/projects/new"]').first().waitFor({ timeout: 30000 });
+}
+
+async function requestJson(api, path, init) {
+  const response = await api.fetch(new URL(path, base), init);
   const payload = await response.json();
   if (!response.ok || payload.ok === false) {
     throw new Error(payload?.error || `Request failed: ${response.status}`);
@@ -34,13 +57,13 @@ async function requestJson(path, init) {
   return payload.data;
 }
 
-async function getProject(projectId) {
-  const data = await requestJson(`/api/projects/${projectId}`);
+async function getProject(api, projectId) {
+  const data = await requestJson(api, `/api/projects/${projectId}`);
   return data.project;
 }
 
-async function patchProject(projectId, patch) {
-  const data = await requestJson(`/api/projects/${projectId}`, {
+async function patchProject(api, projectId, patch) {
+  const data = await requestJson(api, `/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -48,8 +71,8 @@ async function patchProject(projectId, patch) {
   return data.project;
 }
 
-async function patchChapter(chapterId, patch) {
-  const data = await requestJson(`/api/chapters/${chapterId}`, {
+async function patchChapter(api, chapterId, patch) {
+  const data = await requestJson(api, `/api/chapters/${chapterId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -127,7 +150,7 @@ async function openContextMenuForField(page, locator, labelText, selectionMode =
 async function createProject(page) {
   const title = `Harrow Pines ${Date.now()}`;
   await page.goto(base, { waitUntil: "networkidle" });
-  await jsClick(page.getByRole("link", { name: /start a new book/i }));
+  await page.locator('a[href="/projects/new"]').first().click();
   await page.waitForURL(/\/projects\/new/, { timeout: 30000 });
 
   await page.getByPlaceholder("The Glass Meridian").fill(title);
@@ -153,8 +176,9 @@ async function createProject(page) {
 }
 
 async function configureBookPlan(page, projectId) {
-  let project = await getProject(projectId);
-  project = await patchProject(projectId, {
+  const api = page.context().request;
+  let project = await getProject(api, projectId);
+  project = await patchProject(api, projectId, {
     bookSettings: {
       ...project.bookSettings,
       authorName: "Michael William Polevoy",
@@ -174,7 +198,7 @@ async function configureBookPlan(page, projectId) {
   await jsClick(page.getByRole("button", { name: "Apply book plan", exact: true }));
   await pagePause(2000);
 
-  project = await getProject(projectId);
+  project = await getProject(api, projectId);
   assert.equal(project.chapters.length, 3, "Book planner did not produce 3 chapters");
 
   const chapterPlans = [
@@ -212,7 +236,7 @@ async function configureBookPlan(page, projectId) {
 
   for (let index = 0; index < 3; index += 1) {
     const chapter = project.chapters[index];
-    await patchChapter(chapter.id, {
+    await patchChapter(api, chapter.id, {
       ...chapterPlans[index],
       targetWordCount: 667,
     });
@@ -341,7 +365,7 @@ async function writeRemainingBook(page, projectId) {
   await jsClick(ribbonButton(page, "Resume Paused Run"));
   await pagePause(1500);
 
-  let project = await getProject(projectId);
+  let project = await getProject(page.context().request, projectId);
   for (let index = 1; index < project.chapters.length; index += 1) {
     const chapter = project.chapters[index];
     if (countWords(chapter.draft || "") >= Math.max(450, chapter.targetWordCount - 200)) {
@@ -351,7 +375,7 @@ async function writeRemainingBook(page, projectId) {
     await switchToChapter(page, index);
     await runGenerateChapterFlow(page);
     await pagePause(1500);
-    project = await getProject(projectId);
+    project = await getProject(page.context().request, projectId);
   }
 }
 
@@ -397,7 +421,7 @@ async function runReviewAndExport(page, projectId) {
 }
 
 async function verifyDesktopBook(page, projectId) {
-  let project = await getProject(projectId);
+  let project = await getProject(page.context().request, projectId);
   let totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
   for (let attempt = 0; attempt < 6 && totalWords < 2000; attempt += 1) {
     const weakestChapterIndex = project.chapters.reduce(
@@ -408,7 +432,7 @@ async function verifyDesktopBook(page, projectId) {
     await switchToChapter(page, weakestChapterIndex);
     await appendContinuation(page);
     await pagePause(1500);
-    project = await getProject(projectId);
+    project = await getProject(page.context().request, projectId);
     totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
   }
   if (totalWords < 2000) {
@@ -422,6 +446,7 @@ async function runMobilePass(projectUrl, descriptor, assistantPrompt) {
   const context = await browser.newContext({ ...descriptor });
   const page = await context.newPage();
   try {
+    await signInIfNeeded(page);
     await page.goto(projectUrl, { waitUntil: "networkidle" });
     await page.waitForLoadState("networkidle");
     await openRibbon(page, "View");
@@ -500,10 +525,12 @@ async function main() {
     let projectId;
     let projectUrl;
 
+    await signInIfNeeded(page);
+
     if (resumeProjectId) {
       projectId = resumeProjectId;
       projectUrl = `${base}/projects/${projectId}`;
-      const project = await getProject(projectId);
+      const project = await getProject(page.context().request, projectId);
       title = project.title;
       await page.goto(projectUrl, { waitUntil: "networkidle" });
       console.log(`Resuming project ${title} (${projectId})`);

@@ -2,18 +2,64 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 const base = process.env.STORYFORGE_BASE_URL ?? "http://localhost:3000";
+const authUsername = process.env.STORYFORGE_USERNAME?.trim() ?? "";
+const authPassword = process.env.STORYFORGE_PASSWORD?.trim() ?? "";
 const viewports = [
   { name: "portrait", viewport: { width: 1200, height: 1800 } },
   { name: "landscape", viewport: { width: 1600, height: 1000 } },
 ];
 
-async function resolveProjectUrl() {
+async function createSmokeProject(page) {
+  const title = `Smoke Check ${Date.now()}`;
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.locator('a[href="/projects/new"]').first().click();
+  await page.waitForURL(/\/projects\/new/, { timeout: 30000 });
+  await page.getByPlaceholder("The Glass Meridian").fill(title);
+  await page.getByPlaceholder("A mapmaker races a self-censoring oracle.").fill(
+    "A compact QA story used to prove that The Book Author can still create and open a project in hosted mode."
+  );
+  await page.getByPlaceholder("What is the story fundamentally about?").fill(
+    "A writer stress-tests a drafting system and needs the workspace to stay stable while all the moving parts behave."
+  );
+  await page.getByPlaceholder("Who is the protagonist, what is changing, and what is the fundamental conflict?").fill(
+    "A careful writer needs a quiet, reliable workspace while the software proves that writing, revision, and export still work end to end."
+  );
+  await page.getByPlaceholder("Escalate the mystery, deepen the romance, land on a costly reveal...").fill(
+    "Keep the project tiny, coherent, and usable. This project exists only to prove that the hosted app opens and behaves normally."
+  );
+  await page.getByRole("button", { name: "Create Project", exact: true }).click();
+  await page.waitForURL(/\/projects\/(?!new)/, { timeout: 30000 });
+  return page.url();
+}
+
+async function signInIfNeeded(page) {
+  if (!authUsername || !authPassword) {
+    return;
+  }
+
+  await page.goto(new URL("/sign-in", base).toString(), { waitUntil: "networkidle" });
+  if ((await page.locator('a[href="/projects/new"]').count()) > 0) {
+    return;
+  }
+  await page.getByLabel("Username").fill(authUsername);
+  await page.getByLabel("Password").fill(authPassword);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/auth/sign-in") && response.request().method() === "POST", {
+      timeout: 30000,
+    }),
+    page.getByRole("button", { name: "Sign in", exact: true }).click(),
+  ]);
+  await page.goto(base, { waitUntil: "networkidle" });
+  await page.locator('a[href="/projects/new"]').first().waitFor({ timeout: 30000 });
+}
+
+async function resolveProjectUrl(page) {
   if (process.env.STORYFORGE_PROJECT_PATH) {
     return new URL(process.env.STORYFORGE_PROJECT_PATH, base).toString();
   }
 
-  const response = await fetch(base);
-  const html = await response.text();
+  await page.goto(base, { waitUntil: "networkidle" });
+  const html = await page.content();
   const matches = [...html.matchAll(/href="(\/projects\/[^"]+)"/gi)]
     .map((match) => match[1])
     .filter((href) => href && href !== "/projects/new");
@@ -22,7 +68,7 @@ async function resolveProjectUrl() {
     return new URL(matches[0], base).toString();
   }
 
-  throw new Error("Could not resolve a project URL from The Book Author library.");
+  return createSmokeProject(page);
 }
 
 async function jsClick(locator) {
@@ -31,7 +77,8 @@ async function jsClick(locator) {
 }
 
 async function openWorkspace(page) {
-  const projectUrl = await resolveProjectUrl();
+  await signInIfNeeded(page);
+  const projectUrl = await resolveProjectUrl(page);
   await page.goto(projectUrl, { waitUntil: "networkidle" });
   await page.waitForURL(/\/projects\//, { timeout: 30000 });
   await page.waitForLoadState("networkidle");
