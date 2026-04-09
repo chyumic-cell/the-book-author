@@ -361,10 +361,12 @@ async function resolveInlinePreview(page, buttonName) {
 async function testChapterWorkspace(page) {
   await ensureWritingView(page);
 
+  console.log("CHAPTER_STEP mode toggles");
   await jsClick(page.getByRole("button", { name: "Free write", exact: true }));
   await jsClick(page.getByRole("button", { name: "Co-write", exact: true }));
   await jsClick(page.getByRole("button", { name: "Full author", exact: true }));
 
+  console.log("CHAPTER_STEP chapter sidebar");
   await openRibbon(page, "View");
   await setRibbonToggle(page, "Show Chapters", "Hide Chapters", true);
   const sidebar = page.locator("aside");
@@ -378,6 +380,7 @@ async function testChapterWorkspace(page) {
   await jsClick(page.getByRole("button", { name: "Add chapter", exact: true }));
   await pagePause(1200);
 
+  console.log("CHAPTER_STEP outline panel");
   await jsClick(page.getByRole("button", { name: "Open outline", exact: true }));
   await page.getByLabel("Chapter outline").waitFor({ timeout: 10000 });
   await jsClick(page.getByRole("button", { name: "Collapse", exact: true }).first());
@@ -391,6 +394,7 @@ async function testChapterWorkspace(page) {
   await jsClick(page.getByRole("button", { name: "Collapse", exact: true }).first());
   await page.getByRole("heading", { name: "Chapter planning", exact: true }).waitFor({ state: "detached", timeout: 10000 });
 
+  console.log("CHAPTER_STEP outline ai tools");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Generate Outline").first());
   await page.waitForTimeout(8000);
@@ -407,62 +411,74 @@ async function testChapterWorkspace(page) {
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
+  console.log("CHAPTER_STEP chapter draft generate");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Generate Chapter").first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
   const editor = page.getByTestId("manuscript-editor");
+  console.log("CHAPTER_STEP inline tighten");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", true);
   await jsClick(menu.getByRole("button", { name: /Tighten with AI|Tighten current paragraph/ }).first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
+  console.log("CHAPTER_STEP inline improve prose");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", true);
   await jsClick(menu.getByRole("button", { name: /Improve prose|Improve current paragraph/ }).first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
+  console.log("CHAPTER_STEP inline add tension");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", true);
   await jsClick(menu.getByRole("button", { name: /Add tension/ }).first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Reject");
 
+  console.log("CHAPTER_STEP inline sharpen voice");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", true);
   await jsClick(menu.getByRole("button", { name: /Sharpen voice|Sharpen this beat/ }).first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
+  console.log("CHAPTER_STEP inline continue");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", false);
   await jsClick(menu.getByRole("button", { name: "Continue from cursor", exact: true }));
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Accept");
 
+  console.log("CHAPTER_STEP inline next beats");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", false);
   await jsClick(menu.getByRole("button", { name: "Suggest next beats", exact: true }));
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Reject");
 
+  console.log("CHAPTER_STEP inline coach");
   menu = await openContextMenuForField(page, editor, "Manuscript editor", true);
   await jsClick(menu.getByRole("button", { name: /Coach this selection|Coach this moment/ }).first());
   await page.getByTestId("coach-note").waitFor({ timeout: 180000 });
   await jsClick(page.getByTestId("coach-note").getByRole("button", { name: "Dismiss", exact: true }));
 
+  console.log("CHAPTER_STEP chapter revise pacing");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Rewrite Pacing").first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Reject");
 
+  console.log("CHAPTER_STEP chapter revise prose");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Improve Prose").first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Reject");
 
+  console.log("CHAPTER_STEP chapter revise voice");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Sharpen Voice").first());
   await waitForInlinePreview(page);
   await resolveInlinePreview(page, "Reject");
 
+  console.log("CHAPTER_STEP review tools");
   await openRibbon(page, "Review");
   await jsClick(ribbonButton(page, "Summarize").first());
   await page.waitForTimeout(2000);
@@ -472,6 +488,7 @@ async function testChapterWorkspace(page) {
   await openRibbon(page, "Review");
   await jsClick(ribbonButton(page, "Run Continuity").first());
   await page.waitForTimeout(2000);
+  console.log("CHAPTER_STEP guide checks");
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Chapter Guide").first());
   await page.waitForTimeout(4000);
@@ -485,6 +502,7 @@ async function testChapterWorkspace(page) {
   await jsClick(ribbonButton(page, "Whole Book Guide").first());
   await page.waitForTimeout(4000);
 
+  console.log("CHAPTER_STEP context pane");
   await openRibbon(page, "View");
   await setRibbonToggle(page, "Show Context", "Hide Context", true);
   await page.getByRole("heading", { name: "Smart Context", exact: true }).waitFor({ timeout: 10000 });

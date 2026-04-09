@@ -12,6 +12,18 @@ async function pagePause(ms = 500) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRetryableNetworkError(error) {
+  const message = String(error?.message ?? error ?? "");
+  return [
+    "ECONNRESET",
+    "ENOTFOUND",
+    "ETIMEDOUT",
+    "ERR_INTERNET_DISCONNECTED",
+    "ERR_NETWORK_IO_SUSPENDED",
+    "Timeout",
+  ].some((token) => message.includes(token));
+}
+
 async function jsClick(locator) {
   await locator.waitFor({ state: "visible", timeout: 30000 });
   await locator.evaluate((node) => node.click());
@@ -53,29 +65,49 @@ async function signInIfNeeded(page) {
 }
 
 async function requestJson(api, path, init, timeoutMs = 300000) {
-  const response = await api.fetch(new URL(path, base).toString(), {
-    timeout: timeoutMs,
-    ...init,
-  });
-  const text = await response.text();
-  if (!text.trim()) {
-    throw new Error(`Empty response from ${path} (${response.status})`);
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const response = await api.fetch(new URL(path, base).toString(), {
+        timeout: timeoutMs,
+        ...init,
+      });
+      const text = await response.text();
+      if (!text.trim()) {
+        throw new Error(`Empty response from ${path} (${response.status})`);
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(text);
+      } catch (error) {
+        throw new Error(
+          `Non-JSON response from ${path} (${response.status}): ${text.slice(0, 400)}`,
+          { cause: error },
+        );
+      }
+
+      if (!response.ok() || payload.ok === false) {
+        const status = response.status();
+        const message = payload?.error || `Request failed: ${status}`;
+        if (attempt < 3 && (status === 429 || status >= 500)) {
+          lastError = new Error(message);
+          await pagePause(1500 * (attempt + 1));
+          continue;
+        }
+        throw new Error(message);
+      }
+      return payload.data;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= 3 || !isRetryableNetworkError(error)) {
+        throw error;
+      }
+      await pagePause(1500 * (attempt + 1));
+    }
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(text);
-  } catch (error) {
-    throw new Error(
-      `Non-JSON response from ${path} (${response.status}): ${text.slice(0, 400)}`,
-      { cause: error },
-    );
-  }
-
-  if (!response.ok || payload.ok === false) {
-    throw new Error(payload?.error || `Request failed: ${response.status}`);
-  }
-  return payload.data;
+  throw lastError ?? new Error(`Request failed for ${path}`);
 }
 
 async function getProject(api, projectId) {
@@ -125,60 +157,6 @@ async function postJson(api, route, data = {}, timeoutMs = 300000) {
   }, timeoutMs);
 }
 
-async function generateDraftAndApply(api, chapter) {
-  const generated = await postJson(api, `/api/chapters/${chapter.id}/generate/draft`, {}, 360000);
-  await postJson(api, `/api/assist-runs/${generated.run.id}/apply`, {
-    applyMode: "replace-draft",
-    fieldKey: "draft",
-    draft: chapter.draft || "",
-  }, 120000);
-}
-
-async function continueChapterAndAppend(api, chapter, instruction) {
-  const assisted = await postJson(api, `/api/chapters/${chapter.id}/assist`, {
-    mode: "CO_WRITE",
-    role: "COWRITER",
-    actionType: "CONTINUE",
-    selectionText: "",
-    instruction,
-    contextNote: "Extend the live chapter draft toward the planned target length while preserving continuity.",
-    beforeSelection: (chapter.draft || "").slice(-1400),
-    afterSelection: "",
-  }, 360000);
-
-  await postJson(api, `/api/assist-runs/${assisted.run.id}/apply`, {
-    applyMode: "append",
-    fieldKey: "draft",
-    draft: chapter.draft || "",
-  }, 120000);
-}
-
-async function ensureChapterDraft(api, projectId, chapterIndex, minimumWords, targetWords) {
-  let project = await getProject(api, projectId);
-  let chapter = project.chapters[chapterIndex];
-  if (!chapter) {
-    throw new Error(`Chapter ${chapterIndex + 1} not found.`);
-  }
-
-  if (countWords(chapter.draft || "") < 220) {
-    await generateDraftAndApply(api, chapter);
-    project = await getProject(api, projectId);
-    chapter = project.chapters[chapterIndex];
-  }
-
-  for (let attempt = 0; attempt < 8 && countWords(chapter.draft || "") < minimumWords; attempt += 1) {
-    await continueChapterAndAppend(
-      api,
-      chapter,
-      `Continue this chapter with new material that advances the planned scene work and brings the chapter toward about ${targetWords} words.`
-    );
-    project = await getProject(api, projectId);
-    chapter = project.chapters[chapterIndex];
-  }
-
-  return { project, chapter };
-}
-
 async function exportProjectFiles(api, projectId, title) {
   await fs.mkdir(exportDir, { recursive: true });
   const slug = slugify(title);
@@ -218,11 +196,45 @@ async function runGenerateChapterFlow(page) {
   await openRibbon(page, "AI Engine");
   await jsClick(ribbonButton(page, "Generate Chapter"));
   try {
-    await waitForInlinePreview(page, 90000);
+    await waitForInlinePreview(page, 300000);
     await resolveInlinePreview(page, "Accept");
   } catch {
     await pagePause(6000);
   }
+}
+
+async function appendContinuation(page) {
+  const editor = page.getByTestId("manuscript-editor");
+  await editor.waitFor({ timeout: 30000 });
+  await editor.evaluate((node) => {
+    node.focus();
+    if (typeof node.value === "string") {
+      const cursor = node.value.length;
+      node.setSelectionRange(cursor, cursor);
+    }
+  });
+
+  await editor.click({ button: "right", force: true, position: { x: 80, y: 60 } });
+  const menu = page.getByTestId("chapter-context-menu").last();
+  await menu.waitFor({ timeout: 10000 });
+  await jsClick(menu.getByRole("button", { name: "Continue from cursor", exact: true }).first());
+  await waitForInlinePreview(page, 300000);
+  await resolveInlinePreview(page, "Accept");
+}
+
+async function topUpChapterToMinimum(page, projectId, chapterIndex, minimumWords, maxAttempts = 3) {
+  const api = page.context().request;
+  let project = await getProject(api, projectId);
+  let words = countWords(project.chapters[chapterIndex]?.draft || "");
+
+  for (let attempt = 0; attempt < maxAttempts && words < minimumWords; attempt += 1) {
+    await switchToChapter(page, chapterIndex);
+    await appendContinuation(page);
+    project = await getProject(api, projectId);
+    words = countWords(project.chapters[chapterIndex]?.draft || "");
+  }
+
+  return { project, words };
 }
 
 async function createProject(page) {
@@ -326,7 +338,7 @@ async function configureBookPlan(page, projectId) {
   await page.getByRole("heading", { name: "Story Skeleton", exact: true }).waitFor({ timeout: 30000 });
 }
 
-async function generateChapterOne(page) {
+async function generateChapterOne(page, projectId) {
   await openRibbon(page, "View");
   await jsClick(ribbonButton(page, "Writing View"));
   await page.getByTestId("manuscript-editor").waitFor({ timeout: 30000 });
@@ -337,6 +349,19 @@ async function generateChapterOne(page) {
 
   await openRibbon(page, "AI Engine");
   await runGenerateChapterFlow(page);
+  await topUpChapterToMinimum(page, projectId, 0, 520, 3);
+}
+
+async function switchToChapter(page, index) {
+  await openRibbon(page, "View");
+  const chapterToggle = ribbonButton(page, "Show Chapters");
+  if ((await chapterToggle.count()) > 0) {
+    await jsClick(chapterToggle);
+  }
+  const sidebar = page.locator("aside");
+  await sidebar.waitFor({ timeout: 20000 });
+  await jsClick(sidebar.getByTestId("sidebar-chapter-button").nth(index));
+  await pagePause(1200);
 }
 
 async function writeRemainingBook(page, projectId) {
@@ -344,7 +369,18 @@ async function writeRemainingBook(page, projectId) {
   let project = await getProject(api, projectId);
 
   for (let index = 1; index < project.chapters.length; index += 1) {
-    ({ project } = await ensureChapterDraft(api, projectId, index, 540, 667));
+    await switchToChapter(page, index);
+    await runGenerateChapterFlow(page);
+    project = await getProject(api, projectId);
+
+    if (countWords(project.chapters[index].draft || "") < 220) {
+      await runGenerateChapterFlow(page);
+      project = await getProject(api, projectId);
+    }
+
+    if (countWords(project.chapters[index].draft || "") < 520) {
+      ({ project } = await topUpChapterToMinimum(page, projectId, index, 520, 2));
+    }
   }
 }
 
@@ -368,13 +404,15 @@ async function verifyDesktopBook(page, projectId) {
   let project = await getProject(api, projectId);
   let totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
 
-  for (let attempt = 0; attempt < 12 && totalWords < 2000; attempt += 1) {
+  for (let attempt = 0; attempt < 8 && totalWords < 2000; attempt += 1) {
     const weakestChapterIndex = project.chapters.reduce(
       (best, chapter, index, all) =>
         countWords(chapter.draft || "") < countWords(all[best].draft || "") ? index : best,
       0,
     );
-    ({ project } = await ensureChapterDraft(api, projectId, weakestChapterIndex, Math.min(750, countWords(project.chapters[weakestChapterIndex].draft || "") + 180), 760));
+    await switchToChapter(page, weakestChapterIndex);
+    await appendContinuation(page);
+    project = await getProject(api, projectId);
     totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
   }
 
@@ -486,7 +524,7 @@ async function main() {
       await configureBookPlan(page, projectId);
       console.log("Configured 2,000-word / 3-chapter plan");
 
-      await generateChapterOne(page);
+      await generateChapterOne(page, projectId);
       console.log("Generated chapter 1 through the desktop UI");
 
       await writeRemainingBook(page, projectId);
