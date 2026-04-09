@@ -4,6 +4,9 @@ import { createAssistRun } from "@/lib/story-service";
 import { fail, ok } from "@/lib/api";
 import { assistRequestSchema } from "@/lib/schemas";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ chapterId: string }> },

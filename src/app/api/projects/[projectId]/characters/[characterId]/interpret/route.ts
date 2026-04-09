@@ -1,6 +1,9 @@
 import { fail, ok } from "@/lib/api";
 import { interpretCharacterProfile } from "@/lib/openai";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   _request: Request,
   context: { params: Promise<{ projectId: string; characterId: string }> },

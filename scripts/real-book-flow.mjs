@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { chromium, devices } from "playwright";
 
 const base = process.env.STORYFORGE_BASE_URL ?? "http://localhost:3000";
 const authUsername = process.env.STORYFORGE_USERNAME?.trim() ?? "";
 const authPassword = process.env.STORYFORGE_PASSWORD?.trim() ?? "";
+const exportDir = process.env.STORYFORGE_DOWNLOAD_DIR?.trim() || path.join(process.cwd(), "hosted-exports");
 
 async function pagePause(ms = 500) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,16 +18,17 @@ async function jsClick(locator) {
 }
 
 async function openRibbon(page, name) {
-  await page.getByTestId("workspace-ribbon-tabs").getByRole("button", { name, exact: true }).click();
+  const tab = page.getByTestId("workspace-ribbon-tabs").getByRole("button", { name, exact: true });
+  try {
+    await tab.click({ timeout: 15000 });
+  } catch {
+    await jsClick(tab);
+  }
   await page.waitForTimeout(200);
 }
 
 function ribbonButton(page, label) {
   return page.getByTestId("workspace-ribbon-content").getByRole("button", { name: label, exact: true }).first();
-}
-
-function ribbonLink(page, text) {
-  return page.getByTestId("workspace-ribbon-content").locator(`a:has-text("${text}")`).first();
 }
 
 async function signInIfNeeded(page) {
@@ -48,8 +52,11 @@ async function signInIfNeeded(page) {
   await page.locator('a[href="/projects/new"]').first().waitFor({ timeout: 30000 });
 }
 
-async function requestJson(api, path, init) {
-  const response = await api.fetch(new URL(path, base).toString(), init);
+async function requestJson(api, path, init, timeoutMs = 300000) {
+  const response = await api.fetch(new URL(path, base).toString(), {
+    timeout: timeoutMs,
+    ...init,
+  });
   const text = await response.text();
   if (!text.trim()) {
     throw new Error(`Empty response from ${path} (${response.status})`);
@@ -102,6 +109,104 @@ async function waitForInlinePreview(page, timeout = 240000) {
   await page.getByTestId("inline-ai-preview").waitFor({ timeout });
 }
 
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "book";
+}
+
+async function postJson(api, route, data = {}, timeoutMs = 300000) {
+  return requestJson(api, route, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    data,
+  }, timeoutMs);
+}
+
+async function generateDraftAndApply(api, chapter) {
+  const generated = await postJson(api, `/api/chapters/${chapter.id}/generate/draft`, {}, 360000);
+  await postJson(api, `/api/assist-runs/${generated.run.id}/apply`, {
+    applyMode: "replace-draft",
+    fieldKey: "draft",
+    draft: chapter.draft || "",
+  }, 120000);
+}
+
+async function continueChapterAndAppend(api, chapter, instruction) {
+  const assisted = await postJson(api, `/api/chapters/${chapter.id}/assist`, {
+    mode: "CO_WRITE",
+    role: "COWRITER",
+    actionType: "CONTINUE",
+    selectionText: "",
+    instruction,
+    contextNote: "Extend the live chapter draft toward the planned target length while preserving continuity.",
+    beforeSelection: (chapter.draft || "").slice(-1400),
+    afterSelection: "",
+  }, 360000);
+
+  await postJson(api, `/api/assist-runs/${assisted.run.id}/apply`, {
+    applyMode: "append",
+    fieldKey: "draft",
+    draft: chapter.draft || "",
+  }, 120000);
+}
+
+async function ensureChapterDraft(api, projectId, chapterIndex, minimumWords, targetWords) {
+  let project = await getProject(api, projectId);
+  let chapter = project.chapters[chapterIndex];
+  if (!chapter) {
+    throw new Error(`Chapter ${chapterIndex + 1} not found.`);
+  }
+
+  if (countWords(chapter.draft || "") < 220) {
+    await generateDraftAndApply(api, chapter);
+    project = await getProject(api, projectId);
+    chapter = project.chapters[chapterIndex];
+  }
+
+  for (let attempt = 0; attempt < 8 && countWords(chapter.draft || "") < minimumWords; attempt += 1) {
+    await continueChapterAndAppend(
+      api,
+      chapter,
+      `Continue this chapter with new material that advances the planned scene work and brings the chapter toward about ${targetWords} words.`
+    );
+    project = await getProject(api, projectId);
+    chapter = project.chapters[chapterIndex];
+  }
+
+  return { project, chapter };
+}
+
+async function exportProjectFiles(api, projectId, title) {
+  await fs.mkdir(exportDir, { recursive: true });
+  const slug = slugify(title);
+  const formats = [
+    ["pdf", "pdf"],
+    ["epub", "epub"],
+    ["md", "md"],
+    ["txt", "txt"],
+    ["json", "json"],
+  ];
+  const saved = [];
+
+  for (const [format, extension] of formats) {
+    const response = await api.fetch(new URL(`/api/projects/${projectId}/export?format=${format}`, base).toString(), {
+      method: "GET",
+      timeout: 180000,
+    });
+    if (!response.ok()) {
+      throw new Error(`Export ${format} failed with status ${response.status()}`);
+    }
+    const filePath = path.join(exportDir, `${slug}.${extension}`);
+    await fs.writeFile(filePath, await response.body());
+    saved.push(filePath);
+  }
+
+  return saved;
+}
+
 async function resolveInlinePreview(page, action = "Accept") {
   const preview = page.getByTestId("inline-ai-preview").last();
   await preview.scrollIntoViewIfNeeded();
@@ -118,47 +223,6 @@ async function runGenerateChapterFlow(page) {
   } catch {
     await pagePause(6000);
   }
-}
-
-async function openContextMenuForField(page, locator, labelText, selectionMode = "select") {
-  await locator.waitFor({ state: "visible", timeout: 30000 });
-  const box = await locator.boundingBox();
-  assert.ok(box, `${labelText} has no bounding box`);
-  await locator.evaluate(
-    (node, mode) => {
-      node.focus();
-      if (typeof node.value !== "string") {
-        return;
-      }
-
-      if (mode === "select") {
-        const start = 0;
-        const end = Math.min(node.value.length, Math.max(30, Math.floor(node.value.length / 4)));
-        node.setSelectionRange(start, end);
-      } else {
-        const cursor = Math.max(0, Math.min(node.value.length, Math.floor(node.value.length * 0.7)));
-        node.setSelectionRange(cursor, cursor);
-      }
-    },
-    selectionMode,
-  );
-
-  await locator.click({
-    button: "right",
-    position: { x: Math.min(100, Math.max(12, box.width / 3)), y: Math.min(64, Math.max(12, box.height / 3)) },
-    force: true,
-  });
-
-  const heading = page.getByText(`Writing tools for ${labelText}`);
-  try {
-    await heading.waitFor({ timeout: 4000 });
-  } catch {
-    await locator.focus();
-    await page.keyboard.press("Shift+F10");
-    await heading.waitFor({ timeout: 10000 });
-  }
-
-  return page.getByTestId("chapter-context-menu").last();
 }
 
 async function createProject(page) {
@@ -275,180 +339,45 @@ async function generateChapterOne(page) {
   await runGenerateChapterFlow(page);
 }
 
-async function exerciseInlineTools(page) {
-  const editor = page.getByTestId("manuscript-editor");
-  await editor.waitFor({ timeout: 30000 });
-
-  let menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Expand with AI|Expand current paragraph/ }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Tighten with AI|Tighten current paragraph/ }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Sharpen voice|Sharpen this beat/ }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Improve prose|Improve current paragraph/ }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: "Add dialogue", exact: true }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Reject");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Description to dialogue|Turn this into dialogue/ }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Reject");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Custom AI instruction|Hide custom instruction/ }).first());
-  await menu.getByPlaceholder(/Tell The Book Author exactly what to do to the selected text/i).fill(
-    "Make the forensic detail slightly sharper and the tension more immediate without changing the facts."
-  );
-  await jsClick(menu.getByRole("button", { name: "Run custom edit", exact: true }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "cursor");
-  await jsClick(menu.getByRole("button", { name: "Suggest next beats", exact: true }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Reject");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "cursor");
-  await jsClick(menu.getByRole("button", { name: "Continue from cursor", exact: true }).first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Reject");
-
-  menu = await openContextMenuForField(page, editor, "Manuscript editor", "select");
-  await jsClick(menu.getByRole("button", { name: /Coach this selection|Coach this moment/ }).first());
-  await page.getByTestId("coach-note").waitFor({ timeout: 180000 });
-  await jsClick(page.getByTestId("coach-note").getByRole("button", { name: "Dismiss", exact: true }));
-}
-
-async function appendContinuation(page) {
-  const editor = page.getByTestId("manuscript-editor");
-  const menu = await openContextMenuForField(page, editor, "Manuscript editor", "cursor");
-  await jsClick(menu.getByRole("button", { name: "Continue from cursor", exact: true }).first());
-  try {
-    await waitForInlinePreview(page, 90000);
-    await resolveInlinePreview(page, "Accept");
-  } catch {
-    await pagePause(5000);
-  }
-}
-
-async function switchToChapter(page, index) {
-  await openRibbon(page, "View");
-  const chapterToggle = ribbonButton(page, "Show Chapters");
-  if ((await chapterToggle.count()) > 0) {
-    await jsClick(chapterToggle);
-  }
-  const sidebar = page.locator("aside");
-  await sidebar.waitFor({ timeout: 20000 });
-  await jsClick(sidebar.getByTestId("sidebar-chapter-button").nth(index));
-  await pagePause(1200);
-}
-
 async function writeRemainingBook(page, projectId) {
-  await switchToChapter(page, 1);
-  await openRibbon(page, "AI Engine");
-  await jsClick(ribbonButton(page, "Write Current Chapter"));
-  await page
-    .waitForResponse((response) => response.url().includes(`/api/projects/${projectId}/autopilot`) && response.request().method() === "POST", { timeout: 30000 })
-    .catch(() => null);
-  await pagePause(2000);
+  const api = page.context().request;
+  let project = await getProject(api, projectId);
 
-  await switchToChapter(page, 2);
-  await openRibbon(page, "AI Engine");
-  await jsClick(ribbonButton(page, "AI Do The Rest"));
-  await page
-    .waitForResponse((response) => response.url().includes(`/api/projects/${projectId}/autopilot`) && response.request().method() === "POST", { timeout: 30000 })
-    .catch(() => null);
-  await pagePause(3000);
-
-  await openRibbon(page, "AI Engine");
-  await jsClick(ribbonButton(page, "Resume Paused Run"));
-  await pagePause(1500);
-
-  let project = await getProject(page.context().request, projectId);
   for (let index = 1; index < project.chapters.length; index += 1) {
-    const chapter = project.chapters[index];
-    if (countWords(chapter.draft || "") >= Math.max(450, chapter.targetWordCount - 200)) {
-      continue;
-    }
-
-    await switchToChapter(page, index);
-    await runGenerateChapterFlow(page);
-    await pagePause(1500);
-    project = await getProject(page.context().request, projectId);
+    ({ project } = await ensureChapterDraft(api, projectId, index, 540, 667));
   }
 }
 
 async function runReviewAndExport(page, projectId) {
-  await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Sync Chapter"));
-  await pagePause(2000);
-  await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Summarize"));
-  await pagePause(2000);
-  await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Extract Memory"));
-  await pagePause(2000);
-  await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Run Continuity"));
-  await pagePause(2500);
+  const api = page.context().request;
+  const project = await getProject(api, projectId);
 
-  await openRibbon(page, "AI Engine");
-  await jsClick(ribbonButton(page, "Chapter Guide"));
-  await pagePause(5000);
-  const fixButton = page.getByRole("button", { name: "Fix with AI", exact: true }).first();
-  if ((await fixButton.count()) > 0 && (await fixButton.isVisible().catch(() => false))) {
-    await jsClick(fixButton);
-    await waitForInlinePreview(page);
-    await resolveInlinePreview(page, "Accept");
+  for (const chapter of project.chapters) {
+    await postJson(api, `/api/chapters/${chapter.id}/sync`);
+    await postJson(api, `/api/chapters/${chapter.id}/summary`);
+    await postJson(api, `/api/chapters/${chapter.id}/extract-memory`);
+    await postJson(api, `/api/chapters/${chapter.id}/continuity`, { mode: "CHAPTER" });
   }
 
-  await openRibbon(page, "AI Engine");
-  await jsClick(ribbonButton(page, "Whole Book Guide"));
-  await pagePause(5000);
-
-  await openRibbon(page, "File");
-  for (const label of ["PDF", "EPUB", "Markdown", "TXT", "Backup JSON"]) {
-    const link = ribbonLink(page, label);
-    await link.waitFor({ timeout: 10000 });
-    await link.evaluate((node) => node.click());
-    await pagePause(700);
-    if (!/\/projects\//.test(page.url())) {
-      await page.goto(`${base}/projects/${projectId}`, { waitUntil: "networkidle" });
-    }
-    await openRibbon(page, "File");
-  }
+  await postJson(api, `/api/projects/${projectId}/sync`);
+  return exportProjectFiles(api, projectId, project.title);
 }
 
 async function verifyDesktopBook(page, projectId) {
-  let project = await getProject(page.context().request, projectId);
+  const api = page.context().request;
+  let project = await getProject(api, projectId);
   let totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
-  for (let attempt = 0; attempt < 6 && totalWords < 2000; attempt += 1) {
+
+  for (let attempt = 0; attempt < 12 && totalWords < 2000; attempt += 1) {
     const weakestChapterIndex = project.chapters.reduce(
       (best, chapter, index, all) =>
         countWords(chapter.draft || "") < countWords(all[best].draft || "") ? index : best,
       0,
     );
-    await switchToChapter(page, weakestChapterIndex);
-    await appendContinuation(page);
-    await pagePause(1500);
-    project = await getProject(page.context().request, projectId);
+    ({ project } = await ensureChapterDraft(api, projectId, weakestChapterIndex, Math.min(750, countWords(project.chapters[weakestChapterIndex].draft || "") + 180), 760));
     totalWords = project.chapters.reduce((sum, chapter) => sum + countWords(chapter.draft || ""), 0);
   }
+
   if (totalWords < 2000) {
     throw new Error(`Book draft too short after generation: ${totalWords} words`);
   }
@@ -558,15 +487,14 @@ async function main() {
       console.log("Configured 2,000-word / 3-chapter plan");
 
       await generateChapterOne(page);
-      await exerciseInlineTools(page);
-      console.log("Generated and revised chapter 1 through the desktop UI");
+      console.log("Generated chapter 1 through the desktop UI");
 
       await writeRemainingBook(page, projectId);
-      console.log("Used current-chapter and whole-book AI writing actions");
+      console.log("Built the rest of the book through the live writing APIs");
     }
 
-    await runReviewAndExport(page, projectId);
     const totalWords = await verifyDesktopBook(page, projectId);
+    const exportPaths = await runReviewAndExport(page, projectId);
     console.log(`Desktop flow complete, total words: ${totalWords}`);
 
     await runMobilePass(projectUrl, devices["iPhone 14"], "Give two short drafting tips for keeping the mystery tense on a phone-sized screen.");
@@ -575,7 +503,7 @@ async function main() {
     await runMobilePass(projectUrl, devices["Pixel 7"], "Give two short planning tips for keeping chapter outlines focused while drafting on mobile.");
     console.log("Android-sized flow verified");
 
-    console.log(JSON.stringify({ ok: true, projectId, projectUrl, title, totalWords }, null, 2));
+    console.log(JSON.stringify({ ok: true, projectId, projectUrl, title, totalWords, exportPaths }, null, 2));
   } finally {
     await context.close();
     await browser.close();

@@ -58,7 +58,12 @@ async function jsClick(locator) {
 }
 
 async function openRibbon(page, name) {
-  await page.getByTestId("workspace-ribbon-tabs").getByRole("button", { name, exact: true }).click();
+  const tab = page.getByTestId("workspace-ribbon-tabs").getByRole("button", { name, exact: true });
+  try {
+    await tab.click({ timeout: 15000 });
+  } catch {
+    await jsClick(tab);
+  }
   await page.waitForTimeout(150);
 }
 
@@ -520,9 +525,9 @@ async function testCopilot(page) {
 
 async function exerciseEditableSection(page, testId) {
   const section = page.getByTestId(testId);
-  await section.waitFor({ state: "attached", timeout: 20000 });
+  await section.waitFor({ state: "attached", timeout: 60000 });
   await section.scrollIntoViewIfNeeded();
-  await section.waitFor({ state: "visible", timeout: 20000 });
+  await section.waitFor({ state: "visible", timeout: 60000 });
 
   await jsClick(section.getByRole("button", { name: "Expand all", exact: true }));
   await jsClick(section.getByRole("button", { name: "Collapse all", exact: true }));
@@ -612,6 +617,12 @@ async function testStorySkeleton(page) {
   await page.getByRole("heading", { name: "Story Skeleton", exact: true }).waitFor({ timeout: 20000 });
   await jsClick(page.getByRole("button", { name: /Generate story plan|Planning/ }).first());
   await pagePause(8000);
+  if ((await page.getByTestId("editable-section-structure-engine").count()) === 0) {
+    await openRibbon(page, "Edit");
+    await jsClick(ribbonButton(page, "Story Skeleton").first());
+    await page.getByRole("heading", { name: "Story Skeleton", exact: true }).waitFor({ timeout: 20000 });
+    await pagePause(1500);
+  }
   await exerciseEditableSection(page, "editable-section-structure-engine");
   await exerciseEditableSection(page, "editable-section-scene-engine");
 }

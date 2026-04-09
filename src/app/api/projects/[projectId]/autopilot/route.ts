@@ -3,6 +3,9 @@ import { getAutopilotRun, resumeAutopilotRun, startAutopilotRun } from "@/lib/bo
 import { autopilotRequestSchema } from "@/lib/schemas";
 import { getProjectWorkspace } from "@/lib/project-data";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ projectId: string }> },

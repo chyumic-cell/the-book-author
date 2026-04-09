@@ -3,6 +3,9 @@ import { getProjectWorkspace } from "@/lib/project-data";
 import { fail, ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   _request: Request,
   context: { params: Promise<{ chapterId: string }> },

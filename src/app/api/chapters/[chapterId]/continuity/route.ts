@@ -3,6 +3,9 @@ import { runContinuityCheck } from "@/lib/continuity";
 import { fail, ok } from "@/lib/api";
 import { continuityCheckRequestSchema } from "@/lib/schemas";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ chapterId: string }> },

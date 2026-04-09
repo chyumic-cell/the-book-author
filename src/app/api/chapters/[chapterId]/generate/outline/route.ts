@@ -3,6 +3,9 @@ import { getProjectWorkspace } from "@/lib/project-data";
 import { createAssistRun } from "@/lib/story-service";
 import { fail, ok } from "@/lib/api";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   _request: Request,
   context: { params: Promise<{ chapterId: string }> },

@@ -2,6 +2,9 @@ import { runProjectAssistant } from "@/lib/project-assistant";
 import { fail, ok } from "@/lib/api";
 import { projectChatSchema } from "@/lib/schemas";
 
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ projectId: string }> },
