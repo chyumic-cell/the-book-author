@@ -178,7 +178,7 @@ async function processJob(job: AutopilotRunRecord, maxChapters: number) {
       const draft = await generateChapterDraft(activeJob.projectId, chapterId, activeJob.generalPrompt);
       await updateChapter(chapterId, {
         draft: draft.content,
-        status: "DRAFTED",
+        status: "DRAFTING",
       });
     }
 

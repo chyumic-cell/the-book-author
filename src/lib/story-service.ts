@@ -345,6 +345,96 @@ function pickNullableString(payload: Record<string, unknown>, key: string) {
   return String(payload[key]);
 }
 
+const validChapterStatuses = new Set(["PLANNED", "OUTLINED", "DRAFTING", "COMPLETE", "REVISED"]);
+
+function normalizeChapterStatus(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+
+  const normalized = String(value).trim().toUpperCase();
+  if (normalized === "DRAFTED") {
+    return "DRAFTING" as const;
+  }
+
+  if (validChapterStatuses.has(normalized)) {
+    return normalized as "PLANNED" | "OUTLINED" | "DRAFTING" | "COMPLETE" | "REVISED";
+  }
+
+  return undefined;
+}
+
+async function ensureProjectExists(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new Error("Project not found.");
+  }
+}
+
+async function resolveProjectChapterId(projectId: string, chapterId: string | null) {
+  if (!chapterId) {
+    return null;
+  }
+
+  const chapter = await prisma.chapter.findFirst({
+    where: {
+      id: chapterId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  return chapter?.id ?? null;
+}
+
+async function resolveProjectCharacterId(projectId: string, characterId: string | null) {
+  if (!characterId) {
+    return null;
+  }
+
+  const character = await prisma.character.findFirst({
+    where: {
+      id: characterId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  return character?.id ?? null;
+}
+
+async function ensureStructureBeatBelongsToProject(projectId: string, structureBeatId: string) {
+  const beat = await prisma.structureBeat.findFirst({
+    where: {
+      id: structureBeatId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  if (!beat) {
+    throw new Error("That structure beat could not be found in this book.");
+  }
+}
+
+async function ensureSceneCardBelongsToProject(projectId: string, sceneCardId: string) {
+  const sceneCard = await prisma.sceneCard.findFirst({
+    where: {
+      id: sceneCardId,
+      projectId,
+    },
+    select: { id: true },
+  });
+
+  if (!sceneCard) {
+    throw new Error("That scene card could not be found in this book.");
+  }
+}
+
 export async function mutateStoryBible(projectId: string, mutation: StoryBibleMutation, method: "POST" | "PATCH" | "DELETE") {
   const payload = mutation.payload;
 
@@ -629,18 +719,24 @@ export async function mutateIdeaLab(projectId: string, mutation: IdeaLabMutation
 
 export async function mutateSkeleton(projectId: string, mutation: SkeletonMutation, method: "POST" | "PATCH" | "DELETE") {
   const payload = mutation.payload;
+  await ensureProjectExists(projectId);
 
   switch (mutation.entityType) {
     case "structureBeat":
       if (method === "DELETE" && mutation.id) {
+        await ensureStructureBeatBelongsToProject(projectId, mutation.id);
         return prisma.structureBeat.delete({ where: { id: mutation.id } });
+      }
+
+      if (mutation.id) {
+        await ensureStructureBeatBelongsToProject(projectId, mutation.id);
       }
 
       return mutation.id
         ? prisma.structureBeat.update({
             where: { id: mutation.id },
             data: {
-              chapterId: pickNullableString(payload, "chapterId"),
+              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
               type: (pickString(payload, "type") || "OPENING_DISTURBANCE") as never,
               label: pickString(payload, "label"),
               description: pickString(payload, "description"),
@@ -652,7 +748,7 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
         : prisma.structureBeat.create({
             data: {
               projectId,
-              chapterId: pickNullableString(payload, "chapterId"),
+              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
               type: (pickString(payload, "type") || "OPENING_DISTURBANCE") as never,
               label: pickString(payload, "label") || "New structure beat",
               description: pickString(payload, "description") || "Define the turning point this beat should deliver.",
@@ -664,15 +760,20 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
 
     case "sceneCard":
       if (method === "DELETE" && mutation.id) {
+        await ensureSceneCardBelongsToProject(projectId, mutation.id);
         return prisma.sceneCard.delete({ where: { id: mutation.id } });
+      }
+
+      if (mutation.id) {
+        await ensureSceneCardBelongsToProject(projectId, mutation.id);
       }
 
       return mutation.id
         ? prisma.sceneCard.update({
             where: { id: mutation.id },
             data: {
-              chapterId: pickNullableString(payload, "chapterId"),
-              povCharacterId: pickNullableString(payload, "povCharacterId"),
+              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+              povCharacterId: await resolveProjectCharacterId(projectId, pickNullableString(payload, "povCharacterId")),
               title: pickString(payload, "title"),
               summary: pickString(payload, "summary"),
               goal: pickString(payload, "goal"),
@@ -689,8 +790,8 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
         : prisma.sceneCard.create({
             data: {
               projectId,
-              chapterId: pickNullableString(payload, "chapterId"),
-              povCharacterId: pickNullableString(payload, "povCharacterId"),
+              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+              povCharacterId: await resolveProjectCharacterId(projectId, pickNullableString(payload, "povCharacterId")),
               title: pickString(payload, "title") || "New scene",
               summary: pickString(payload, "summary"),
               goal: pickString(payload, "goal"),
@@ -755,7 +856,7 @@ export async function updateChapter(chapterId: string, input: ChapterPatchInput)
       draft: input.draft,
       notes: input.notes,
       povCharacterId: input.povCharacterId ?? undefined,
-      status: input.status as never,
+      status: normalizeChapterStatus(input.status) as never,
     },
   });
 }
