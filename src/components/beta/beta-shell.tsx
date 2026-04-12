@@ -39,6 +39,12 @@ export function BetaShell({
           <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:justify-end">
             <Link
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text)] transition hover:border-[color:rgba(var(--accent-rgb),0.35)] hover:bg-[color:var(--panel-soft)] sm:flex-none"
+              href="/"
+            >
+              {session ? "Open app" : "Home"}
+            </Link>
+            <Link
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md border border-[color:var(--line)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text)] transition hover:border-[color:rgba(var(--accent-rgb),0.35)] hover:bg-[color:var(--panel-soft)] sm:flex-none"
               href="/downloads"
             >
               Downloads

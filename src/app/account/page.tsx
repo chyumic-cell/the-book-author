@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 
 import { BetaShell } from "@/components/beta/beta-shell";
 import { PwaDownloadActions } from "@/components/providers/pwa-download-actions";
@@ -11,6 +12,7 @@ import { getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
+  noStore();
   const session = await requireBetaSession();
 
   return (
@@ -36,6 +38,9 @@ export default async function AccountPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Link className="font-medium text-[var(--accent)] underline" href="/">
+            Return to the app
+          </Link>
           <Link className="font-medium text-[var(--accent)] underline" href="/">
             Open web app
           </Link>

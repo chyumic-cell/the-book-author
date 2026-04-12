@@ -23,6 +23,13 @@ function hasHostedSessionCookie(request: NextRequest) {
   return Boolean(request.cookies.get(HOSTED_SESSION_COOKIE_NAME)?.value?.trim());
 }
 
+function applyHostedNoStoreHeaders(response: NextResponse) {
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
+  return response;
+}
+
 export function proxy(request: NextRequest) {
   if (!isHostedBetaEnabled()) {
     return NextResponse.next();
@@ -31,29 +38,44 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!isBlockedHostedPath(pathname)) {
-    return NextResponse.next();
+    return applyHostedNoStoreHeaders(NextResponse.next());
   }
 
   if (hasHostedSessionCookie(request)) {
-    return NextResponse.next();
+    return applyHostedNoStoreHeaders(NextResponse.next());
   }
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json(
+    return applyHostedNoStoreHeaders(NextResponse.json(
       {
         ok: false,
         error: `Sign in to ${APP_NAME} before using the hosted writing workspace.`,
       },
       { status: 401 },
-    );
+    ));
   }
 
   const redirectUrl = request.nextUrl.clone();
   redirectUrl.pathname = "/sign-in";
   redirectUrl.searchParams.set("next", pathname);
-  return NextResponse.redirect(redirectUrl);
+  return applyHostedNoStoreHeaders(NextResponse.redirect(redirectUrl));
 }
 
 export const config = {
-  matcher: ["/projects/:path*", "/api/projects/:path*", "/api/chapters/:path*", "/api/assist-runs/:path*", "/api/settings/providers/:path*", "/api/settings/providers"],
+  matcher: [
+    "/",
+    "/account",
+    "/admin/:path*",
+    "/downloads",
+    "/feedback",
+    "/projects/:path*",
+    "/sign-in",
+    "/sign-up",
+    "/terms",
+    "/api/projects/:path*",
+    "/api/chapters/:path*",
+    "/api/assist-runs/:path*",
+    "/api/settings/providers/:path*",
+    "/api/settings/providers",
+  ],
 };

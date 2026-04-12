@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
 
 import { BetaShell } from "@/components/beta/beta-shell";
 import { AppBrandMark } from "@/components/brand/app-brand-mark";
@@ -97,6 +98,7 @@ function AppHome({
 }
 
 export default async function HomePage() {
+  noStore();
   if (isHostedBetaEnabled()) {
     const session = await getOptionalBetaSession();
 

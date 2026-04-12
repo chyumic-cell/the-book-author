@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { unstable_noStore as noStore } from "next/cache";
+
 import { BetaShell } from "@/components/beta/beta-shell";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
@@ -13,6 +16,7 @@ import { APP_NAME } from "@/lib/brand";
 export const dynamic = "force-dynamic";
 
 export default async function TermsPage() {
+  noStore();
   const session = await getOptionalBetaSession();
   const introLines = getStoryForgeTermsSummary();
   const sections = getStoryForgeTermsSections();
@@ -27,6 +31,27 @@ export default async function TermsPage() {
         <div className="flex flex-wrap gap-2">
           <Chip>Version {getStoryForgeTermsVersion()}</Chip>
           <Chip>Updated {getStoryForgeTermsLastUpdated()}</Chip>
+        </div>
+        <div className="flex flex-wrap gap-3 text-sm font-medium">
+          {session ? (
+            <>
+              <Link className="text-[var(--accent)] underline" href="/">
+                Return to the app
+              </Link>
+              <Link className="text-[var(--accent)] underline" href="/account">
+                Open account
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link className="text-[var(--accent)] underline" href="/sign-in">
+                Sign in
+              </Link>
+              <Link className="text-[var(--accent)] underline" href="/sign-up">
+                Create account
+              </Link>
+            </>
+          )}
         </div>
         <div className="grid gap-3">
           {introLines.map((line, index) => (
