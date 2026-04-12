@@ -11,7 +11,7 @@ import { providerModelSwitchSchema, providerSettingsSchema } from "@/lib/schemas
 
 const providerConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
 const providerConfigPath = path.join(providerConfigRoot, ".the-book-author.providers.json");
-const useHostedReadOnlyProviderConfig = isHostedBetaEnabled();
+const useHostedReadOnlyProviderConfig = isHostedBetaEnabled() || process.env.VERCEL === "1";
 const hostedOpenRouterModel = "openrouter/auto";
 
 export const OPENROUTER_SETUP_URL = process.env.OPENROUTER_SETUP_URL ?? "https://openrouter.ai/keys";
