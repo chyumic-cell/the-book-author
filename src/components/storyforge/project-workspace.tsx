@@ -77,6 +77,7 @@ const DEFAULT_CHAPTER_CONTEXT_WIDTH = 296;
 const DEFAULT_MANUSCRIPT_ZOOM = 100;
 const MANUSCRIPT_ZOOM_MIN = 80;
 const MANUSCRIPT_ZOOM_MAX = 160;
+const AUTOSAVE_DELAY_MS = 5 * 60 * 1000;
 const STORAGE_KEYS = {
   leftPaneWidth: "storyforge-left-pane-width",
   rightPaneWidth: "storyforge-right-pane-width",
@@ -673,7 +674,7 @@ export function ProjectWorkspace({
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Autosave failed.");
       }
-    }, 1200);
+    }, AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timeout);
   }, [editor, persistChapter, selectedChapter]);
