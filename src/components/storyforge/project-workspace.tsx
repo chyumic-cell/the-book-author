@@ -215,10 +215,16 @@ export function ProjectWorkspace({
 
   const chapterId = selectedChapterId ?? project.chapters.at(-1)?.id ?? null;
   const selectedChapter = project.chapters.find((chapter) => chapter.id === chapterId) ?? project.chapters.at(-1) ?? null;
-  const dockPaddingClass = copilotExpanded ? "pb-[24rem] xl:pb-[28rem]" : "pb-[5.5rem]";
-  const shouldShowInspector = showInspector && activeTab !== "chapters";
   const desktopShell = viewportWidth >= 960;
   const phoneShell = viewportWidth > 0 && viewportWidth < 820;
+  const dockPaddingClass = phoneShell
+    ? copilotExpanded
+      ? "pb-[32rem]"
+      : "pb-[11rem]"
+    : copilotExpanded
+      ? "pb-[24rem] xl:pb-[28rem]"
+      : "pb-[5.5rem]";
+  const shouldShowInspector = showInspector && activeTab !== "chapters";
   const shouldShowChapterSidebar = activeTab === "chapters" ? showChapterSidebar && desktopShell : desktopShell;
   const shouldShowOuterInspector = shouldShowInspector && desktopShell;
   const canUndo = editorPastRef.current.length > 0;
@@ -1530,7 +1536,9 @@ export function ProjectWorkspace({
   return (
     <main
       className={cn(
-        "workspace-canvas flex h-screen flex-col overflow-hidden px-3 py-3 sm:px-4 lg:px-5",
+        phoneShell
+          ? "workspace-canvas flex h-[100dvh] flex-col overflow-hidden px-2 py-2"
+          : "workspace-canvas flex h-screen flex-col overflow-hidden px-3 py-3 sm:px-4 lg:px-5",
       )}
     >
         <WorkspaceMenuBar
@@ -1541,10 +1549,11 @@ export function ProjectWorkspace({
           chapterContextVisible={showChapterContextPane}
           projectId={project.id}
         chapterOutlineVisible={showChapterOutline}
-        chapterPlanningVisible={showChapterPlanning}
-        chapterSidebarVisible={showChapterSidebar}
-        copilotExpanded={copilotExpanded}
+          chapterPlanningVisible={showChapterPlanning}
+          chapterSidebarVisible={showChapterSidebar}
+          copilotExpanded={copilotExpanded}
           manuscriptZoom={manuscriptZoom}
+          phoneShell={phoneShell}
           onOpenProviders={openProviders}
           onOpenTab={setActiveTab}
           onRedo={handleRedo}
@@ -1583,7 +1592,7 @@ export function ProjectWorkspace({
 
       <div
         className={cn(
-          "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
+          phoneShell ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden" : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
         )}
         style={desktopGridStyle}
       >
@@ -1613,7 +1622,7 @@ export function ProjectWorkspace({
           />
         ) : null}
 
-        <section className={cn("grid min-w-0 min-h-0 gap-4 overflow-y-auto pr-1", dockPaddingClass)}>
+        <section className={cn(phoneShell ? "grid min-w-0 min-h-0 gap-3 overflow-y-auto" : "grid min-w-0 min-h-0 gap-4 overflow-y-auto pr-1", dockPaddingClass)}>
           {activeTab !== "chapters" ? (
             <Card className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
               <div className="grid gap-1">
@@ -1765,9 +1774,62 @@ export function ProjectWorkspace({
 
       <AppLegalNotice className="mt-3 shrink-0" />
 
+      {phoneShell ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <Card className="rounded-[22px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 px-2 py-2 shadow-[0_-10px_24px_var(--shadow)] backdrop-blur">
+            <div className="grid grid-cols-5 gap-1">
+              <Button
+                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                onClick={() => {
+                  setActiveTab("chapters");
+                  setCopilotExpanded(true);
+                }}
+                variant={copilotExpanded ? "primary" : "ghost"}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">AI</span>
+                <span>Coach</span>
+              </Button>
+              <Button
+                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                onClick={() => setActiveTab("chapters")}
+                variant={activeTab === "chapters" ? "primary" : "ghost"}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Write</span>
+                <span>Draft</span>
+              </Button>
+              <Button
+                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                onClick={() => setActiveTab("bible")}
+                variant={activeTab === "bible" ? "primary" : "ghost"}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Bible</span>
+                <span>Cast</span>
+              </Button>
+              <Button
+                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                onClick={() => setActiveTab("skeleton")}
+                variant={activeTab === "skeleton" ? "primary" : "ghost"}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Arc</span>
+                <span>Plot</span>
+              </Button>
+              <Button
+                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                onClick={() => setActiveTab("setup")}
+                variant={activeTab === "setup" ? "primary" : "ghost"}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Setup</span>
+                <span>Book</span>
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
       <ProjectCopilotBar
         activeAiRole={activeAiRole}
         activeTab={activeTab}
+        dockClassName={phoneShell ? "bottom-[calc(4.85rem+env(safe-area-inset-bottom))]" : "bottom-0"}
         expanded={copilotExpanded}
         onBeforeSubmit={handleCopilotBeforeSubmit}
         onContextPackage={setContextPackage}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -61,15 +61,24 @@ function setRibbonAndMaybeOpenTab(
 }
 
 function RibbonGroup({
+  compact = false,
   title,
   children,
 }: {
+  compact?: boolean;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="grid min-w-[170px] gap-2 border-r border-[color:var(--line)] pr-4 last:border-r-0 last:pr-0">
-      <div className="flex flex-wrap gap-2">{children}</div>
+    <div
+      className={cn(
+        "grid gap-2",
+        compact
+          ? "rounded-xl border border-[color:var(--line)] bg-white px-3 py-3"
+          : "min-w-[170px] border-r border-[color:var(--line)] pr-4 last:border-r-0 last:pr-0",
+      )}
+    >
+      <div className={cn("flex flex-wrap gap-2", compact && "flex-col [&>*]:w-full")}>{children}</div>
       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{title}</div>
     </div>
   );
@@ -107,6 +116,7 @@ export function WorkspaceMenuBar({
   chapterPlanningVisible,
   chapterSidebarVisible,
   manuscriptZoom,
+  phoneShell = false,
   onOpenTab,
   onOpenProviders,
   onRedo,
@@ -150,6 +160,7 @@ export function WorkspaceMenuBar({
   chapterPlanningVisible: boolean;
   chapterSidebarVisible: boolean;
   manuscriptZoom: number;
+  phoneShell?: boolean;
   onOpenTab: (tab: StoryForgeTab) => void;
   onOpenProviders: () => void;
   onRedo: () => void;
@@ -182,28 +193,44 @@ export function WorkspaceMenuBar({
 }) {
   const router = useRouter();
   const [activeRibbonTab, setActiveRibbonTab] = useState<RibbonTabId>("home");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     router.prefetch("/");
     router.prefetch("/projects/new");
   }, [router]);
 
+  const compactGroup = phoneShell;
+  const effectiveMobileMenuOpen = phoneShell && mobileMenuOpen;
+
+  const mobileWorkspaceLinks: Array<{ tab: StoryForgeTab; label: string }> = [
+    { tab: "chapters", label: "Writing" },
+    { tab: "setup", label: "Book Setup" },
+    { tab: "skeleton", label: "Story Skeleton" },
+    { tab: "bible", label: "Story Bible" },
+    { tab: "ideaLab", label: "Idea Lab" },
+    { tab: "memory", label: "Memory" },
+    { tab: "continuity", label: "Continuity" },
+    { tab: "settings", label: "Settings" },
+    { tab: "help", label: "About Us" },
+  ];
+
   const ribbonContent = useMemo(() => {
     switch (activeRibbonTab) {
       case "file":
         return (
             <>
-            <RibbonGroup title="Project">
+            <RibbonGroup compact={compactGroup} title="Project">
               <RibbonLink href="/">Open Library</RibbonLink>
               <RibbonLink href="/projects/new">New Book</RibbonLink>
             </RibbonGroup>
-            <RibbonGroup title="Save">
+            <RibbonGroup compact={compactGroup} title="Save">
               <Button onClick={onSaveNow}>Save</Button>
               <Button onClick={onSaveBackup} variant="secondary">
                 Save As Backup
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Export">
+            <RibbonGroup compact={compactGroup} title="Export">
               <RibbonLink href={`/api/projects/${projectId}/export?format=pdf`}>PDF</RibbonLink>
               <RibbonLink href={`/api/projects/${projectId}/export?format=epub`}>EPUB</RibbonLink>
               <RibbonLink href={`/api/projects/${projectId}/export?format=md`}>Markdown</RibbonLink>
@@ -215,7 +242,7 @@ export function WorkspaceMenuBar({
       case "edit":
         return (
           <>
-            <RibbonGroup title="Writing">
+            <RibbonGroup compact={compactGroup} title="Writing">
               <Button disabled={!canUndo} onClick={onUndo} variant="secondary">
                 Undo
               </Button>
@@ -223,7 +250,7 @@ export function WorkspaceMenuBar({
                 Redo
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Navigation">
+            <RibbonGroup compact={compactGroup} title="Navigation">
               <Button onClick={() => onOpenTab("chapters")} variant={activeTab === "chapters" ? "primary" : "secondary"}>
                 Chapter View
               </Button>
@@ -242,7 +269,7 @@ export function WorkspaceMenuBar({
       case "review":
         return (
           <>
-            <RibbonGroup title="Checks">
+            <RibbonGroup compact={compactGroup} title="Checks">
               <Button onClick={onSyncChapter} variant="secondary">
                 Sync Chapter
               </Button>
@@ -259,7 +286,7 @@ export function WorkspaceMenuBar({
                 Continuity View
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Panels">
+            <RibbonGroup compact={compactGroup} title="Panels">
               <Button onClick={onToggleInspector} variant="secondary">
                 {showInspector ? "Hide Context Pane" : "Show Context Pane"}
               </Button>
@@ -269,13 +296,13 @@ export function WorkspaceMenuBar({
       case "ai":
         return (
           <>
-            <RibbonGroup title="Providers">
+            <RibbonGroup compact={compactGroup} title="Providers">
               <Button onClick={onOpenProviders}>AI Engine</Button>
               <Button onClick={onToggleCopilot} variant="secondary">
                 {copilotExpanded ? "Hide Command Bar" : "Show Command Bar"}
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="AI Access">
+            <RibbonGroup compact={compactGroup} title="AI Access">
               <Button onClick={onToggleCopilot} variant={copilotExpanded ? "primary" : "secondary"}>
                 {copilotExpanded ? "Hide AI Bar" : "Show AI Bar"}
               </Button>
@@ -283,7 +310,7 @@ export function WorkspaceMenuBar({
                 Model Settings
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Chapter Drafting">
+            <RibbonGroup compact={compactGroup} title="Chapter Drafting">
               <Button onClick={onRunGenerateOutline} variant="secondary">
                 Generate Outline
               </Button>
@@ -292,7 +319,7 @@ export function WorkspaceMenuBar({
                 Rewrite Pacing
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Chapter Revision">
+            <RibbonGroup compact={compactGroup} title="Chapter Revision">
               <Button onClick={onReviseForProse} variant="secondary">
                 Improve Prose
               </Button>
@@ -300,7 +327,7 @@ export function WorkspaceMenuBar({
                 Sharpen Voice
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Bestseller Sync">
+            <RibbonGroup compact={compactGroup} title="Bestseller Sync">
               <Button onClick={onRunChapterGuideCheck} variant="secondary">
                 Chapter Guide
               </Button>
@@ -308,7 +335,7 @@ export function WorkspaceMenuBar({
                 Whole Book Guide
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="AI Writing Run">
+            <RibbonGroup compact={compactGroup} title="AI Writing Run">
               <Button onClick={onRunAutopilotChapter} variant="secondary">
                 Write Current Chapter
               </Button>
@@ -325,7 +352,7 @@ export function WorkspaceMenuBar({
       case "view":
         return (
           <>
-            <RibbonGroup title="Writing">
+            <RibbonGroup compact={compactGroup} title="Writing">
               <Button onClick={() => onOpenTab("chapters")} variant={activeTab === "chapters" ? "primary" : "secondary"}>
                 Writing View
               </Button>
@@ -336,7 +363,7 @@ export function WorkspaceMenuBar({
                 {chapterContextVisible ? "Hide Context" : "Show Context"}
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Panels">
+            <RibbonGroup compact={compactGroup} title="Panels">
               <Button onClick={onToggleChapterOutline} variant={chapterOutlineVisible ? "primary" : "secondary"}>
                 {chapterOutlineVisible ? "Hide Outline" : "Show Outline"}
               </Button>
@@ -350,7 +377,7 @@ export function WorkspaceMenuBar({
                 {showInspector ? "Hide Inspector" : "Show Inspector"}
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Project">
+            <RibbonGroup compact={compactGroup} title="Project">
               <Button onClick={() => onOpenTab("bible")} variant="secondary">
                 Character Master
               </Button>
@@ -366,7 +393,7 @@ export function WorkspaceMenuBar({
       case "settings":
         return (
           <>
-            <RibbonGroup title="Workspace">
+            <RibbonGroup compact={compactGroup} title="Workspace">
               <Button onClick={() => onOpenTab("settings")} variant={activeTab === "settings" ? "primary" : "secondary"}>
                 Open Settings
               </Button>
@@ -379,7 +406,7 @@ export function WorkspaceMenuBar({
       case "help":
         return (
           <>
-            <RibbonGroup title="About Us">
+            <RibbonGroup compact={compactGroup} title="About Us">
               <Button onClick={() => onOpenTab("help")}>
                 Open About Us
               </Button>
@@ -400,7 +427,7 @@ export function WorkspaceMenuBar({
       default:
         return (
           <>
-            <RibbonGroup title="Document">
+            <RibbonGroup compact={compactGroup} title="Document">
               <Button onClick={onSaveNow}>Save</Button>
               <Button onClick={onSaveBackup} variant="secondary">
                 Backup
@@ -415,7 +442,7 @@ export function WorkspaceMenuBar({
                 Redo
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Zoom">
+            <RibbonGroup compact={compactGroup} title="Zoom">
               <Button onClick={onZoomOut} variant="secondary">
                 Zoom -
               </Button>
@@ -426,7 +453,7 @@ export function WorkspaceMenuBar({
                 Zoom +
               </Button>
             </RibbonGroup>
-            <RibbonGroup title="Views">
+            <RibbonGroup compact={compactGroup} title="Views">
               <Button onClick={() => onOpenTab("chapters")} variant={activeTab === "chapters" ? "primary" : "secondary"}>
                 Writing
               </Button>
@@ -486,7 +513,98 @@ export function WorkspaceMenuBar({
     projectId,
     showInspector,
     autopilotStatus,
+    compactGroup,
   ]);
+
+  if (phoneShell) {
+    return (
+      <>
+        <div
+          className="sticky top-0 z-50 shrink-0 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] shadow-[0_12px_28px_var(--shadow)]"
+          data-testid="workspace-ribbon"
+        >
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--accent)] px-3 py-2.5">
+            <Button
+              aria-label="Open navigation menu"
+              className="min-h-10 min-w-10 border-white/20 bg-white/12 px-0 text-white hover:bg-white/18"
+              onClick={() => setMobileMenuOpen(true)}
+              variant="ghost"
+            >
+              <span aria-hidden="true" className="text-xl leading-none text-white">
+                ≡
+              </span>
+            </Button>
+            <div className="min-w-0 flex-1">
+              <AppBrandMark
+                className="items-center text-white"
+                nameClassName="truncate text-lg text-white"
+                betaClassName="text-[0.5em] text-white"
+              />
+              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                {RIBBON_TABS.find((tab) => tab.id === activeRibbonTab)?.label ?? "Home"}
+              </p>
+            </div>
+            <Chip className="border-white/18 bg-white/14 text-white">{saveState}</Chip>
+          </div>
+        </div>
+
+        {effectiveMobileMenuOpen ? (
+          <div className="fixed inset-0 z-[90] bg-slate-950/38" onClick={() => setMobileMenuOpen(false)} role="presentation">
+            <aside
+              className="h-full w-[min(88vw,22rem)] overflow-y-auto border-r border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-3 shadow-[0_24px_48px_rgba(15,23,42,0.26)]"
+              onClick={(event) => {
+                event.stopPropagation();
+                const target = event.target as HTMLElement;
+                if (target.closest("button, a")) {
+                  window.setTimeout(() => setMobileMenuOpen(false), 0);
+                }
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="grid gap-1">
+                  <AppBrandMark nameClassName="text-lg" />
+                  <p className="text-xs text-[var(--muted)]">Phone workspace menu</p>
+                </div>
+                <Button className="min-h-10 min-w-10 px-0" onClick={() => setMobileMenuOpen(false)} variant="secondary">
+                  ×
+                </Button>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <RibbonGroup compact title="Workspace">
+                  {mobileWorkspaceLinks.map((entry) => (
+                    <Button
+                      key={entry.tab}
+                      onClick={() => onOpenTab(entry.tab)}
+                      variant={activeTab === entry.tab ? "primary" : "secondary"}
+                    >
+                      {entry.label}
+                    </Button>
+                  ))}
+                  <RibbonLink href="/">Open Library</RibbonLink>
+                  <RibbonLink href="/projects/new">New Book</RibbonLink>
+                </RibbonGroup>
+
+                <RibbonGroup compact title="Sections">
+                  {RIBBON_TABS.map((tab) => (
+                    <Button
+                      key={tab.id}
+                      onClick={() => setRibbonAndMaybeOpenTab(tab.id, setActiveRibbonTab, onOpenTab)}
+                      variant={activeRibbonTab === tab.id ? "primary" : "secondary"}
+                    >
+                      {tab.label}
+                    </Button>
+                  ))}
+                </RibbonGroup>
+
+                <div className="grid gap-3">{ribbonContent}</div>
+              </div>
+            </aside>
+          </div>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <div

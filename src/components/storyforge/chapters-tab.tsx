@@ -873,10 +873,11 @@ export function ChaptersTab({
           : liveRange;
     selectionRangeRef.current = nextRange;
     setSelectionRange(nextRange);
-    const menuWidth = 320;
+    const menuInset = phoneShell ? 12 : 16;
+    const menuWidth = Math.min(phoneShell ? window.innerWidth - menuInset * 2 : 320, 320);
     const menuHeight = Math.min(window.innerHeight * 0.85, 560);
-    const safeLeft = Math.max(16, Math.min(clientX, window.innerWidth - menuWidth - 16));
-    const safeTop = Math.max(16, Math.min(clientY, window.innerHeight - menuHeight - 16));
+    const safeLeft = Math.max(menuInset, Math.min(clientX, window.innerWidth - menuWidth - menuInset));
+    const safeTop = Math.max(menuInset, Math.min(clientY, window.innerHeight - menuHeight - menuInset));
 
     setShowCustomInstruction(false);
     setCustomInstruction("");
@@ -1112,11 +1113,31 @@ export function ChaptersTab({
       onFocus: (event: FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => {
         rememberSelection(fieldKey, event.currentTarget);
       },
+      onSelect: (event: SyntheticEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+        rememberSelection(fieldKey, event.currentTarget);
+      },
       onMouseUp: (event: ReactMouseEvent<HTMLTextAreaElement | HTMLInputElement>) => {
         rememberSelection(fieldKey, event.currentTarget);
       },
       onKeyUp: (event: SyntheticEvent<HTMLTextAreaElement | HTMLInputElement>) => {
         rememberSelection(fieldKey, event.currentTarget);
+      },
+      onTouchEnd: (event: React.TouchEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+        const target = event.currentTarget;
+        const touch = event.changedTouches[0];
+        const touchX = touch?.clientX ?? window.innerWidth / 2;
+        const touchY = touch?.clientY ?? window.innerHeight / 2;
+        window.setTimeout(() => {
+          const range = rememberSelection(fieldKey, target, false, true);
+          if (phoneShell && range.selectionEnd > range.selectionStart) {
+            showContextMenu(
+              fieldKey,
+              target,
+              touchX,
+              Math.min(window.innerHeight - 132, touchY + 20),
+            );
+          }
+        }, 120);
       },
       onContextMenu: (event: ReactMouseEvent<HTMLTextAreaElement | HTMLInputElement>) => {
         event.preventDefault();
@@ -1193,24 +1214,33 @@ export function ChaptersTab({
       <Card className="grid gap-0 overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-3">
           <div>
-            <h3 className="text-2xl font-semibold">Chapter Workspace</h3>
+            <h3 className={cn("font-semibold", phoneShell ? "text-xl" : "text-2xl")}>Chapter Workspace</h3>
             <p className="text-sm text-[var(--muted)]">
-              Write directly on the manuscript page, then use AI as a boost, reviewer, or full drafting partner when you want it.
+              {phoneShell
+                ? "Use the phone layout to steer the AI, manage the chapter plan, and open the manuscript only when you want direct edits."
+                : "Write directly on the manuscript page, then use AI as a boost, reviewer, or full drafting partner when you want it."}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Chip>{activeAiRole}</Chip>
-            {(["FREE_WRITE", "CO_WRITE", "FULL_AUTHOR"] as const).map((mode) => (
-              <Button
-                key={mode}
-                className={cn(assistMode === mode && "ring-2 ring-[rgba(225,166,108,0.45)]")}
-                onClick={() => onAssistModeChange(mode)}
-                variant={assistMode === mode ? "primary" : "secondary"}
-              >
-                {mode === "FREE_WRITE" ? "Free write" : mode === "CO_WRITE" ? "Co-write" : "Full author"}
-              </Button>
-            ))}
-          </div>
+          {phoneShell ? (
+            <div className="flex flex-wrap gap-2">
+              <Chip>{activeAiRole}</Chip>
+              <Chip>AI-first phone mode</Chip>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Chip>{activeAiRole}</Chip>
+              {(["FREE_WRITE", "CO_WRITE", "FULL_AUTHOR"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  className={cn(assistMode === mode && "ring-2 ring-[rgba(225,166,108,0.45)]")}
+                  onClick={() => onAssistModeChange(mode)}
+                  variant={assistMode === mode ? "primary" : "secondary"}
+                >
+                  {mode === "FREE_WRITE" ? "Free write" : mode === "CO_WRITE" ? "Co-write" : "Full author"}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto border-b border-[color:var(--line)] bg-white px-4 py-3 min-[960px]:hidden">
@@ -1249,23 +1279,27 @@ export function ChaptersTab({
                 <Chip>Autosave: {saveState}</Chip>
                 <Chip>{editor.draft.trim() ? editor.draft.trim().split(/\s+/).length : 0} words</Chip>
                 <Chip>{selectedChapter.status}</Chip>
-                <Chip>{manuscriptZoom}% zoom</Chip>
-                <Chip>Right-click selected text for AI tools</Chip>
+                {!phoneShell ? <Chip>{manuscriptZoom}% zoom</Chip> : null}
+                <Chip>{phoneShell ? "Long-press selected text for AI tools" : "Right-click selected text for AI tools"}</Chip>
                 {busyAction ? (
                   <Chip className="gap-2">
                     <span aria-hidden="true" className="storyforge-spinner" />
                     <span>{formatBusyLabel(busyAction)}</span>
                   </Chip>
                 ) : null}
-                <Button onClick={onAddChapter} variant="secondary">
-                  Add chapter
-                </Button>
-                <Button onClick={onToggleOutlinePanel} variant="secondary">
-                  {showOutlinePanel ? "Hide outline" : "Open outline"}
-                </Button>
-                <Button onClick={onTogglePlanningPanel} variant="secondary">
-                  {showPlanningPanel ? "Hide planning" : "Open planning"}
-                </Button>
+                {!phoneShell ? (
+                  <>
+                    <Button onClick={onAddChapter} variant="secondary">
+                      Add chapter
+                    </Button>
+                    <Button onClick={onToggleOutlinePanel} variant="secondary">
+                      {showOutlinePanel ? "Hide outline" : "Open outline"}
+                    </Button>
+                    <Button onClick={onTogglePlanningPanel} variant="secondary">
+                      {showPlanningPanel ? "Hide planning" : "Open planning"}
+                    </Button>
+                  </>
+                ) : null}
               </div>
 
               {phoneShell ? (
@@ -1281,6 +1315,19 @@ export function ChaptersTab({
                       <Chip>{autopilotRun ? `Run: ${autopilotRun.status.toLowerCase()}` : "No active run"}</Chip>
                       {busyAction ? <Chip>{formatBusyLabel(busyAction)}</Chip> : null}
                     </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {(["FREE_WRITE", "CO_WRITE", "FULL_AUTHOR"] as const).map((mode) => (
+                      <Button
+                        key={mode}
+                        className={cn("min-h-11", assistMode === mode && "ring-2 ring-[rgba(225,166,108,0.45)]")}
+                        onClick={() => onAssistModeChange(mode)}
+                        variant={assistMode === mode ? "primary" : "secondary"}
+                      >
+                        {mode === "FREE_WRITE" ? "Free write" : mode === "CO_WRITE" ? "Co-write" : "Full author"}
+                      </Button>
+                    ))}
                   </div>
 
                   {aiMode === "AI setup required" ? (
@@ -1469,7 +1516,10 @@ export function ChaptersTab({
 
                       {contextMenu ? (
                         <div
-                          className="fixed z-[70] w-[320px] max-h-[min(85vh,560px)] overflow-y-auto rounded-lg border border-[color:var(--line-strong)] bg-[color:var(--panel)] p-2 shadow-[0_24px_50px_var(--shadow)]"
+                          className={cn(
+                            "fixed z-[70] max-h-[min(85vh,560px)] overflow-y-auto rounded-lg border border-[color:var(--line-strong)] bg-[color:var(--panel)] p-2 shadow-[0_24px_50px_var(--shadow)]",
+                            phoneShell ? "w-[min(92vw,320px)]" : "w-[320px]",
+                          )}
                           data-testid="chapter-context-menu"
                           ref={contextMenuRef}
                           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -1603,8 +1653,16 @@ export function ChaptersTab({
               </div>
 
               <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-3 text-sm text-[var(--muted)]">
-                Chapter AI tools now live in the ribbon under <strong className="text-[var(--text)]">AI Engine</strong>.
-                Review and sync actions live in <strong className="text-[var(--text)]">Review</strong>, so the manuscript area stays cleaner while you write.
+                {phoneShell ? (
+                  <>
+                    More controls live in the <strong className="text-[var(--text)]">menu drawer</strong>, while the bottom tabs keep Bible, Skeleton, Setup, and AI close on a phone-sized screen.
+                  </>
+                ) : (
+                  <>
+                    Chapter AI tools now live in the ribbon under <strong className="text-[var(--text)]">AI Engine</strong>.
+                    Review and sync actions live in <strong className="text-[var(--text)]">Review</strong>, so the manuscript area stays cleaner while you write.
+                  </>
+                )}
               </div>
 
               {bestsellerGuideReport ? (

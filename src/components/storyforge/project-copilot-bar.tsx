@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { APP_NAME } from "@/lib/brand";
 import { aiRoleOptions } from "@/lib/defaults";
+import { cn } from "@/lib/utils";
 import type {
   AiRole,
   ContextPackage,
@@ -64,6 +65,7 @@ export function ProjectCopilotBar({
   activeTab,
   activeAiRole,
   expanded,
+  dockClassName,
   onBeforeSubmit,
   onOpenProviders,
   project,
@@ -77,6 +79,7 @@ export function ProjectCopilotBar({
   activeTab: StoryForgeTab;
   activeAiRole: AiRole;
   expanded: boolean;
+  dockClassName?: string;
   onBeforeSubmit?: (options: {
     message: string;
     applyChanges: boolean;
@@ -188,7 +191,7 @@ export function ProjectCopilotBar({
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 sm:px-4" id="project-copilot-dock">
+    <div className={cn("fixed left-0 right-0 z-40 px-3 pb-3 sm:px-4", dockClassName)} id="project-copilot-dock">
       {expanded ? (
         <Card className="mx-auto max-w-[1600px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 shadow-[0_-14px_34px_var(--shadow)] backdrop-blur">
           <div className="grid gap-4 p-4">

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/brand";
@@ -48,6 +49,7 @@ function isAndroidBrowser() {
 }
 
 export function PwaInstallPrompt() {
+  const pathname = usePathname();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [hiddenForSession, setHiddenForSession] = useState(false);
   const [installed, setInstalled] = useState(false);
@@ -92,8 +94,12 @@ export function PwaInstallPrompt() {
       return false;
     }
 
+    if (pathname && pathname !== "/" && pathname !== "/downloads") {
+      return false;
+    }
+
     return isInstallable || isIos || isAndroid;
-  }, [hiddenForSession, installed, isInstallable, isIos, isAndroid, isMobile]);
+  }, [hiddenForSession, installed, isInstallable, isIos, isAndroid, isMobile, pathname]);
 
   async function handleInstall() {
     if (!installEvent) {

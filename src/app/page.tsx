@@ -21,7 +21,7 @@ function AppHome({
   projects: Awaited<ReturnType<typeof listProjects>>;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-10">
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:gap-8 sm:px-6 sm:py-8 lg:px-10">
       <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
         <Card className="relative overflow-hidden">
           <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.12)] via-transparent to-[rgba(53,100,77,0.12)]" />
@@ -31,28 +31,28 @@ function AppHome({
               {hosted ? <Chip>Hosted web workspace</Chip> : null}
             </div>
             <div className="grid gap-4">
-              <h1 className="max-w-3xl text-5xl leading-[1.02] tracking-tight">
+              <h1 className="max-w-3xl text-3xl leading-[1.04] tracking-tight sm:text-5xl sm:leading-[1.02]">
                 Build books in a sunlit library workspace that remembers the story without swallowing the whole manuscript.
               </h1>
-              <p className="max-w-3xl text-lg text-[var(--muted)]">
+              <p className="max-w-3xl text-base text-[var(--muted)] sm:text-lg">
                 {APP_NAME} blends a manuscript studio, story bible, developmental editor, and optional AI collaborator into one polished environment. Write by hand, co-write selectively, or let the system draft while structured memory keeps canon, continuity, and momentum intact.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Link
-                className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)] sm:w-auto"
                 href="/projects/new"
               >
                 Start a New Book
               </Link>
               <Link
-                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white sm:w-auto"
                 href="/account"
               >
                 Open account
               </Link>
               <Link
-                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white sm:w-auto"
                 href="/downloads"
               >
                 Install on phone
