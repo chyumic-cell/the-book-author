@@ -396,8 +396,40 @@ function cleanChapterFieldContent(
   }
 }
 
+function structuredFieldValueToText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => structuredFieldValueToText(entry))
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => {
+        const nested = structuredFieldValueToText(entry);
+        if (!nested) {
+          return "";
+        }
+
+        return Array.isArray(entry) || (entry && typeof entry === "object") ? `${key}: ${nested}` : nested;
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return value == null ? "" : String(value).trim();
+}
+
 function inferAssistantIntent(message: string, scope: ProjectChatScope): AssistantIntent {
   const lower = message.toLowerCase();
+  const explicitlyRejectsNotes =
+    /(?:do not|don't|not|instead of|rather than)[^.]{0,40}\bnotes?\b/.test(lower) ||
+    /(?:don'?t|do not)\s+write[^.]{0,40}\bnotes?\b/.test(lower);
   return {
     wantsOutline:
       lower.includes("outline") ||
@@ -427,10 +459,11 @@ function inferAssistantIntent(message: string, scope: ProjectChatScope): Assista
       lower.includes("what each chapter should do") ||
       lower.includes("what this chapter should do"),
     wantsNotes:
-      lower.includes("note") ||
-      lower.includes("notes") ||
-      lower.includes("remember this") ||
-      lower.includes("save this"),
+      !explicitlyRejectsNotes &&
+      (lower.includes("note") ||
+        lower.includes("notes") ||
+        lower.includes("remember this") ||
+        lower.includes("save this")),
     wantsDraft:
       lower.includes("manuscript") ||
       lower.includes("draft") ||
@@ -995,6 +1028,34 @@ async function materializeChapterFieldAction(input: {
       : "";
   }
 
+  if (!cleanedContent && fieldKey === "outline") {
+    const emergencyOutlinePrompt = buildPromptEnvelope(
+      `Emergency outline for Chapter ${chapter.number}`,
+      input.project,
+      fieldContext,
+      [
+        "Return only the chapter outline.",
+        "Write 6 concrete beats, each on its own line.",
+        "Make the beats causal, escalating, commercially sharp, and specific to this book.",
+        "Do not leave the outline blank.",
+        previousChapter
+          ? `Previous chapter summary: ${truncateText(previousChapter.outline || previousChapter.purpose, 220)}`
+          : "This is the opening chapter, so start with a strong disturbance and immediate hook.",
+        nextChapter
+          ? `Aim the ending beat toward Chapter ${nextChapter.number}: ${truncateText(nextChapter.purpose || nextChapter.outline, 180)}`
+          : "End with forward pull that makes the reader need the next chapter.",
+        "User instruction:",
+        input.message,
+      ].join("\n\n"),
+      `Current AI role: ${input.role}.`,
+    );
+
+    generated = await generateTextWithProvider(emergencyOutlinePrompt, { maxOutputTokens: 1100 });
+    cleanedContent = generated?.trim()
+      ? cleanChapterFieldContent(input.project, chapter, fieldKey, generated.trim(), currentFieldValue)
+      : "";
+  }
+
   if (!cleanedContent) {
     return input.action;
   }
@@ -1343,9 +1404,7 @@ async function materializeChapterPlanningBundle(input: {
             : "";
 
       if (fieldKey && rawValue != null) {
-        const textValue = Array.isArray(rawValue)
-          ? rawValue.map((entry) => String(entry ?? "").trim()).filter(Boolean).join("\n")
-          : String(rawValue).trim();
+        const textValue = structuredFieldValueToText(rawValue);
         if (textValue) {
           return Promise.resolve({
             ...action,
@@ -1512,8 +1571,9 @@ async function materializePlanActions(input: {
 
   const resultPromises = normalizedActions.map<Promise<AssistantPlanAction>>((action) => Promise.resolve(action));
   const bundledIndexes = new Set<number>();
+  const groupedValues = Array.from(groupedPlanningActions.values());
 
-  for (const group of groupedPlanningActions.values()) {
+  for (const group of groupedValues) {
     const shouldBundle = input.scope === "SKELETON" || group.actions.length > 1;
     if (!shouldBundle) {
       continue;
