@@ -957,10 +957,45 @@ async function materializeChapterFieldAction(input: {
     `Current AI role: ${input.role}.`,
   );
 
-  const generated = await generateTextWithProvider(fieldPrompt, {
-    maxOutputTokens: fieldKey === "draft" ? 1800 : fieldKey === "outline" ? 900 : 700,
+  const generationBudget = fieldKey === "draft" ? 1800 : fieldKey === "outline" ? 900 : 700;
+  let generated = await generateTextWithProvider(fieldPrompt, {
+    maxOutputTokens: generationBudget,
   });
-  if (!generated?.trim()) {
+  let cleanedContent = generated?.trim()
+    ? cleanChapterFieldContent(input.project, chapter, fieldKey, generated.trim(), currentFieldValue)
+    : "";
+
+  if (!cleanedContent && chapterPlanningFieldKeys.has(fieldKey)) {
+    const retryPrompt = buildPromptEnvelope(
+      `Retry ${fieldLabel(fieldKey)}`,
+      input.project,
+      fieldContext,
+      [
+        `Return only the final ${fieldLabel(fieldKey)} for Chapter ${chapter.number}.`,
+        fieldKey === "title"
+          ? "Return a distinct, commercially strong title in 2 to 7 words."
+          : fieldKey === "outline"
+            ? "Return a fully populated outline with 5 to 9 concrete escalating beats."
+            : fieldSpecificInstruction,
+        "Do not leave the field blank.",
+        "Do not add labels, markdown, or commentary.",
+        "Current field content:",
+        currentFieldValue || "(empty)",
+        "User instruction:",
+        input.message,
+      ].join("\n\n"),
+      `Current AI role: ${input.role}.`,
+    );
+
+    generated = await generateTextWithProvider(retryPrompt, {
+      maxOutputTokens: fieldKey === "outline" ? Math.max(generationBudget, 1100) : generationBudget,
+    });
+    cleanedContent = generated?.trim()
+      ? cleanChapterFieldContent(input.project, chapter, fieldKey, generated.trim(), currentFieldValue)
+      : "";
+  }
+
+  if (!cleanedContent) {
     return input.action;
   }
 
@@ -969,7 +1004,7 @@ async function materializeChapterFieldAction(input: {
     chapterId: resolvedChapterId,
     chapterNumber: chapter.number,
     fieldKey,
-    content: cleanChapterFieldContent(input.project, chapter, fieldKey, generated.trim(), currentFieldValue),
+    content: cleanedContent,
   };
 }
 
