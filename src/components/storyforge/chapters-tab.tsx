@@ -588,6 +588,10 @@ export function ChaptersTab({
         "--chapter-context-width": `${smartContextPaneWidth}px`,
       } as CSSProperties)
     : undefined;
+  const hasPhoneDraftSelection =
+    phoneShell &&
+    selectionRange.fieldKey === "draft" &&
+    selectionRange.selectionEnd > selectionRange.selectionStart;
   const relatedCharacters = useMemo(() => {
     if (!selectedChapter) {
       return [];
@@ -1108,6 +1112,21 @@ export function ChaptersTab({
     setShowCustomInstruction(false);
   }
 
+  function openPhoneSelectionTools() {
+    const target = activeFieldRef.current;
+    const range = selectionRangeRef.current;
+    if (!target || range.selectionEnd <= range.selectionStart) {
+      return;
+    }
+
+    showContextMenu(
+      range.fieldKey,
+      target,
+      window.innerWidth / 2,
+      Math.max(104, window.innerHeight - 320),
+    );
+  }
+
   function getAssistableTextProps(fieldKey: AssistFieldKey) {
     return {
       onFocus: (event: FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => {
@@ -1483,6 +1502,23 @@ export function ChaptersTab({
                             ? `POV ready • target ${editor.targetWordCount.toLocaleString()} words`
                             : `Target ${editor.targetWordCount.toLocaleString()} words`}
                         </p>
+                        {hasPhoneDraftSelection ? (
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            <Chip>Selected text: {selectionRange.selectionEnd - selectionRange.selectionStart} chars</Chip>
+                            <Button onClick={openPhoneSelectionTools} type="button">
+                              AI tools
+                            </Button>
+                            <Button onClick={() => void copySelection()} type="button" variant="secondary">
+                              Copy
+                            </Button>
+                            <Button onClick={() => void cutSelection()} type="button" variant="secondary">
+                              Cut
+                            </Button>
+                            <Button onClick={() => void pasteClipboard()} type="button" variant="secondary">
+                              Paste
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
