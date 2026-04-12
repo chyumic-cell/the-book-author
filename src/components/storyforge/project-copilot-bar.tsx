@@ -66,6 +66,7 @@ export function ProjectCopilotBar({
   activeAiRole,
   expanded,
   dockClassName,
+  phoneShell,
   onBeforeSubmit,
   onOpenProviders,
   project,
@@ -80,6 +81,7 @@ export function ProjectCopilotBar({
   activeAiRole: AiRole;
   expanded: boolean;
   dockClassName?: string;
+  phoneShell?: boolean;
   onBeforeSubmit?: (options: {
     message: string;
     applyChanges: boolean;
@@ -194,7 +196,7 @@ export function ProjectCopilotBar({
     <div className={cn("fixed left-0 right-0 z-40 px-3 pb-3 sm:px-4", dockClassName)} id="project-copilot-dock">
       {expanded ? (
         <Card className="mx-auto max-w-[1600px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 shadow-[0_-14px_34px_var(--shadow)] backdrop-blur">
-          <div className="grid gap-4 p-4">
+          <div className={cn("grid gap-4 p-4", phoneShell ? "gap-3 p-3" : null)}>
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[color:var(--line)] pb-3">
               <div className="grid gap-2">
                 <div className="flex flex-wrap gap-2">
@@ -257,7 +259,10 @@ export function ProjectCopilotBar({
 
             <div
               ref={bodyRef}
-              className="max-h-[240px] overflow-auto rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4"
+              className={cn(
+                "overflow-auto rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4",
+                phoneShell ? "max-h-[152px] p-3" : "max-h-[240px]",
+              )}
             >
               <div className="grid gap-3">
                 {turns.map((turn) => (
@@ -298,15 +303,15 @@ export function ProjectCopilotBar({
             </div>
 
             <form className="grid gap-3" onSubmit={handleSubmit}>
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <div className={cn("grid gap-3", phoneShell ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_auto]")}>
                 <TextareaAutosize
-                  className="min-h-[72px] resize-none"
-                  minRows={2}
+                  className={cn("resize-none", phoneShell ? "min-h-[52px] text-sm" : "min-h-[72px]")}
+                  minRows={phoneShell ? 2 : 2}
                 placeholder={`Explain a scene problem, ask for stronger options, or tell ${APP_NAME} what to update.`}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                 />
-                <Button className="min-h-[72px] px-8" disabled={submitting} type="submit">
+                <Button className={cn(phoneShell ? "min-h-[48px] px-5" : "min-h-[72px] px-8")} disabled={submitting} type="submit">
                   <span className="inline-flex items-center gap-2">
                     {submitting ? <span aria-hidden="true" className="storyforge-spinner" /> : null}
                     <span>{submitting ? "Working..." : "Send"}</span>
@@ -321,13 +326,19 @@ export function ProjectCopilotBar({
         </Card>
       ) : (
         <div className="mx-auto max-w-[1600px] rounded-xl border border-[color:var(--line)] bg-[color:var(--panel)] shadow-[0_-10px_24px_var(--shadow)]">
-          <form className="grid gap-3 p-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]" onSubmit={handleSubmit}>
+          <form
+            className={cn(
+              "grid gap-3 p-3",
+              phoneShell ? "grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 p-2.5" : "lg:grid-cols-[auto_minmax(0,1fr)_auto]",
+            )}
+            onSubmit={handleSubmit}
+          >
             <div className="flex items-center gap-2">
               <Chip>AI</Chip>
-              <Chip>{activeRoleLabel}</Chip>
+              {!phoneShell ? <Chip>{activeRoleLabel}</Chip> : null}
             </div>
             <TextareaAutosize
-              className="min-h-[44px] resize-none"
+              className={cn("resize-none", phoneShell ? "min-h-[40px] text-sm" : "min-h-[44px]")}
               minRows={1}
                 placeholder={`Ask ${APP_NAME} plainly for help, edits, ideas, or chapter changes.`}
               value={message}
@@ -335,10 +346,10 @@ export function ProjectCopilotBar({
               onFocus={() => onExpandedChange(true)}
             />
             <div className="flex gap-2">
-              <Button onClick={() => onExpandedChange(true)} type="button" variant="secondary">
+              <Button className={cn(phoneShell ? "min-h-[40px] px-3 text-sm" : null)} onClick={() => onExpandedChange(true)} type="button" variant="secondary">
                 Open
               </Button>
-              <Button disabled={submitting} type="submit">
+              <Button className={cn(phoneShell ? "min-h-[40px] px-3 text-sm" : null)} disabled={submitting} type="submit">
                 <span className="inline-flex items-center gap-2">
                   {submitting ? <span aria-hidden="true" className="storyforge-spinner" /> : null}
                   <span>{submitting ? "Working..." : "Send"}</span>

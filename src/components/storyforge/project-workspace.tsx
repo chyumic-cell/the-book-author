@@ -220,8 +220,8 @@ export function ProjectWorkspace({
   const phoneShell = viewportWidth > 0 && viewportWidth < 820;
   const dockPaddingClass = phoneShell
     ? copilotExpanded
-      ? "pb-[32rem]"
-      : "pb-[11rem]"
+      ? "pb-[24rem]"
+      : "pb-[7.5rem]"
     : copilotExpanded
       ? "pb-[24rem] xl:pb-[28rem]"
       : "pb-[5.5rem]";
@@ -1832,6 +1832,7 @@ export function ProjectWorkspace({
         activeTab={activeTab}
         dockClassName={phoneShell ? "bottom-[calc(4.85rem+env(safe-area-inset-bottom))]" : "bottom-0"}
         expanded={copilotExpanded}
+        phoneShell={phoneShell}
         onBeforeSubmit={handleCopilotBeforeSubmit}
         onContextPackage={setContextPackage}
         onExpandedChange={setCopilotExpanded}
