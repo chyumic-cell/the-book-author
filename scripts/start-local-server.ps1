@@ -13,7 +13,8 @@ if (!(Test-Path $serverPath)) {
   throw "Standalone server not found at $serverPath"
 }
 
-$env:DATABASE_URL = "file:C:/Users/pc1/Documents/storyforge/prisma/dev.db"
+$env:DATABASE_URL = "file:C:/Users/pc1/Documents/The Book Author/prisma/dev.db"
+$env:THE_BOOK_AUTHOR_CONFIG_DIR = $appDir
 $env:STORYFORGE_CONFIG_DIR = $appDir
 
 if (Test-Path $staticSource) {
