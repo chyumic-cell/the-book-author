@@ -12,6 +12,7 @@ import { providerModelSwitchSchema, providerSettingsSchema } from "@/lib/schemas
 const providerConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
 const providerConfigPath = path.join(providerConfigRoot, ".the-book-author.providers.json");
 const useHostedReadOnlyProviderConfig = isHostedBetaEnabled();
+const hostedOpenRouterModel = "openrouter/auto";
 
 export const OPENROUTER_SETUP_URL = process.env.OPENROUTER_SETUP_URL ?? "https://openrouter.ai/keys";
 const REQUIRE_PERSONAL_AI_KEY =
@@ -91,7 +92,7 @@ const defaultSecrets: ProviderSecrets = {
   },
   openrouter: {
     apiKey: (process.env.OPENROUTER_API_KEY ?? "").trim(),
-    model: (process.env.OPENROUTER_MODEL ?? "openrouter/auto").trim(),
+    model: (useHostedReadOnlyProviderConfig ? hostedOpenRouterModel : process.env.OPENROUTER_MODEL ?? "openrouter/auto").trim(),
     baseUrl: (process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").trim(),
     siteUrl: (process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000").trim(),
     appName: (process.env.OPENROUTER_APP_NAME ?? APP_NAME).trim(),
