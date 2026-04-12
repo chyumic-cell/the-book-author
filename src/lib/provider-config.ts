@@ -6,10 +6,12 @@ import path from "node:path";
 import type { ProviderKind, ProviderSettingsRecord } from "@/types/storyforge";
 
 import { APP_NAME } from "@/lib/brand";
+import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import { providerModelSwitchSchema, providerSettingsSchema } from "@/lib/schemas";
 
 const providerConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
 const providerConfigPath = path.join(providerConfigRoot, ".the-book-author.providers.json");
+const useHostedReadOnlyProviderConfig = isHostedBetaEnabled();
 
 export const OPENROUTER_SETUP_URL = process.env.OPENROUTER_SETUP_URL ?? "https://openrouter.ai/keys";
 const REQUIRE_PERSONAL_AI_KEY =
@@ -115,6 +117,10 @@ function maskKey(value: string) {
 }
 
 async function readProviderSecrets(): Promise<ProviderSecrets> {
+  if (useHostedReadOnlyProviderConfig) {
+    return defaultSecrets;
+  }
+
   try {
     const raw = await fs.readFile(providerConfigPath, "utf8");
     const parsed = JSON.parse(raw) as Partial<ProviderSecrets>;
@@ -132,6 +138,10 @@ async function readProviderSecrets(): Promise<ProviderSecrets> {
 }
 
 async function writeProviderSecrets(nextSecrets: ProviderSecrets) {
+  if (useHostedReadOnlyProviderConfig) {
+    throw new Error("Provider settings are managed by the hosted deployment right now and cannot be edited from the web app.");
+  }
+
   await fs.writeFile(providerConfigPath, JSON.stringify(nextSecrets, null, 2));
 }
 
