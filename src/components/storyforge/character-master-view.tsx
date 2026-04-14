@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
-import { cn } from "@/lib/utils";
 import type { CharacterInterpretationSuggestion, CharacterRecord } from "@/types/storyforge";
 
 function splitLines(value: string) {
@@ -214,6 +213,7 @@ export function CharacterMasterView({
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(characters[0]?.id ?? null);
   const [drafts, setDrafts] = useState<Record<string, CharacterRecord>>({});
   const [deepMode, setDeepMode] = useState(true);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [suggestions, setSuggestions] = useState<CharacterInterpretationSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
@@ -314,28 +314,44 @@ export function CharacterMasterView({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="grid gap-2" data-testid="character-master-list">
-          {characters.map((entry) => (
-            <button
-              key={entry.id}
-              className={cn(
-                "rounded-md border px-3 py-3 text-left transition",
-                selectedCharacterId === entry.id
-                  ? "border-[color:rgba(var(--accent-rgb),0.35)] bg-white"
-                  : "border-[color:var(--line)] bg-[color:var(--panel-soft)] hover:bg-white",
-              )}
-              onClick={() => setSelectedCharacterId(entry.id)}
-              type="button"
-            >
-              <div className="text-sm font-semibold text-[var(--text)]">{entry.name}</div>
-              <div className="mt-1 text-xs text-[var(--muted)]">
-                {entry.quickProfile.profession || entry.role || entry.summary}
+        <div className="grid gap-3" data-testid="character-master-list">
+          <Card className="grid gap-3">
+            <div className="grid gap-1">
+              <strong className="text-base text-[var(--text)]">Characters</strong>
+              <p className="text-xs text-[var(--muted)]">
+                Pick a character from the dropdown when you want to open that dossier.
+              </p>
+            </div>
+            <Field label="Character field">
+              <select
+                value={selectedCharacterId ?? ""}
+                onChange={(event) => {
+                  setSelectedCharacterId(event.target.value || null);
+                  setDetailsExpanded(Boolean(event.target.value));
+                }}
+              >
+                {characters.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {character ? (
+              <div className="rounded-[20px] border border-[color:var(--line)] bg-[color:var(--panel-soft)]/78 p-3">
+                <div className="text-sm font-semibold text-[var(--text)]">{character.name}</div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  {character.quickProfile.profession || character.role || character.summary}
+                </div>
               </div>
-            </button>
-          ))}
+            ) : null}
+            <Button onClick={() => setDetailsExpanded((current) => !current)} variant="ghost">
+              {detailsExpanded ? "Collapse dossier" : "Expand dossier"}
+            </Button>
+          </Card>
         </div>
 
-        {draft ? (
+        {draft && detailsExpanded ? (
           <div className="grid gap-4">
             <Card className="grid gap-4">
               <div className="flex flex-wrap items-start justify-between gap-3">

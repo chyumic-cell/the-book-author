@@ -62,7 +62,7 @@ export function EditableListSection({
     [fields, items],
   );
   const [draftOverrides, setDraftOverrides] = useState<Record<string, Record<string, unknown>>>({});
-  const [expandedIds, setExpandedIds] = useState<string[]>(() => items.map((item) => String(item.id)));
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const drafts = useMemo(
     () =>
       Object.fromEntries(
@@ -118,10 +118,14 @@ export function EditableListSection({
           return (
             <div key={itemId} className="rounded-[24px] border border-[color:var(--line)] bg-[color:var(--panel-soft)]/78 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="grid gap-1">
+                <button
+                  className="grid flex-1 gap-1 text-left"
+                  onClick={() => toggleExpanded(itemId)}
+                  type="button"
+                >
                   <strong className="text-lg text-[var(--text)]">{itemTitle}</strong>
                   <p className="text-xs text-[var(--muted)]">{expanded ? "Expanded editor" : "Collapsed summary"}</p>
-                </div>
+                </button>
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={() => toggleExpanded(itemId)} variant="ghost">
                     {expanded ? "Collapse" : "Expand"}

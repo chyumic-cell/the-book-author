@@ -22,6 +22,7 @@ import type {
   ProjectChatActionRecord,
   ProjectChatScope,
   ProjectWorkspace,
+  StructureBeatType,
   StoryForgeTab,
   StyleProfileRecord,
 } from "@/types/storyforge";
@@ -363,6 +364,87 @@ function inferStructureType(message: string) {
   }
 
   return "MIDPOINT";
+}
+
+const canonicalStructureBeats: Array<{
+  type: StructureBeatType;
+  label: string;
+  prompt: string;
+  defaultSummary: string;
+}> = [
+  {
+    type: "OPENING_DISTURBANCE",
+    label: "Opening Disturbance",
+    prompt: "Define the first destabilizing event that knocks the story out of balance and makes the main problem impossible to ignore.",
+    defaultSummary: "Introduce the event that knocks the story world off balance.",
+  },
+  {
+    type: "FIRST_DOORWAY",
+    label: "First Doorway",
+    prompt: "Define the point of no return that locks the protagonist into the main conflict and closes off the old normal.",
+    defaultSummary: "Lock the protagonist into the main conflict with a no-return choice.",
+  },
+  {
+    type: "MIDPOINT",
+    label: "Midpoint Shift",
+    prompt: "Define the central reversal, revelation, or escalation that changes the character's understanding and raises the cost of the story.",
+    defaultSummary: "Change the story's center of gravity with a major revelation or reversal.",
+  },
+  {
+    type: "SECOND_DOORWAY",
+    label: "Second Doorway",
+    prompt: "Define the pressure turn that forces the protagonist into the final drive toward the climax with fewer options and higher risk.",
+    defaultSummary: "Force the story into the final drive with harder pressure and fewer safe options.",
+  },
+  {
+    type: "CLIMAX",
+    label: "Climax",
+    prompt: "Define the decisive confrontation where the protagonist must act under maximum pressure and pay for the story's promise.",
+    defaultSummary: "Deliver the decisive confrontation and highest-pressure choice.",
+  },
+  {
+    type: "RESOLUTION",
+    label: "Resolution",
+    prompt: "Define the final consequence state that shows what the climax cost and what changed permanently after it.",
+    defaultSummary: "Show the lasting consequence and changed state after the climax.",
+  },
+];
+
+function shouldBuildWholeStructureEngine(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("structure engine") ||
+    (lower.includes("story structure") && (lower.includes("build") || lower.includes("fill") || lower.includes("set up"))) ||
+    (lower.includes("structure beats") && (lower.includes("all") || lower.includes("full"))) ||
+    (lower.includes("opening disturbance") &&
+      lower.includes("midpoint") &&
+      (lower.includes("climax") || lower.includes("resolution")))
+  );
+}
+
+function buildCanonicalStructureBeatActions(project: ProjectWorkspace, chapterId: string | null, message: string): AssistantPlanAction[] {
+  const totalChapters = Math.max(project.chapters.length, 1);
+  const chapterTargets = {
+    OPENING_DISTURBANCE: 1,
+    FIRST_DOORWAY: Math.max(2, Math.round(totalChapters * 0.25)),
+    MIDPOINT: Math.max(2, Math.round(totalChapters * 0.5)),
+    SECOND_DOORWAY: Math.max(3, Math.round(totalChapters * 0.75)),
+    CLIMAX: Math.max(1, totalChapters - 1),
+    RESOLUTION: totalChapters,
+  } as const;
+
+  return canonicalStructureBeats.map((beat) => ({
+    kind: "CREATE_STRUCTURE_BEAT",
+    title: beat.label,
+    content: "",
+    structureType: beat.type,
+    chapterId:
+      project.chapters.find((chapter) => chapter.number === chapterTargets[beat.type])?.id ??
+      chapterId ??
+      undefined,
+    chapterNumber: chapterTargets[beat.type],
+    summary: `${beat.prompt} ${beat.defaultSummary} Keep it synced with the current project/series canon and the user's request: ${message}`,
+  }));
 }
 
 const validActionKinds = new Set<AssistantActionKind>([
@@ -2060,14 +2142,19 @@ function buildFallbackPlan(input: {
       nextTab = "ideaLab";
     }
 
+    if (actions.length === 0 && input.scope === "SKELETON" && shouldBuildWholeStructureEngine(input.message)) {
+      actions.push(...buildCanonicalStructureBeatActions(input.project, input.chapterId, input.message));
+      nextTab = "skeleton";
+    }
+
     if (
       actions.length === 0 &&
       (input.scope === "SKELETON" || lower.includes("midpoint") || lower.includes("doorway") || lower.includes("climax") || lower.includes("beat"))
     ) {
       actions.push({
         kind: "CREATE_STRUCTURE_BEAT",
-        title: input.message.slice(0, 80),
-        content: input.message,
+        title: "",
+        content: "",
         structureType: inferStructureType(input.message),
         chapterId: input.chapterId ?? undefined,
         summary: "Mapped the request into the story skeleton as a structure beat.",
@@ -2718,10 +2805,16 @@ async function materializeStructureBeatAction(input: {
       "Return strict JSON only.",
       'Use this shape: {"label":"...","description":"...","notes":"...","type":"MIDPOINT"}',
       "Create one commercially strong structure beat that fits the user's request and the current book plan.",
+      "This is for the Structure Engine, not for chapter notes. Do not echo the user's raw wording as the label.",
+      "The label must read like a clean structural beat name a novelist would want to keep in the planner.",
+      input.action.structureType ? `Preferred beat type: ${normalizeStructureType(input.action.structureType)}.` : "",
+      input.action.title ? `Preferred label anchor: ${input.action.title}.` : "",
+      input.action.summary ? `Planning brief: ${input.action.summary}` : "",
       resolvedChapter
         ? `Link it naturally to Chapter ${resolvedChapter.number}: ${resolvedChapter.title}.`
         : "If no chapter is specified, position it at the best structural point for the request.",
       "Keep the label short and useful. Make the description concrete, causal, and story-specific.",
+      "Use the already filled project, story bible, skeleton, continuity, and series context so the beat stays in sync with the existing plan.",
       "User instruction:",
       input.message,
     ].join("\n\n"),

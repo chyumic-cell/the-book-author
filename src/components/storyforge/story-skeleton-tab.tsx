@@ -361,7 +361,7 @@ export function StorySkeletonTab({
 
       <EditableListSection
         key={`beats-${project.structureBeats.map((item) => item.id).join("-")}`}
-        description="Map flexible act turns such as the opening disturbance, doorways, midpoint, climax, and resolution."
+        description="The Structure Engine is the book's turning-point map. Use it to place the opening disturbance, doorway beats, midpoint, climax, and resolution so the plot keeps escalating in the right order."
         fields={[
           { key: "type", label: "Beat type" },
           { key: "label", label: "Label" },
