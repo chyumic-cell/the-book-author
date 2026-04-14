@@ -9,7 +9,7 @@ import {
 import { APP_NAME } from "@/lib/brand";
 import { buildContextPackage } from "@/lib/memory";
 import { cleanGeneratedText, cleanSummaryText, sanitizeManuscriptText } from "@/lib/ai-output";
-import { generateTextWithProvider } from "@/lib/openai";
+import { generateTextWithProvider, interpretCharacterProfile } from "@/lib/openai";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { getChapterById, getProjectWorkspace } from "@/lib/project-data";
 import { syncChapterToStoryState } from "@/lib/story-sync";
@@ -61,6 +61,11 @@ type AssistantPlan = {
   reply: string;
   actions: AssistantPlanAction[];
   nextTab: StoryForgeTab | null;
+};
+
+type CharacterInterpretationSuggestionLike = {
+  key: string;
+  value: string;
 };
 
 function normalizeScope(scope: ProjectChatScope) {
@@ -658,6 +663,133 @@ function cleanStringList(value: unknown) {
   }
 
   return [];
+}
+
+const CHARACTER_ARRAY_PATHS = new Set([
+  "dossier.basicIdentity.nicknames",
+  "dossier.personalityBehavior.coreTraits",
+  "dossier.personalityBehavior.virtues",
+  "dossier.personalityBehavior.flaws",
+  "dossier.motivationStory.secrets",
+  "dossier.speechLanguage.otherLanguages",
+  "dossier.speechLanguage.descriptors",
+  "dossier.speechLanguage.repeatedPhrases",
+  "dossier.speechLanguage.favoriteExpressions",
+  "dossier.bodyPresence.distinguishingFeatures",
+  "dossier.bodyPresence.habitsTics",
+  "dossier.relationshipDynamics.friends",
+  "dossier.relationshipDynamics.enemies",
+  "dossier.relationshipDynamics.rivals",
+  "dossier.relationshipDynamics.loversExes",
+  "dossier.relationshipDynamics.family",
+  "dossier.relationshipDynamics.mentors",
+  "dossier.relationshipDynamics.subordinatesSuperiors",
+]);
+
+function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
+  const segments = path.split(".");
+  let current: Record<string, unknown> = target;
+
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      current[segment] = value;
+      return;
+    }
+
+    const next = current[segment];
+    if (!next || typeof next !== "object" || Array.isArray(next)) {
+      current[segment] = {};
+    }
+    current = current[segment] as Record<string, unknown>;
+  });
+}
+
+function buildCharacterAutofillPayload(
+  suggestions: CharacterInterpretationSuggestionLike[],
+  currentCharacter?: ProjectWorkspace["characters"][number] | null,
+) {
+  const payload: Record<string, unknown> = {};
+
+  for (const suggestion of suggestions) {
+    const key = suggestion.key.trim();
+    const value = suggestion.value.trim();
+    if (!key || !value) {
+      continue;
+    }
+
+    setNestedValue(
+      payload,
+      key,
+      CHARACTER_ARRAY_PATHS.has(key) ? cleanStringList(value) : value,
+    );
+  }
+
+  const quickProfile = (payload.quickProfile as Record<string, unknown> | undefined) ?? null;
+  const dossier = (payload.dossier as Record<string, unknown> | undefined) ?? null;
+  const motivationStory =
+    dossier && typeof dossier === "object"
+      ? ((dossier.motivationStory as Record<string, unknown> | undefined) ?? null)
+      : null;
+
+  const inferredProfession =
+    (quickProfile && typeof quickProfile.profession === "string" ? String(quickProfile.profession).trim() : "") ||
+    currentCharacter?.quickProfile.profession.trim() ||
+    currentCharacter?.dossier.lifePosition.profession.trim() ||
+    currentCharacter?.role.trim() ||
+    "";
+
+  if (!String(payload.role ?? "").trim() && inferredProfession) {
+    payload.role = inferredProfession;
+  }
+
+  if (!String(payload.goal ?? "").trim() && motivationStory && typeof motivationStory.shortTermGoal === "string") {
+    payload.goal = String(motivationStory.shortTermGoal).trim();
+  }
+
+  if (inferredProfession) {
+    if (!quickProfile || typeof quickProfile !== "object") {
+      payload.quickProfile = { profession: inferredProfession };
+    } else if (!String(quickProfile.profession ?? "").trim()) {
+      quickProfile.profession = inferredProfession;
+    }
+
+    const nextDossier = ((payload.dossier as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+    const nextLifePosition = ((nextDossier.lifePosition as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+    if (!String(nextLifePosition.profession ?? "").trim()) {
+      nextLifePosition.profession = inferredProfession;
+    }
+    nextDossier.lifePosition = nextLifePosition;
+    payload.dossier = nextDossier;
+  }
+
+  return payload;
+}
+
+function shouldAutofillCharacterRecord(
+  payload: Record<string, unknown>,
+  existingEntity: unknown,
+) {
+  if (!payload.name && !existingEntity) {
+    return false;
+  }
+
+  if (!("quickProfile" in payload) || !("dossier" in payload) || !("currentState" in payload)) {
+    return true;
+  }
+
+  const quickProfile = payload.quickProfile;
+  const dossier = payload.dossier;
+  const currentState = payload.currentState;
+
+  return (
+    !quickProfile ||
+    typeof quickProfile !== "object" ||
+    !dossier ||
+    typeof dossier !== "object" ||
+    !currentState ||
+    typeof currentState !== "object" ||
+    Object.keys(payload).length <= 5
+  );
 }
 
 function coerceNumber(value: unknown) {
@@ -3004,6 +3136,9 @@ async function materializeStoryBibleEntityAction(input: {
       "Only include fields you can support confidently from the request and current canon.",
       "If the request is to deepen or improve an existing entity, enrich it substantially rather than making tiny cosmetic additions.",
       "Treat existing story-bible entries, chapter history, memory, continuity, and series canon as source-of-truth context. Do not drift away from those facts.",
+      entityType === "character"
+        ? "For character work, aim for a genuinely usable record: include top-level summary and role when possible, plus meaningful quickProfile, dossier, and currentState content rather than leaving them skeletal."
+        : "",
       seedLabel ? `Use this exact entity name/label where relevant: ${seedLabel}.` : "",
       "Field guide:",
       ...spec.fields.map((field) => `- ${field.key}: ${field.description} Example: ${field.example}`),
@@ -3789,7 +3924,7 @@ async function applyActions(
         continue;
       }
 
-      await mutateStoryBible(
+      const mutationResult = await mutateStoryBible(
         workingProject.id,
         {
           entityType: action.entityType,
@@ -3798,6 +3933,34 @@ async function applyActions(
         },
         entityId ? "PATCH" : "POST",
       );
+
+      if (
+        action.entityType === "character" &&
+        mutationResult &&
+        typeof mutationResult === "object" &&
+        "id" in mutationResult &&
+        shouldAutofillCharacterRecord(payload, existingEntity)
+      ) {
+        const characterId = String((mutationResult as { id?: unknown }).id ?? "");
+        if (characterId) {
+          await refreshWorkingProject();
+          const updatedCharacter = workingProject.characters.find((entry) => entry.id === characterId) ?? null;
+          const suggestions = await interpretCharacterProfile(workingProject.id, characterId);
+          const autofillPayload = buildCharacterAutofillPayload(suggestions, updatedCharacter);
+          if (Object.keys(autofillPayload).length > 0) {
+            await mutateStoryBible(
+              workingProject.id,
+              {
+                entityType: "character",
+                id: characterId,
+                payload: autofillPayload,
+              },
+              "PATCH",
+            );
+          }
+        }
+      }
+
       await recordApplied(index, action, targetLabel, action.summary || `Updated ${targetLabel.toLowerCase()}.`);
       continue;
     }
