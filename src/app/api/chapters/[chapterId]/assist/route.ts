@@ -33,6 +33,8 @@ export async function POST(
             selectionText: input.selectionText,
             instruction: input.instruction,
             localExcerpt,
+            beforeSelection: input.beforeSelection,
+            afterSelection: input.afterSelection,
           });
 
     const run = await createAssistRun({

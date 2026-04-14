@@ -741,6 +741,11 @@ export function ChaptersTab({
       return;
     }
 
+    if (pendingSuggestion.target) {
+      setSuggestionTarget(pendingSuggestion.target);
+      return;
+    }
+
     if (pendingSuggestionTargetRef.current) {
       if (!pendingSuggestionTarget) {
         setPendingSuggestionTarget(pendingSuggestionTargetRef.current);
@@ -1485,7 +1490,7 @@ export function ChaptersTab({
                     <div
                       className={cn(
                         phoneShell
-                          ? "fixed inset-0 z-[80] bg-[color:var(--page)]/96 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.9rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+                          ? "relative z-10 px-0 pb-2 pt-1"
                           : "",
                       )}
                     >
@@ -1493,16 +1498,16 @@ export function ChaptersTab({
                       className={cn(
                         "paper-sheet mx-auto w-full max-w-[920px]",
                         phoneShell
-                          ? "flex h-full flex-col overflow-hidden rounded-[24px] border border-[color:var(--line-strong)] bg-white shadow-[0_18px_48px_var(--shadow)]"
+                          ? "flex min-h-0 flex-col overflow-visible rounded-[20px] border border-[color:var(--line-strong)] bg-white shadow-[0_18px_40px_var(--shadow)]"
                           : "rounded-[4px]",
                       )}
                     >
-                    <div className={cn("border-b border-[color:var(--line)]", phoneShell ? "px-5 py-4" : "px-8 py-5 sm:px-12")}>
+                    <div className={cn("border-b border-[color:var(--line)]", phoneShell ? "px-4 py-3" : "px-8 py-5 sm:px-12")}>
                       <div className="grid gap-1">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
                           Chapter {selectedChapter.number}
                         </p>
-                        <h3 className="text-2xl font-semibold text-[var(--text)]">
+                        <h3 className={cn("font-semibold text-[var(--text)]", phoneShell ? "text-xl leading-8" : "text-2xl")}>
                           {editor.title || selectedChapter.title || `Chapter ${selectedChapter.number}`}
                         </h3>
                         {phoneShell ? (
@@ -1537,7 +1542,7 @@ export function ChaptersTab({
                       </div>
                     </div>
 
-                      <div className={cn("relative", phoneShell ? "min-h-0 flex-1" : null)}>
+                      <div className={cn("relative", phoneShell ? "min-h-0" : null)}>
                       {draftSuggestionPreview ? (
                         <InlineSuggestionPreview
                           actionType={draftSuggestionPreview.actionType}
@@ -1558,7 +1563,7 @@ export function ChaptersTab({
                             className={cn(
                               "manuscript-font w-full resize-none overflow-y-auto !border-0 !bg-transparent !shadow-none focus:!shadow-none focus:ring-0",
                               phoneShell
-                                ? "h-full min-h-0 px-4 py-5 text-[15px] leading-7"
+                                ? "h-[56svh] min-h-[52svh] px-4 py-4 text-[15px] leading-6"
                                 : "h-[62vh] min-h-[34rem] px-8 py-10 text-[18px] leading-9 sm:px-12 min-[960px]:h-[calc(100vh-22rem)]",
                             )}
                             style={{

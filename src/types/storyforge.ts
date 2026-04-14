@@ -569,6 +569,24 @@ export interface ProjectWorkspace {
 export interface AssistSuggestion {
   run: AiAssistRunRecord;
   contextPackage: ContextPackage;
+  target?: {
+    fieldKey:
+      | "title"
+      | "purpose"
+      | "currentBeat"
+      | "keyBeats"
+      | "requiredInclusions"
+      | "forbiddenElements"
+      | "desiredMood"
+      | "sceneList"
+      | "outline"
+      | "draft"
+      | "notes";
+    selectionStart: number;
+    selectionEnd: number;
+    applyMode: "replace-selection" | "replace-draft" | "append" | "insert-at-cursor";
+    sourceText: string;
+  };
 }
 
 export interface CharacterInterpretationSuggestion {
@@ -601,6 +619,9 @@ export interface ProjectChatActionRecord {
     | "UPDATE_CHAPTER_FIELD"
     | "APPEND_CHAPTER_FIELD"
     | "UPDATE_CHAPTER_PURPOSE"
+    | "UPDATE_BOOK_SETUP"
+    | "UPDATE_STYLE_PROFILE"
+    | "UPSERT_STORY_BIBLE_ENTITY"
     | "UPDATE_PLOT_DIRECTION"
     | "UPDATE_STORY_BRIEF";
   targetLabel: string;

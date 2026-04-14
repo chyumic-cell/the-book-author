@@ -7,6 +7,7 @@ import { APP_NAME } from "@/lib/brand";
 import {
   assessManuscriptEnding,
   cleanGeneratedText,
+  cleanInlineSuggestionAgainstContext,
   cleanInlineSuggestionText,
   cleanSummaryText,
   sanitizeManuscriptText,
@@ -817,6 +818,42 @@ function roughWordCount(value: string) {
   return value.trim() ? value.trim().split(/\s+/).length : 0;
 }
 
+function truncateText(value: string | null | undefined, maxLength: number) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
+function normalizeComparableText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[`*_>#]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function overlapScore(left: string, right: string) {
+  const leftWords = new Set(normalizeComparableText(left).split(" ").filter((word) => word.length >= 4));
+  const rightWords = new Set(normalizeComparableText(right).split(" ").filter((word) => word.length >= 4));
+
+  if (leftWords.size === 0 || rightWords.size === 0) {
+    return 0;
+  }
+
+  let shared = 0;
+  for (const word of leftWords) {
+    if (rightWords.has(word)) {
+      shared += 1;
+    }
+  }
+
+  return shared / Math.max(leftWords.size, rightWords.size);
+}
+
 function capOutputTokens(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
@@ -843,9 +880,9 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
 
   switch (actionType) {
     case "TIGHTEN":
-      return wordBudgetToTokens(baselineWords / 1.75, 180, 1800);
+      return wordBudgetToTokens(Math.max(Math.ceil(baselineWords / 3), 60), 120, 1200);
     case "EXPAND":
-      return wordBudgetToTokens(baselineWords * 2.25, 320, 3600);
+      return wordBudgetToTokens(baselineWords * 3, 320, 5200);
     case "ADD_DIALOGUE":
       return wordBudgetToTokens(baselineWords * 1.45, 260, 2400);
     case "DESCRIPTION_TO_DIALOGUE":
@@ -1153,6 +1190,119 @@ async function runPromptTask(options: {
   };
 }
 
+async function enforceInlineLengthIfNeeded(options: {
+  project: ProjectWorkspace;
+  context: ContextPackage;
+  actionType: AssistActionType;
+  selectionText: string;
+  content: string;
+}) {
+  const sourceWords = roughWordCount(options.selectionText);
+  const currentWords = roughWordCount(options.content);
+
+  if (!sourceWords || !currentWords) {
+    return options.content;
+  }
+
+  if (options.actionType === "EXPAND") {
+    const targetWords = Math.max(sourceWords * 3, sourceWords + 12);
+    const minimumAcceptable = Math.ceil(targetWords * 0.82);
+    if (currentWords >= minimumAcceptable) {
+      return options.content;
+    }
+
+    const repairPrompt = buildPromptEnvelope(
+      "Repair expand length",
+      options.project,
+      options.context,
+      [
+        "Rewrite only the selected text.",
+        "The previous result was too short.",
+        `Original selected text word count: ${sourceWords}.`,
+        `Your new result must land near ${targetWords} words, and not below ${minimumAcceptable} words.`,
+        "Do not append outside the selected moment. Rebuild the same selected passage at greater depth and with richer progression.",
+        "Preserve the same continuity, chronology, scene facts, and local speaker set.",
+        "Return only the replacement prose.",
+        "Selected text:",
+        options.selectionText,
+      ].join("\n\n"),
+    );
+    const repairedRaw = await generateTextWithProvider(repairPrompt, {
+      maxOutputTokens: wordBudgetToTokens(targetWords, 420, 6200),
+    });
+    const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+    return roughWordCount(repaired) > currentWords ? repaired : options.content;
+  }
+
+  if (options.actionType === "TIGHTEN") {
+    const targetWords = Math.max(Math.ceil(sourceWords / 3), 8);
+    const maximumAcceptable = Math.max(Math.ceil(targetWords * 1.35), targetWords + 4);
+    if (currentWords <= maximumAcceptable) {
+      return options.content;
+    }
+
+    const repairPrompt = buildPromptEnvelope(
+      "Repair tighten length",
+      options.project,
+      options.context,
+      [
+        "Rewrite only the selected text.",
+        "The previous result was still too long.",
+        `Original selected text word count: ${sourceWords}.`,
+        `Your new result must land near ${targetWords} words, and stay at or below ${maximumAcceptable} words.`,
+        "Keep the core meaning, continuity, and scene logic, but compress hard.",
+        "Return only the replacement prose.",
+        "Selected text:",
+        options.selectionText,
+      ].join("\n\n"),
+    );
+    const repairedRaw = await generateTextWithProvider(repairPrompt, {
+      maxOutputTokens: wordBudgetToTokens(maximumAcceptable, 120, 1400),
+    });
+    const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+    return roughWordCount(repaired) < currentWords ? repaired : options.content;
+  }
+
+  return options.content;
+}
+
+async function enforceTensionIfNeeded(options: {
+  project: ProjectWorkspace;
+  context: ContextPackage;
+  selectionText: string;
+  content: string;
+}) {
+  const selectedWords = roughWordCount(options.selectionText);
+  const currentWords = roughWordCount(options.content);
+  const similarity = overlapScore(options.selectionText, options.content);
+  const isTooClose = similarity >= 0.82 || currentWords <= Math.max(selectedWords + 6, Math.ceil(selectedWords * 1.08));
+
+  if (!isTooClose) {
+    return options.content;
+  }
+
+  const repairPrompt = buildPromptEnvelope(
+    "Repair tension pass",
+    options.project,
+    options.context,
+    [
+      "Rewrite only the selected text so the scene pressure is materially stronger, not just cosmetically rephrased.",
+      "Follow Bell-style scene craft: clarify what the focal character wants right now, strengthen what pushes back, increase worry, sharpen the possibility of loss, and make the passage end in a more pressured state than it began.",
+      "Add real friction through resistance, uncertainty, threat, time pressure, subtext, bad options, or emotionally loaded reaction beats.",
+      "Do not simply restate the same beats with synonyms.",
+      "Preserve continuity, chronology, and scene facts, but make the pressure rise visibly on the page.",
+      "Return only the replacement prose.",
+      "Original selected text:",
+      options.selectionText,
+    ].join("\n\n"),
+  );
+  const repairedRaw = await generateTextWithProvider(repairPrompt, {
+    maxOutputTokens: wordBudgetToTokens(Math.max(Math.ceil(selectedWords * 1.35), selectedWords + 24), 240, 2400),
+  });
+  const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+  return repaired.trim() && overlapScore(options.selectionText, repaired) < similarity ? repaired : options.content;
+}
+
 function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: ContextPackage) {
   return [
     `1. Hook the chapter with ${chapterTitle} starting inside active pressure.`,
@@ -1193,13 +1343,18 @@ function mockRevision(actionType: AssistActionType, selectionText: string, instr
 function buildAssistActionInstruction(actionType: AssistActionType) {
   switch (actionType) {
     case "TIGHTEN":
-      return "Shorten the selected text by roughly 15 to 35 percent while preserving meaning, continuity, and voice.";
+      return [
+        "Rewrite only the selected text so the final result is approximately one third of the original word count.",
+        "Cut hard and decisively, not gently.",
+        "Preserve the core meaning, continuity, scene logic, and voice, but strip everything nonessential.",
+        "Do not summarize vaguely. Keep the surviving language vivid, precise, and readable.",
+      ].join(" ");
     case "EXPAND":
       return [
         "Rewrite and expand only the selected text.",
         "Do not merely append a sentence to the end.",
         "Internally break the selected passage into five micro-parts or beats, then rebuild all five with richer detail, stronger transitions, added texture, and clearer emotional movement.",
-        "Increase the total length substantially, usually by roughly 60 to 140 percent, while preserving the same underlying event, chronology, and meaning.",
+        "Increase the total length to approximately three times the original selected word count while preserving the same underlying event, chronology, and meaning.",
         "Keep the same dramatic center, speaker set, and local scene situation unless the selected text itself already changes them.",
         "Respect the project's dialogue-versus-description settings while expanding.",
       ].join(" ");
@@ -1214,7 +1369,13 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
         "Make the emotional pressure audible in how each person chooses words, evades, blurts, flatters, hedges, or attacks.",
       ].join(" ");
     case "ADD_TENSION":
-      return "Rewrite only the selected text so the pressure, uncertainty, or threat is more palpable.";
+      return [
+        "Rewrite only the selected text so the pressure rises in a real Bell-style way, not as a light rewording.",
+        "Clarify what the focal character wants in this moment, what pushes back, and how the resistance gets worse on the page.",
+        "Increase worry through opposition, uncertainty, subtext, bad options, time pressure, exposure, threat, or emotional consequence.",
+        "Make the end of the selected passage more pressured than the beginning.",
+        "Do not merely substitute sharper adjectives or slightly harsher wording.",
+      ].join(" ");
     case "ADD_DIALOGUE":
       return [
         "Rewrite only the selected text so it contains stronger on-page dialogue.",
@@ -1249,13 +1410,29 @@ function buildAssistScopedInstruction(
   project: ProjectWorkspace,
   actionType: AssistActionType,
   instruction: string,
+  beforeSelection = "",
+  afterSelection = "",
 ) {
   const actionInstruction = buildAssistActionInstruction(actionType);
+  const boundaryInstruction =
+    beforeSelection.trim() || afterSelection.trim()
+      ? [
+          "Use the text immediately before and after the selected span as continuity boundaries.",
+          "Understand what comes before and what comes after so the replacement fits naturally between them.",
+          "Do not repeat, restate, or paraphrase the adjacent sentences just because they appear in context.",
+          "Write only the replacement for the selected span itself.",
+          beforeSelection.trim() ? `Immediate text before selection: ${beforeSelection.trim().slice(-280)}` : "",
+          afterSelection.trim() ? `Immediate text after selection: ${afterSelection.trim().slice(0, 280)}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
 
   if (actionType === "CONTINUE") {
     return [
       buildSelectionStyleInstruction(project, actionType),
       instruction || "Continue from the cursor.",
+      boundaryInstruction,
       "Return only the new continuation text.",
       "Do not repeat the existing passage or add commentary.",
     ].join(" ");
@@ -1272,6 +1449,7 @@ function buildAssistScopedInstruction(
   return [
     buildSelectionStyleInstruction(project, actionType),
     instruction || actionInstruction,
+    boundaryInstruction,
     actionType === "CUSTOM_EDIT"
       ? "Treat the writer's custom instruction as the top priority for the selected text."
       : "",
@@ -1421,6 +1599,8 @@ export async function assistSelection(input: {
   selectionText: string;
   instruction: string;
   localExcerpt?: string;
+  beforeSelection?: string;
+  afterSelection?: string;
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
@@ -1428,16 +1608,46 @@ export async function assistSelection(input: {
   }
 
   const context = buildContextPackage(project, input.chapterId, input.localExcerpt || input.selectionText);
-  return runPromptTask({
+  const result = await runPromptTask({
     task: `${input.actionType} selected text`,
     project,
     context,
-    instruction: buildAssistScopedInstruction(project, input.actionType, input.instruction),
+    instruction: buildAssistScopedInstruction(
+      project,
+      input.actionType,
+      input.instruction,
+      input.beforeSelection,
+      input.afterSelection,
+    ),
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
     mockContent: mockRevision(input.actionType, input.selectionText, input.instruction),
-    clean: cleanInlineSuggestionText,
+    clean: (value) =>
+      cleanInlineSuggestionAgainstContext(value, {
+        beforeSelection: input.beforeSelection,
+        afterSelection: input.afterSelection,
+      }),
   });
+  const enforcedContent = await enforceInlineLengthIfNeeded({
+    project,
+    context,
+    actionType: input.actionType,
+    selectionText: input.selectionText,
+    content: result.content,
+  });
+  const tensionSafeContent =
+    input.actionType === "ADD_TENSION"
+      ? await enforceTensionIfNeeded({
+          project,
+          context,
+          selectionText: input.selectionText,
+          content: enforcedContent,
+        })
+      : enforcedContent;
+  return {
+    ...result,
+    content: tensionSafeContent,
+  };
 }
 
 export async function reviewChapterWithBestsellerGuide(projectId: string, chapterId: string) {
@@ -1544,12 +1754,218 @@ function parseSuggestionJson(raw: string): CharacterInterpretationSuggestion[] |
   return null;
 }
 
+function getCharacterPathValue(character: CharacterRecord, path: string): string {
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object") {
+      return "";
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, character) as string;
+}
+
+function mergeCharacterSuggestions(
+  primary: CharacterInterpretationSuggestion[],
+  secondary: CharacterInterpretationSuggestion[],
+) {
+  const merged: CharacterInterpretationSuggestion[] = [];
+  const seen = new Set<string>();
+
+  for (const suggestion of [...primary, ...secondary]) {
+    const key = suggestion.key.trim().toLowerCase();
+    if (!key || seen.has(key) || !suggestion.value.trim()) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(suggestion);
+  }
+
+  return merged;
+}
+
 function mockCharacterInterpretation(character: CharacterRecord): CharacterInterpretationSuggestion[] {
-  const text = `${character.dossier.freeTextCore}\n${character.notes}`.toLowerCase();
+  const text = `${character.summary}\n${character.goal}\n${character.fear}\n${character.secret}\n${character.wound}\n${character.dossier.freeTextCore}\n${character.notes}`.toLowerCase();
+  const roleText = [
+    character.role,
+    character.archetype,
+    character.quickProfile.profession,
+    character.dossier.lifePosition.profession,
+    character.dossier.lifePosition.roleTitle,
+  ]
+    .join(" ")
+    .toLowerCase();
   const suggestions: CharacterInterpretationSuggestion[] = [];
+  const addSuggestion = (suggestion: CharacterInterpretationSuggestion) => {
+    if (!suggestion.value.trim() || getCharacterPathValue(character, suggestion.key)) {
+      return;
+    }
+    if (suggestions.some((entry) => entry.key === suggestion.key)) {
+      return;
+    }
+    suggestions.push(suggestion);
+  };
+
+  if (!character.quickProfile.profession.trim() && character.role.trim()) {
+    addSuggestion({
+      key: "quickProfile.profession",
+      label: "Profession",
+      value: character.role.trim(),
+      reason: "The visible role field is filled, but the quick profile still lacks the profession that helps the AI keep the character grounded in dialogue and scene work.",
+    });
+  }
+
+  if (!character.dossier.lifePosition.profession.trim() && (character.role.trim() || character.quickProfile.profession.trim())) {
+    addSuggestion({
+      key: "dossier.lifePosition.profession",
+      label: "Life-position profession",
+      value: character.role.trim() || character.quickProfile.profession.trim(),
+      reason: "The dossier should restate the character's profession inside the life-position section so planning and continuity tools can retrieve it reliably.",
+    });
+  }
+
+  if (!character.dossier.lifePosition.socialClass.trim()) {
+    let socialClass = "";
+    if (/(king|queen|prince|princess|duke|duchess|count|countess|baron|baroness|lord|lady|noble|royal|emperor|empress)/.test(roleText)) {
+      socialClass = "aristocratic / ruling elite";
+    } else if (/(priest|rabbi|cleric|scholar|scribe|doctor|magistrate|professor|judge|lawyer|teacher)/.test(roleText)) {
+      socialClass = "educated professional / clerical class";
+    } else if (/(captain|commander|officer|sergeant|soldier|guard|watchman)/.test(roleText)) {
+      socialClass = "professional martial class";
+    } else if (/(smuggler|thief|beggar|dock|laborer|servant|street|miner|farmer)/.test(roleText)) {
+      socialClass = "working or precarious class";
+    }
+    if (socialClass) {
+      addSuggestion({
+        key: "dossier.lifePosition.socialClass",
+        label: "Social class",
+        value: socialClass,
+        reason: "Role and status cues in the character record imply a social position that should shape power, access, and the way this person speaks.",
+      });
+    }
+  }
+
+  if (!character.dossier.speechLanguage.formalityLevel.trim()) {
+    let formality = "";
+    if (/(king|queen|prince|princess|duke|duchess|count|countess|baron|baroness|lord|lady|noble|royal|ambassador|diplomat)/.test(roleText)) {
+      formality = "formal, controlled, and status-conscious";
+    } else if (/(priest|rabbi|cleric|scholar|scribe|judge|magistrate|doctor)/.test(roleText)) {
+      formality = "precise and educated, usually formal in public";
+    } else if (/(captain|commander|officer|sergeant|soldier|guard)/.test(roleText)) {
+      formality = "brief and practical, formal when hierarchy matters";
+    } else if (/(smuggler|thief|dock|street|laborer|servant)/.test(roleText)) {
+      formality = "casual and flexible, shifting with danger and status";
+    }
+    if (formality) {
+      addSuggestion({
+        key: "dossier.speechLanguage.formalityLevel",
+        label: "Formality level",
+        value: formality,
+        reason: "The character's role and social position imply a speech register that should be explicit in the dossier so dialogue does not flatten into the same voice as everyone else.",
+      });
+    }
+  }
+
+  if (!character.dossier.speechLanguage.directness.trim()) {
+    let directness = "";
+    if (/(captain|commander|officer|sergeant|soldier|guard|watchman)/.test(roleText)) {
+      directness = "direct, clipped, and action-first";
+    } else if (/(diplomat|courtier|noble|ambassador|politician)/.test(roleText)) {
+      directness = "indirect, strategic, and careful around the real point";
+    } else if (/(priest|rabbi|cleric|scholar|judge|magistrate)/.test(roleText)) {
+      directness = "measured and exact, with meaning built through careful qualification";
+    }
+    if (directness) {
+      addSuggestion({
+        key: "dossier.speechLanguage.directness",
+        label: "Directness",
+        value: directness,
+        reason: "A clear directness pattern helps the AI keep the character's speech recognizably their own instead of defaulting to neutral exposition.",
+      });
+    }
+  }
+
+  if (!character.quickProfile.speechPattern.trim()) {
+    let speechPattern = "";
+    if (/(captain|commander|officer|sergeant|soldier|guard)/.test(roleText)) {
+      speechPattern = "short commands, practical observations, little wasted language";
+    } else if (/(noble|royal|ambassador|courtier)/.test(roleText)) {
+      speechPattern = "measured, layered, and status-aware, with implication doing half the work";
+    } else if (/(priest|rabbi|cleric|scholar|scribe|judge)/.test(roleText)) {
+      speechPattern = "careful, articulate, and slightly over-explanatory when precision matters";
+    } else if (/(smuggler|thief|dock|street|beggar)/.test(roleText)) {
+      speechPattern = "quick, adaptive, and edged with deflection";
+    }
+    if (speechPattern) {
+      addSuggestion({
+        key: "quickProfile.speechPattern",
+        label: "Speech pattern",
+        value: speechPattern,
+        reason: "A quick speech pattern gives the drafting tools a fast, reusable voice anchor for this character.",
+      });
+    }
+  }
+
+  if (!character.dossier.personalityBehavior.conflictStyle.trim() && /(captain|commander|officer|sergeant|soldier|guard|watchman)/.test(roleText)) {
+    addSuggestion({
+      key: "dossier.personalityBehavior.conflictStyle",
+      label: "Conflict style",
+      value: "presses for clarity fast, prefers action over debate, and treats hesitation as danger",
+      reason: "A martial background should shape how the character behaves under pressure, not just what uniform they wear.",
+    });
+  }
+
+  if (!character.dossier.speechLanguage.superiorSpeech.trim()) {
+    addSuggestion({
+      key: "dossier.speechLanguage.superiorSpeech",
+      label: "Speech to superiors",
+      value: /(noble|royal|courtier|ambassador)/.test(roleText)
+        ? "controlled, polished, and layered with deference or careful challenge"
+        : "more careful, less expansive, and alert to hierarchy",
+      reason: "The AI needs an explicit contrast between how this character speaks upward versus sideways.",
+    });
+  }
+
+  if (!character.dossier.speechLanguage.inferiorSpeech.trim()) {
+    addSuggestion({
+      key: "dossier.speechLanguage.inferiorSpeech",
+      label: "Speech to inferiors",
+      value: /(captain|commander|officer|sergeant|guard)/.test(roleText)
+        ? "directive, practical, and sparing with explanation"
+        : "more relaxed and less filtered, unless status anxiety makes them perform authority",
+      reason: "This helps the dialogue engine vary speech by relationship and status instead of making every conversation sound the same.",
+    });
+  }
+
+  if (!character.dossier.speechLanguage.lovedOnesSpeech.trim()) {
+    addSuggestion({
+      key: "dossier.speechLanguage.lovedOnesSpeech",
+      label: "Speech to loved ones",
+      value: "less guarded, more revealing, and more likely to let unfinished thoughts slip through",
+      reason: "A private speech mode gives the AI a believable emotional contrast for intimate scenes.",
+    });
+  }
+
+  if (!character.dossier.speechLanguage.scaredSpeech.trim()) {
+    addSuggestion({
+      key: "dossier.speechLanguage.scaredSpeech",
+      label: "Scared speech",
+      value: /(captain|commander|officer|sergeant|soldier|guard)/.test(roleText)
+        ? "gets even shorter, more procedural, and more controlling"
+        : "speeds up, narrows, and starts choosing safer half-truths",
+      reason: "Fear should change cadence and wording in a specific way, not just add exclamation marks.",
+    });
+  }
+
+  if (!character.dossier.personalityBehavior.emotionalTendencies.trim() && (character.fear.trim() || character.wound.trim() || character.secret.trim())) {
+    addSuggestion({
+      key: "dossier.personalityBehavior.emotionalTendencies",
+      label: "Emotional tendencies",
+      value: "usually controlled, but stress pushes the buried fear and wound closer to the surface",
+      reason: "The record already shows fear, wound, or secrecy, so the dossier should explain how that pressure leaks into behavior.",
+    });
+  }
 
   if (text.includes("indirect") || text.includes("talks in circles") || text.includes("evasive")) {
-    suggestions.push({
+    addSuggestion({
       key: "quickProfile.speechPattern",
       label: "Speech pattern",
       value: "indirect / evasive",
@@ -1558,7 +1974,7 @@ function mockCharacterInterpretation(character: CharacterRecord): CharacterInter
   }
 
   if (text.includes("sarcastic")) {
-    suggestions.push({
+    addSuggestion({
       key: "dossier.speechLanguage.descriptors",
       label: "Speech descriptors",
       value: "sarcastic",
@@ -1567,7 +1983,7 @@ function mockCharacterInterpretation(character: CharacterRecord): CharacterInter
   }
 
   if (text.includes("warm") || text.includes("kind")) {
-    suggestions.push({
+    addSuggestion({
       key: "dossier.personalityBehavior.coreTraits",
       label: "Core traits",
       value: "warm",
@@ -1576,11 +1992,38 @@ function mockCharacterInterpretation(character: CharacterRecord): CharacterInter
   }
 
   if (text.includes("polite")) {
-    suggestions.push({
+    addSuggestion({
       key: "dossier.speechLanguage.formalityLevel",
       label: "Formality level",
       value: "polite / formal",
       reason: "The notes describe a more polite speech mode than the current quick profile shows.",
+    });
+  }
+
+  if (text.includes("soldier") || text.includes("officer") || text.includes("guard")) {
+    addSuggestion({
+      key: "dossier.personalityBehavior.conflictStyle",
+      label: "Conflict style",
+      value: "direct, trained, tactical under pressure",
+      reason: "The character language suggests a martial or security background that should shape how conflict is handled.",
+    });
+  }
+
+  if (text.includes("ashamed") || text.includes("guilt")) {
+    addSuggestion({
+      key: "dossier.personalityBehavior.emotionalTendencies",
+      label: "Emotional tendencies",
+      value: "controlled on the surface, with guilt leaking through under stress",
+      reason: "The notes imply guilt-driven emotional restraint rather than neutral description.",
+    });
+  }
+
+  if (text.includes("lie") || text.includes("lying") || text.includes("secret")) {
+    addSuggestion({
+      key: "dossier.speechLanguage.lyingSpeech",
+      label: "Lying speech",
+      value: "gives partial truths, narrows the subject, and becomes more precise than usual",
+      reason: "The character notes suggest concealment and strategic speech rather than simple honesty.",
     });
   }
 
@@ -1598,44 +2041,174 @@ export async function interpretCharacterProfile(projectId: string, characterId: 
     throw new Error("Character not found.");
   }
 
+  const primaryChapter =
+    project.chapters.find((entry) => entry.povCharacterId === character.id && entry.draft.trim()) ??
+    project.chapters.find((entry) => entry.draft.includes(character.name)) ??
+    project.chapters.find((entry) => entry.outline.includes(character.name)) ??
+    project.chapters[0] ??
+    null;
+  const context = primaryChapter
+    ? buildContextPackage(
+        project,
+        primaryChapter.id,
+        truncateText(
+          [primaryChapter.outline, primaryChapter.draft, primaryChapter.notes].filter(Boolean).join("\n\n"),
+          1400,
+        ),
+      )
+    : null;
+  const relatedRelationships = project.relationships
+    .filter((entry) => entry.sourceCharacterId === character.id || entry.targetCharacterId === character.id)
+    .slice(0, 6)
+    .map((entry) => ({
+      source: entry.sourceCharacterName,
+      target: entry.targetCharacterName,
+      kind: entry.kind,
+      description: truncateText(entry.description, 180),
+      tension: truncateText(entry.tension, 120),
+      status: truncateText(entry.status, 120),
+    }));
+  const relatedPlotThreads = project.plotThreads
+    .filter((entry) => {
+      const haystack = [entry.title, entry.summary, entry.promisedPayoff].join(" ").toLowerCase();
+      return haystack.includes(character.name.toLowerCase());
+    })
+    .slice(0, 6)
+    .map((entry) => ({
+      title: entry.title,
+      summary: truncateText(entry.summary, 180),
+      promisedPayoff: truncateText(entry.promisedPayoff, 140),
+    }));
+
   const prompt = [
     `You are ${APP_NAME}'s character dossier interpreter.`,
-    "Read the free-text character notes and suggest structured updates.",
+    "Read the full character snapshot and suggest strong structured dossier upgrades.",
     "Return strict JSON only as an array.",
     'Each item must look like {"key":"quickProfile.speechPattern","label":"Speech pattern","value":"indirect / evasive","reason":"..."}',
-    "Only suggest fields that are strongly supported by the text.",
+    "Return 12 to 20 useful suggestions when the material supports them, not just two or three tiny edits.",
+    "Only suggest fields that are meaningfully supported by the character material.",
+    "Prefer the fields that are currently empty, thin, generic, or obviously underdeveloped.",
+    "Make the suggestions specific enough to materially improve future dialogue, planning, and drafting.",
+    "Prioritize voice, class, education, speech rhythm, emotional leakage, conflict style, loyalties, fears, and continuity-sensitive current state.",
+    "Treat project canon, story-bible canon, memory, continuity, and series canon as binding context for this character.",
+    "If the dossier is thin, infer responsibly from the surrounding project data, role, class signals, relationships, and current story pressure instead of staying vague.",
+    "When a target field is list-like, return the value as newline-separated items inside the string.",
+    "Do not repeat information already captured clearly unless you are sharpening it into a more useful field.",
+    "Avoid vague filler like 'complex' or 'interesting'.",
     "Useful keys include:",
     "- quickProfile.accent",
     "- quickProfile.speechPattern",
+    "- quickProfile.profession",
+    "- quickProfile.placeOfLiving",
+    "- dossier.basicIdentity.culturalBackground",
+    "- dossier.basicIdentity.beliefSystem",
+    "- dossier.lifePosition.socialClass",
+    "- dossier.lifePosition.educationLevel",
+    "- dossier.lifePosition.reputation",
     "- dossier.personalityBehavior.coreTraits",
+    "- dossier.personalityBehavior.virtues",
+    "- dossier.personalityBehavior.flaws",
     "- dossier.personalityBehavior.emotionalTendencies",
     "- dossier.personalityBehavior.conflictStyle",
+    "- dossier.personalityBehavior.projectedImage",
+    "- dossier.personalityBehavior.trueNature",
+    "- dossier.personalityBehavior.hiddenSelf",
     "- dossier.motivationStory.shortTermGoal",
     "- dossier.motivationStory.longTermGoal",
+    "- dossier.motivationStory.internalConflict",
+    "- dossier.motivationStory.externalConflict",
+    "- dossier.motivationStory.relationshipToMainConflict",
     "- dossier.speechLanguage.formalityLevel",
     "- dossier.speechLanguage.descriptors",
     "- dossier.speechLanguage.directness",
     "- dossier.speechLanguage.pointStyle",
+    "- dossier.speechLanguage.rhythm",
+    "- dossier.speechLanguage.angrySpeech",
+    "- dossier.speechLanguage.scaredSpeech",
+    "- dossier.speechLanguage.lyingSpeech",
+    "- dossier.speechLanguage.persuasiveSpeech",
+    "- dossier.speechLanguage.superiorSpeech",
+    "- dossier.speechLanguage.inferiorSpeech",
+    "- dossier.speechLanguage.lovedOnesSpeech",
+    "- dossier.speechLanguage.avoidedTopics",
+    "- dossier.speechLanguage.commonMisunderstandings",
     "- dossier.bodyPresence.presenceFeel",
+    "- currentState.currentKnowledge",
+    "- currentState.unknowns",
+    "- currentState.emotionalState",
+    "- currentState.physicalCondition",
+    "- currentState.loyalties",
+    "- currentState.recentChanges",
+    "- currentState.continuityRisks",
     "Character snapshot:",
     JSON.stringify(
       {
+        projectCore: {
+          title: project.title,
+          premise: truncateText(project.premise, 220),
+          oneLineHook: truncateText(project.oneLineHook, 160),
+          seriesName: project.bookSettings.seriesName,
+          seriesOrder: project.bookSettings.seriesOrder,
+          genre: project.bookSettings.genre,
+          tone: project.bookSettings.tone,
+          audience: project.bookSettings.audience,
+          pointOfView: project.bookSettings.pointOfView,
+          tense: project.bookSettings.tense,
+          storyBrief: truncateText(project.bookSettings.storyBrief, 220),
+          plotDirection: truncateText(project.bookSettings.plotDirection, 220),
+          voiceRules: project.styleProfile.voiceRules.slice(0, 8),
+        },
         name: character.name,
+        role: character.role,
+        archetype: character.archetype,
         summary: character.summary,
+        goal: character.goal,
+        fear: character.fear,
+        secret: character.secret,
+        wound: character.wound,
         freeTextCore: character.dossier.freeTextCore,
         notes: character.notes,
         quickProfile: character.quickProfile,
-        currentSpeech: character.dossier.speechLanguage,
+        dossier: character.dossier,
+        currentState: character.currentState,
+        relatedRelationships,
+        relatedPlotThreads,
+        contextChapter:
+          primaryChapter == null
+            ? null
+            : {
+                number: primaryChapter.number,
+                title: primaryChapter.title,
+                purpose: primaryChapter.purpose,
+                currentBeat: primaryChapter.currentBeat,
+                desiredMood: primaryChapter.desiredMood,
+                outlineExcerpt: truncateText(primaryChapter.outline, 320),
+                draftExcerpt: truncateText(primaryChapter.draft, 320),
+              },
+        canonContext:
+          context == null
+            ? null
+            : {
+                seriesCanon: context.seriesContext.slice(0, 5),
+                storyBibleCanon: context.storyBibleContext.slice(0, 6),
+                dialogueVoiceCanon: context.dialogueVoiceContext.slice(0, 5),
+                longTermMemory: context.relevantLongTermMemory.slice(0, 4).map((item) => item.title),
+                shortTermMemory: context.recentShortTermMemory.slice(0, 4).map((item) => item.title),
+                continuityConstraints: context.continuityConstraints.slice(0, 4).map((item) => item.title),
+              },
       },
       null,
       2,
     ),
   ].join("\n\n");
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 900 });
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 3200 });
   if (!raw) {
     return mockCharacterInterpretation(character);
   }
 
-  return parseSuggestionJson(raw) ?? mockCharacterInterpretation(character);
+  const parsed = parseSuggestionJson(raw) ?? [];
+  const heuristic = mockCharacterInterpretation(character);
+  const merged = mergeCharacterSuggestions(parsed, heuristic);
+  return merged.length ? merged.slice(0, 20) : heuristic;
 }

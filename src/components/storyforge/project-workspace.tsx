@@ -220,8 +220,8 @@ export function ProjectWorkspace({
   const phoneShell = viewportWidth > 0 && viewportWidth < 820;
   const dockPaddingClass = phoneShell
     ? copilotExpanded
-      ? "pb-[24rem]"
-      : "pb-[7.5rem]"
+      ? "pb-[19rem]"
+      : "pb-[6.5rem]"
     : copilotExpanded
       ? "pb-[24rem] xl:pb-[28rem]"
       : "pb-[5.5rem]";
@@ -1088,7 +1088,24 @@ export function ProjectWorkspace({
       if (actionType === "COACH") {
         setCoachAdvice(data.run.suggestion);
       } else {
-        setPendingSuggestion({ run: data.run, contextPackage: data.contextPackage });
+        setPendingSuggestion({
+          run: data.run,
+          contextPackage: data.contextPackage,
+          target: {
+            fieldKey: targetField,
+            selectionStart,
+            selectionEnd,
+            sourceText: fieldContent,
+            applyMode:
+              actionType === "CONTINUE"
+                ? "insert-at-cursor"
+                : actionType === "NEXT_BEATS" || actionType === "OUTLINE"
+                  ? "replace-draft"
+                  : selectionStart === selectionEnd
+                    ? "insert-at-cursor"
+                    : "replace-selection",
+          },
+        });
       }
 
       setContextPackage(data.contextPackage);
@@ -1538,7 +1555,7 @@ export function ProjectWorkspace({
     <main
       className={cn(
         phoneShell
-          ? "workspace-canvas flex h-[100dvh] flex-col overflow-hidden px-2 py-2"
+          ? "workspace-canvas flex min-h-[100dvh] flex-col overflow-x-hidden overflow-y-auto px-2 py-2"
           : "workspace-canvas flex h-screen flex-col overflow-hidden px-3 py-3 sm:px-4 lg:px-5",
       )}
     >
@@ -1593,7 +1610,7 @@ export function ProjectWorkspace({
 
       <div
         className={cn(
-          phoneShell ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden" : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
+          phoneShell ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-visible" : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
         )}
         style={desktopGridStyle}
       >
@@ -1623,7 +1640,14 @@ export function ProjectWorkspace({
           />
         ) : null}
 
-        <section className={cn(phoneShell ? "grid min-w-0 min-h-0 gap-3 overflow-y-auto" : "grid min-w-0 min-h-0 gap-4 overflow-y-auto pr-1", dockPaddingClass)}>
+        <section
+          className={cn(
+            phoneShell
+              ? "grid min-w-0 gap-3 overflow-visible"
+              : "grid min-w-0 min-h-0 gap-4 overflow-y-auto pr-1",
+            dockPaddingClass,
+          )}
+        >
           {activeTab !== "chapters" ? (
             <Card className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
               <div className="grid gap-1">
@@ -1776,11 +1800,11 @@ export function ProjectWorkspace({
       <AppLegalNotice className="mt-3 shrink-0" />
 
       {phoneShell ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          <Card className="rounded-[22px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 px-2 py-2 shadow-[0_-10px_24px_var(--shadow)] backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-30 px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+          <Card className="rounded-[20px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 px-1.5 py-1.5 shadow-[0_-10px_24px_var(--shadow)] backdrop-blur">
             <div className="grid grid-cols-5 gap-1">
               <Button
-                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
                 onClick={() => {
                   setActiveTab("chapters");
                   setCopilotExpanded(true);
@@ -1791,7 +1815,7 @@ export function ProjectWorkspace({
                 <span>Coach</span>
               </Button>
               <Button
-                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
                 onClick={() => setActiveTab("chapters")}
                 variant={activeTab === "chapters" ? "primary" : "ghost"}
               >
@@ -1799,7 +1823,7 @@ export function ProjectWorkspace({
                 <span>Draft</span>
               </Button>
               <Button
-                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
                 onClick={() => setActiveTab("bible")}
                 variant={activeTab === "bible" ? "primary" : "ghost"}
               >
@@ -1807,7 +1831,7 @@ export function ProjectWorkspace({
                 <span>Cast</span>
               </Button>
               <Button
-                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
                 onClick={() => setActiveTab("skeleton")}
                 variant={activeTab === "skeleton" ? "primary" : "ghost"}
               >
@@ -1815,7 +1839,7 @@ export function ProjectWorkspace({
                 <span>Plot</span>
               </Button>
               <Button
-                className="min-h-[52px] flex-col gap-1 px-1 py-2 text-[11px]"
+                className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
                 onClick={() => setActiveTab("setup")}
                 variant={activeTab === "setup" ? "primary" : "ghost"}
               >
@@ -1830,7 +1854,7 @@ export function ProjectWorkspace({
       <ProjectCopilotBar
         activeAiRole={activeAiRole}
         activeTab={activeTab}
-        dockClassName={phoneShell ? "bottom-[calc(4.85rem+env(safe-area-inset-bottom))]" : "bottom-0"}
+        dockClassName={phoneShell ? "bottom-[calc(4.2rem+env(safe-area-inset-bottom))]" : "bottom-0"}
         expanded={copilotExpanded}
         phoneShell={phoneShell}
         onBeforeSubmit={handleCopilotBeforeSubmit}

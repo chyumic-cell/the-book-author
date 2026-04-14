@@ -921,10 +921,52 @@ export async function applyAssistRun(assistRunId: string, input: ApplyAssistInpu
   }
 
   const fieldKey = input.fieldKey ?? "draft";
-  const currentContent = input.content ?? input.draft ?? "";
+  const chapterFieldContentRaw =
+    fieldKey === "draft"
+      ? run.chapter.draft
+      : fieldKey === "outline"
+        ? run.chapter.outline
+        : fieldKey === "title"
+          ? run.chapter.title
+          : fieldKey === "purpose"
+            ? run.chapter.purpose
+            : fieldKey === "currentBeat"
+              ? run.chapter.currentBeat
+              : fieldKey === "desiredMood"
+                ? run.chapter.desiredMood
+                : fieldKey === "notes"
+                ? run.chapter.notes
+                  : (run.chapter[fieldKey] as string[] | undefined)?.join("\n") ?? "";
+  const chapterFieldContent = chapterFieldContentRaw ?? "";
+  const providedContent = input.content ?? input.draft ?? "";
+  const selectedText = run.selectionText ?? "";
+  const currentContent =
+    input.applyMode === "replace-selection" &&
+    providedContent.trim() &&
+    selectedText.trim() &&
+    providedContent.trim() === selectedText.trim() &&
+    chapterFieldContent.trim().length > providedContent.trim().length
+      ? chapterFieldContent
+      : providedContent || chapterFieldContent;
   let nextContent = currentContent;
-  const selectionStart = input.selectionStart ?? currentContent.length;
-  const selectionEnd = input.selectionEnd ?? currentContent.length;
+  const rawSelectionStart = input.selectionStart ?? currentContent.length;
+  const rawSelectionEnd = input.selectionEnd ?? currentContent.length;
+  let selectionStart = Math.max(0, Math.min(rawSelectionStart, currentContent.length));
+  let selectionEnd = Math.max(selectionStart, Math.min(rawSelectionEnd, currentContent.length));
+
+  if (
+    input.applyMode === "replace-selection" &&
+    currentContent === chapterFieldContent &&
+    selectedText.trim() &&
+    selectionEnd - selectionStart <= selectedText.trim().length &&
+    currentContent.slice(selectionStart, selectionEnd).trim() !== selectedText.trim()
+  ) {
+    const locatedSelectionStart = currentContent.indexOf(selectedText);
+    if (locatedSelectionStart >= 0) {
+      selectionStart = locatedSelectionStart;
+      selectionEnd = locatedSelectionStart + selectedText.length;
+    }
+  }
 
   if (input.applyMode === "replace-selection") {
     nextContent = `${currentContent.slice(0, selectionStart)}${run.suggestion}${currentContent.slice(selectionEnd)}`;

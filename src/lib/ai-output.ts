@@ -300,6 +300,51 @@ export function cleanInlineSuggestionText(value: string) {
   return cleaned || cleanStructuredText(value);
 }
 
+function trimRepeatedBoundaryOverlap(value: string, boundary: string, side: "start" | "end") {
+  let nextValue = value.trim();
+  const normalizedBoundary = boundary.trim();
+  if (!nextValue || !normalizedBoundary) {
+    return nextValue;
+  }
+
+  const boundarySentences =
+    side === "start" ? splitSentences(normalizedBoundary).slice(-2) : splitSentences(normalizedBoundary).slice(0, 2);
+
+  for (const sentence of boundarySentences) {
+    const trimmedSentence = sentence.trim();
+    if (!trimmedSentence || trimmedSentence.length < 18) {
+      continue;
+    }
+
+    if (side === "start") {
+      const candidate = nextValue.slice(0, Math.min(nextValue.length, trimmedSentence.length + 40));
+      if (overlapScore(candidate, trimmedSentence) >= 0.9) {
+        nextValue = nextValue.slice(trimmedSentence.length).trimStart();
+      }
+    } else {
+      const candidate = nextValue.slice(Math.max(0, nextValue.length - trimmedSentence.length - 40));
+      if (overlapScore(candidate, trimmedSentence) >= 0.9) {
+        nextValue = nextValue.slice(0, Math.max(0, nextValue.length - trimmedSentence.length)).trimEnd();
+      }
+    }
+  }
+
+  return nextValue.trim();
+}
+
+export function cleanInlineSuggestionAgainstContext(
+  value: string,
+  options: {
+    beforeSelection?: string;
+    afterSelection?: string;
+  },
+) {
+  let cleaned = cleanInlineSuggestionText(value);
+  cleaned = trimRepeatedBoundaryOverlap(cleaned, options.beforeSelection ?? "", "start");
+  cleaned = trimRepeatedBoundaryOverlap(cleaned, options.afterSelection ?? "", "end");
+  return cleaned.trim();
+}
+
 function dedupeSentenceStream(paragraph: string, recentSentences: string[], issues: string[]) {
   const kept: string[] = [];
   const keptSignatures: string[] = [];

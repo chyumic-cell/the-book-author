@@ -200,7 +200,7 @@ export const providerSettingsSchema = z.object({
   openrouter: z.object({
     apiKey: z.string().optional(),
     clearKey: z.boolean().optional(),
-    model: z.string().default("openai/gpt-4.1-mini"),
+    model: z.string().default("openrouter/free"),
     baseUrl: z.string().default("https://openrouter.ai/api/v1"),
     siteUrl: z.string().default("http://localhost:3000"),
     appName: z.string().default("The Book Author"),
