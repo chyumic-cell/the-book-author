@@ -126,13 +126,23 @@ export async function syncChapterToStoryState(
   options?: {
     continuityMode?: ContinuityCheckMode;
     draftOverride?: string;
+    chapterOverride?: Partial<
+      Pick<
+        ProjectWorkspace["chapters"][number],
+        "title" | "purpose" | "currentBeat" | "desiredMood" | "outline" | "notes" | "draft"
+      >
+    >;
   },
 ): Promise<{
   extraction: MemoryExtractionResult;
   report: ContinuityReport;
   project: ProjectWorkspace;
 }> {
-  const extraction = await persistMemoryExtraction(projectId, chapterId);
+  const chapterOverride = {
+    ...(options?.chapterOverride ?? {}),
+    ...(options?.draftOverride ? { draft: options.draftOverride } : {}),
+  };
+  const extraction = await persistMemoryExtraction(projectId, chapterId, chapterOverride);
   let project = await getProjectWorkspace(projectId);
   if (!project) {
     throw new Error("Project not found.");
@@ -142,14 +152,18 @@ export async function syncChapterToStoryState(
   if (!chapter) {
     throw new Error("Chapter not found.");
   }
+  const liveChapter = {
+    ...chapter,
+    ...chapterOverride,
+  };
 
-  await upsertCoreSummary(projectId, chapter, extraction);
-  await syncSceneCardSnapshot(projectId, chapter, extraction);
+  await upsertCoreSummary(projectId, liveChapter, extraction);
+  await syncSceneCardSnapshot(projectId, liveChapter, extraction);
 
   const report = await runContinuityCheck(
     projectId,
     chapterId,
-    options?.draftOverride ?? chapter.draft,
+    chapterOverride.draft ?? chapter.draft,
     options?.continuityMode ?? "CHAPTER",
   );
 

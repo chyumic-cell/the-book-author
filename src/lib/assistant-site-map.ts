@@ -109,6 +109,7 @@ export const STORY_BIBLE_ENTITY_SPECS: EntitySpec[] = [
       { key: "heat", label: "Heat", description: "Urgency or pressure level.", example: "4" },
       { key: "promisedPayoff", label: "Promised payoff", description: "What resolution or reveal the thread owes the reader.", example: "The source is exposed during the temple fire." },
       { key: "lastTouchedChapter", label: "Last touched chapter", description: "Most recent chapter number that advanced the thread.", example: "7" },
+      { key: "progressMarkers", label: "Progress markers", description: "Per-chapter marker objects showing where the thread is introduced, developed, escalated, stalled, or resolved.", example: '[{"chapterNumber":3,"label":"The hidden ledger appears","strength":"INTRODUCED","notes":"The mystery first becomes visible on the page."}]' },
     ],
   },
   {

@@ -69,6 +69,21 @@ type CharacterInterpretationSuggestionLike = {
   value: string;
 };
 
+type PlotThreadAutofillPayload = {
+  title?: string;
+  summary?: string;
+  status?: string;
+  heat?: number;
+  promisedPayoff?: string;
+  lastTouchedChapter?: number | null;
+  progressMarkers?: Array<{
+    chapterNumber?: number | string;
+    label?: string;
+    strength?: string;
+    notes?: string;
+  }>;
+};
+
 function normalizeScope(scope: ProjectChatScope) {
   return scope === "AUTO" ? "PROJECT" : scope;
 }
@@ -874,6 +889,236 @@ function shouldAutofillCharacterRecord(
   );
 }
 
+function shouldAutofillPlotThreadRecord(payload: Record<string, unknown>, existingEntity: unknown) {
+  const title = String(payload.title ?? (existingEntity && typeof existingEntity === "object" && "title" in existingEntity ? (existingEntity as { title?: unknown }).title ?? "" : "")).trim();
+  if (!title) {
+    return false;
+  }
+
+  return (
+    !String(payload.summary ?? "").trim() ||
+    !String(payload.promisedPayoff ?? "").trim() ||
+    !String(payload.status ?? "").trim() ||
+    typeof payload.heat !== "number" ||
+    !Number.isFinite(payload.heat as number) ||
+    !("lastTouchedChapter" in payload)
+  );
+}
+
+function summarizePlotThreadAutofillContext(
+  project: ProjectWorkspace,
+  threadTitle: string,
+  currentThread?: ProjectWorkspace["plotThreads"][number] | null,
+) {
+  const lowerTitle = threadTitle.toLowerCase();
+  const relatedChapters = project.chapters
+    .filter((chapter) => {
+      const haystack = [
+        chapter.title,
+        chapter.purpose,
+        chapter.currentBeat,
+        chapter.outline,
+        chapter.notes,
+        chapter.summaries[0]?.summary ?? "",
+      ]
+        .join("\n")
+        .toLowerCase();
+      return lowerTitle && haystack.includes(lowerTitle);
+    })
+    .slice(0, 8)
+    .map((chapter) => ({
+      number: chapter.number,
+      title: chapter.title,
+      purpose: truncateText(chapter.purpose, 140),
+      currentBeat: truncateText(chapter.currentBeat, 120),
+      outline: truncateText(chapter.outline, 220),
+      summary: truncateText(chapter.summaries[0]?.summary ?? "", 180),
+    }));
+
+  return {
+    thread: currentThread
+      ? {
+          title: currentThread.title,
+          summary: currentThread.summary,
+          status: currentThread.status,
+          heat: currentThread.heat,
+          promisedPayoff: currentThread.promisedPayoff,
+          lastTouchedChapter: currentThread.lastTouchedChapter,
+        }
+      : {
+          title: threadTitle,
+        },
+    matchingChapters: relatedChapters,
+    chapterPlan: project.chapters.slice(0, 20).map((chapter) => ({
+      number: chapter.number,
+      title: chapter.title,
+      purpose: truncateText(chapter.purpose, 90),
+      currentBeat: truncateText(chapter.currentBeat, 90),
+      outline: truncateText(chapter.outline, 140),
+      summary: truncateText(chapter.summaries[0]?.summary ?? "", 120),
+    })),
+    existingThreads: project.plotThreads.slice(0, 8).map((thread) => ({
+      title: thread.title,
+      summary: truncateText(thread.summary, 140),
+      payoff: truncateText(thread.promisedPayoff, 120),
+      status: thread.status,
+      heat: thread.heat,
+      lastTouchedChapter: thread.lastTouchedChapter,
+    })),
+  };
+}
+
+function inferProgressMarkersFromChapters(
+  project: ProjectWorkspace,
+  threadTitle: string,
+  summary: string,
+  promisedPayoff: string,
+) {
+  const tokens = [threadTitle, summary, promisedPayoff]
+    .join(" ")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4)
+    .slice(0, 24);
+
+  if (!tokens.length) {
+    return [];
+  }
+
+  const markers = project.chapters
+    .map((chapter) => {
+      const haystack = [
+        chapter.title,
+        chapter.purpose,
+        chapter.currentBeat,
+        chapter.outline,
+        chapter.notes,
+        chapter.draft.slice(0, 1800),
+        chapter.summaries[0]?.summary ?? "",
+      ]
+        .join("\n")
+        .toLowerCase();
+      const hits = tokens.filter((token) => haystack.includes(token)).length;
+      if (hits === 0) {
+        return null;
+      }
+
+      return {
+        chapterNumber: chapter.number,
+        label: chapter.title || `Chapter ${chapter.number}`,
+        strength: hits >= 4 ? "ESCALATED" : hits >= 2 ? "DEVELOPED" : "INTRODUCED",
+        notes: truncateText(chapter.summaries[0]?.summary || chapter.outline || chapter.purpose, 160),
+        hits,
+      };
+    })
+    .filter((marker): marker is { chapterNumber: number; label: string; strength: string; notes: string; hits: number } => Boolean(marker))
+    .sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+  if (!markers.length) {
+    return [];
+  }
+
+  const lastIndex = markers.length - 1;
+  return markers.map((marker, index) => ({
+    chapterNumber: marker.chapterNumber,
+    label: marker.label,
+    strength:
+      index === lastIndex && /resolve|reveal|expose|final|end|payoff/i.test(`${summary} ${promisedPayoff}`)
+        ? "RESOLVED"
+        : marker.strength,
+    notes: marker.notes,
+  }));
+}
+
+async function buildPlotThreadAutofillPayload(input: {
+  project: ProjectWorkspace;
+  role: AiRole;
+  message: string;
+  chapterId: string | null;
+  threadId: string;
+  seedTitle: string;
+}) {
+  const updatedProject = await getProjectWorkspace(input.project.id);
+  const project = updatedProject ?? input.project;
+  const currentThread = project.plotThreads.find((thread) => thread.id === input.threadId) ?? null;
+  const contextChapterId = resolveContextChapterId(project, input.chapterId);
+  if (!contextChapterId) {
+    return {};
+  }
+
+  const context = buildContextPackage(project, contextChapterId);
+  const prompt = buildPromptEnvelope(
+    "Fill a plot thread / story arc",
+    project,
+    context,
+    [
+      "Return strict JSON only.",
+      'Use this shape: {"title":"...","summary":"...","status":"ACTIVE","heat":4,"promisedPayoff":"...","lastTouchedChapter":7,"progressMarkers":[{"chapterNumber":3,"label":"...","strength":"INTRODUCED","notes":"..."}]}',
+      "You are filling a Story Bible plot thread so it becomes a real usable story arc, not a placeholder.",
+      "Read the already written manuscript state, the chapter plans, the existing story bible, memory, continuity, and any series canon before deciding the arc.",
+      "Use what is already on the page and what is already planned. Keep the arc synchronized with both past material and future setup.",
+      "Do not invent contradictions. If the arc is only partly present so far, write the summary and promised payoff in a way that fits the current trajectory.",
+      "Set heat as an integer from 1 to 5 based on urgency and reader pressure.",
+      "Set lastTouchedChapter to the most recent chapter that clearly advances this arc. Use null only if nothing in the current project supports the arc yet.",
+      "Include progressMarkers when you can identify where the arc is introduced, developed, escalated, stalled, or resolved across chapters.",
+      "Context for this specific arc:",
+      JSON.stringify(summarizePlotThreadAutofillContext(project, input.seedTitle, currentThread), null, 2),
+      "User instruction:",
+      input.message,
+    ].join("\n\n"),
+    `Current AI role: ${input.role}.`,
+  );
+
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 1000 });
+  const parsed = raw ? parseJsonObject(raw) : null;
+  const payload = cleanStoryBiblePayload((parsed ?? {}) as Record<string, unknown>, "plotThread") as PlotThreadAutofillPayload;
+
+  const normalized: Record<string, unknown> = {};
+  const title = String(payload.title ?? input.seedTitle).trim();
+  if (title) {
+    normalized.title = title;
+  }
+  const summary = String(payload.summary ?? "").trim();
+  if (summary) {
+    normalized.summary = summary;
+  }
+  const status = String(payload.status ?? "").trim().toUpperCase();
+  if (status) {
+    normalized.status = status;
+  }
+  const promisedPayoff = String(payload.promisedPayoff ?? "").trim();
+  if (promisedPayoff) {
+    normalized.promisedPayoff = promisedPayoff;
+  }
+  const heat = coerceNumber(payload.heat);
+  if (heat !== null) {
+    normalized.heat = Math.min(5, Math.max(1, heat));
+  }
+  if (payload.lastTouchedChapter === null) {
+    normalized.lastTouchedChapter = null;
+  } else {
+    const lastTouchedChapter = coerceNumber(payload.lastTouchedChapter);
+    if (lastTouchedChapter !== null) {
+      normalized.lastTouchedChapter = Math.max(1, lastTouchedChapter);
+    }
+  }
+  const progressMarkers = cleanProgressMarkers(payload.progressMarkers);
+  if (progressMarkers.length > 0) {
+    normalized.progressMarkers = progressMarkers;
+  } else if (summary || promisedPayoff) {
+    const inferredMarkers = inferProgressMarkersFromChapters(project, title, summary, promisedPayoff);
+    if (inferredMarkers.length > 0) {
+      normalized.progressMarkers = inferredMarkers;
+      if (!("lastTouchedChapter" in normalized)) {
+        normalized.lastTouchedChapter = inferredMarkers[inferredMarkers.length - 1]?.chapterNumber ?? null;
+      }
+    }
+  }
+
+  return normalized;
+}
+
 function coerceNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(value);
@@ -1024,6 +1269,42 @@ function cleanTextPayloadValue(value: unknown) {
   return cleanGeneratedText(String(value ?? "").trim());
 }
 
+function cleanProgressMarkers(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => {
+      const record = entry as Record<string, unknown>;
+      const chapterNumber = coerceNumber(record.chapterNumber);
+      const label = cleanGeneratedText(String(record.label ?? "").trim());
+      const notes = cleanGeneratedText(String(record.notes ?? "").trim());
+      const strength = String(record.strength ?? "").trim().toUpperCase();
+      if (!chapterNumber || !label) {
+        return null;
+      }
+
+      const normalizedStrength =
+        strength === "INTRODUCED" ||
+        strength === "DEVELOPED" ||
+        strength === "ESCALATED" ||
+        strength === "STALLED" ||
+        strength === "RESOLVED"
+          ? strength
+          : "DEVELOPED";
+
+      return {
+        chapterNumber,
+        label,
+        strength: normalizedStrength,
+        notes,
+      };
+    })
+    .filter((entry): entry is { chapterNumber: number; label: string; strength: string; notes: string } => Boolean(entry));
+}
+
 function cleanStoryBiblePayload(
   payload: Record<string, unknown> | undefined,
   entityType: AssistantStoryBibleEntityType,
@@ -1040,6 +1321,11 @@ function cleanStoryBiblePayload(
 
     if (entityType === "relationship" && (key === "sourceCharacterId" || key === "targetCharacterId")) {
       next[key] = String(value ?? "").trim();
+      continue;
+    }
+
+    if (entityType === "plotThread" && key === "progressMarkers") {
+      next[key] = cleanProgressMarkers(value);
       continue;
     }
 
@@ -1098,6 +1384,7 @@ function inferAssistantIntent(message: string, scope: ProjectChatScope): Assista
     lower.includes("character master") ||
     lower.includes("character") ||
     lower.includes("plot thread") ||
+    lower.includes("mystery") ||
     lower.includes("location") ||
     lower.includes("faction") ||
     lower.includes("timeline");
@@ -1370,8 +1657,8 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
       /relationship(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
     ],
     plotThread: [
-      /(?:plot\s+thread|thread|arc)(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
-      /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+(?:plot\s+thread|thread|arc)/i,
+      /(?:plot\s+thread|thread|arc|mystery)(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
+      /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+(?:plot\s+thread|thread|arc|mystery)/i,
     ],
     location: [
       /(?:location|place)(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
@@ -2287,13 +2574,13 @@ function buildFallbackPlan(input: {
         });
       }
 
-      if (lower.includes("plot thread") || lower.includes("arc")) {
+      if (lower.includes("plot thread") || lower.includes("arc") || lower.includes("mystery")) {
         storyBibleActions.push({
           kind: "UPSERT_STORY_BIBLE_ENTITY",
           entityType: "plotThread",
           entityMatch: extractEntityLabelFromMessage(input.message, "plotThread"),
           payload: {},
-          summary: "Updated the relevant plot thread in the story bible.",
+          summary: "Updated the relevant plot thread, mystery, or arc in the story bible.",
         });
       }
 
@@ -4050,6 +4337,40 @@ async function applyActions(
               },
               "PATCH",
             );
+          }
+        }
+      }
+
+      if (
+        action.entityType === "plotThread" &&
+        mutationResult &&
+        typeof mutationResult === "object" &&
+        "id" in mutationResult &&
+        shouldAutofillPlotThreadRecord(payload, existingEntity)
+      ) {
+        const plotThreadId = String((mutationResult as { id?: unknown }).id ?? "");
+        const seedTitle =
+          String(payload.title ?? action.entityMatch ?? (existingEntity && typeof existingEntity === "object" && "title" in existingEntity ? (existingEntity as { title?: unknown }).title ?? "" : "")).trim();
+        if (plotThreadId && seedTitle) {
+          const autofillPayload = await buildPlotThreadAutofillPayload({
+            project: workingProject,
+            role: "COWRITER",
+            message: action.summary || action.content || action.entityMatch || "Fill this plot thread as a usable story arc.",
+            chapterId: action.chapterId ?? options?.defaultChapterId ?? null,
+            threadId: plotThreadId,
+            seedTitle,
+          });
+          if (Object.keys(autofillPayload).length > 0) {
+            await mutateStoryBible(
+              workingProject.id,
+              {
+                entityType: "plotThread",
+                id: plotThreadId,
+                payload: autofillPayload,
+              },
+              "PATCH",
+            );
+            await refreshWorkingProject();
           }
         }
       }

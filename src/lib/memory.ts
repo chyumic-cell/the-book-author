@@ -472,48 +472,75 @@ export async function retrieveRelevantMemory(projectId: string, chapterId: strin
   return buildContextPackage(project, chapterId, localExcerpt);
 }
 
-export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: string): MemoryExtractionResult {
+export function extractMemoryFromDraft(
+  project: ProjectWorkspace,
+  chapterId: string,
+  overrides?: Partial<
+    Pick<
+      ProjectWorkspace["chapters"][number],
+      "title" | "purpose" | "currentBeat" | "desiredMood" | "outline" | "notes" | "draft"
+    >
+  >,
+): MemoryExtractionResult {
   const chapter = getChapterById(project, chapterId);
   if (!chapter) {
     throw new Error("Chapter not found.");
   }
+  const workingChapter = {
+    ...chapter,
+    ...overrides,
+  };
   const cleanedDraft = sanitizeManuscriptText(chapter.draft, {
-    chapterTitle: chapter.title,
-    chapterNumber: chapter.number,
+    chapterTitle: workingChapter.title,
+    chapterNumber: workingChapter.number,
     previousChapterDrafts: project.chapters
       .filter((entry) => entry.number < chapter.number)
       .map((entry) => entry.draft)
       .filter(Boolean),
   }).text;
+  const chapterSignalText = [
+    workingChapter.title,
+    workingChapter.purpose,
+    workingChapter.currentBeat,
+    workingChapter.desiredMood,
+    workingChapter.outline,
+    workingChapter.notes,
+    cleanedDraft,
+    ...workingChapter.keyBeats,
+    ...workingChapter.requiredInclusions,
+    ...workingChapter.sceneList,
+  ]
+    .filter(Boolean)
+    .join("\n");
   const sentences = cleanedDraft
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
-  const touchedCharacters = pickRelevantCharacters(project, chapter, [], cleanedDraft).slice(0, 4);
-  const touchedLocations = pickRelevantLocations(project, chapter, cleanedDraft).slice(0, 2);
+  const touchedCharacters = pickRelevantCharacters(project, workingChapter, [], chapterSignalText).slice(0, 5);
+  const touchedLocations = pickRelevantLocations(project, workingChapter, chapterSignalText).slice(0, 3);
   const activeThreads = project.plotThreads
     .map((thread) => ({
       thread,
-      score: scorePlotThreadMention(thread, `${chapter.title}\n${chapter.outline}\n${chapter.currentBeat}\n${cleanedDraft}`),
+      score: scorePlotThreadMention(thread, chapterSignalText),
     }))
     .filter(({ score }) => score > 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, 3)
+    .slice(0, 5)
     .map(({ thread }) => thread);
   const relatedCharacterIds = uniqueNonEmpty([
-    chapter.povCharacterId ?? "",
+    workingChapter.povCharacterId ?? "",
     ...touchedCharacters.map((character) => character.id),
   ]);
   const relatedLocationIds = touchedLocations.map((location) => location.id);
   const relatedPlotThreadIds = activeThreads.map((thread) => thread.id);
 
   const summary = cleanSummaryText(
-    sentences.slice(0, 2).join(" ") || compactText(chapter.outline || chapter.purpose, 220),
+    sentences.slice(0, 2).join(" ") || compactText(workingChapter.outline || workingChapter.purpose, 220),
   );
-  const emotionalTone = chapter.desiredMood || chapter.summaries[0]?.emotionalTone || "Tense forward motion";
+  const emotionalTone = workingChapter.desiredMood || chapter.summaries[0]?.emotionalTone || "Tense forward motion";
   const candidates = [
     {
-      title: `${chapter.title} summary`,
+      title: `${workingChapter.title} summary`,
       content: summary,
       category: "PLOT_POINT",
       tags: ["chapter", "summary"],
@@ -526,7 +553,7 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
       promotionReason: "Chapter events change story state or reader understanding.",
     },
     {
-      title: `${chapter.title} immediate tone`,
+      title: `${workingChapter.title} immediate tone`,
       content: emotionalTone,
       category: "EMOTION",
       tags: ["tone", "recent"],
@@ -538,11 +565,11 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
       durabilityScore: 0.35,
       promotionReason: "Useful for the next chapter bridge, not permanent.",
     },
-    ...(chapter.currentBeat
+    ...(workingChapter.currentBeat
       ? [
           {
-            title: `${chapter.title} active beat`,
-            content: `Current pressure in motion: ${chapter.currentBeat}`,
+            title: `${workingChapter.title} active beat`,
+            content: `Current pressure in motion: ${workingChapter.currentBeat}`,
             category: "SCENE_STATE",
             tags: ["beat", "scene", "active"],
             relatedCharacterIds,
@@ -570,8 +597,8 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
       durabilityScore: 0.49,
       promotionReason: "Character state should stay live across the next few scenes or chapters.",
     })),
-    ...activeThreads.slice(0, 2).map((thread) => ({
-      title: `${thread.title} touched in ${chapter.title}`,
+    ...activeThreads.slice(0, 3).map((thread) => ({
+      title: `${thread.title} touched in ${workingChapter.title}`,
       content: cleanSummaryText(`Chapter ${chapter.number} develops this thread: ${summary}`),
       category: "THREAD",
       tags: ["thread", "active", thread.title.toLowerCase()],
@@ -583,7 +610,7 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
       durabilityScore: 0.63,
       promotionReason: "This promise is still in motion and should remain retrievable.",
     })),
-    ...chapter.requiredInclusions.slice(0, 2).map((item) => ({
+    ...workingChapter.requiredInclusions.slice(0, 3).map((item) => ({
       title: item,
       content: `This chapter foregrounds ${item}, so future prompts should confirm whether it remains active.`,
       category: "THREAD",
@@ -599,7 +626,7 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
     ...(touchedLocations.length
       ? [
           {
-            title: `${chapter.title} setting state`,
+            title: `${workingChapter.title} setting state`,
             content: cleanSummaryText(
               `Current location pressure: ${touchedLocations.map((location) => location.name).join(", ")}. ${summary}`,
             ),
@@ -624,25 +651,37 @@ export function extractMemoryFromDraft(project: ProjectWorkspace, chapterId: str
   };
 }
 
-export async function persistMemoryExtraction(projectId: string, chapterId: string) {
+export async function persistMemoryExtraction(
+  projectId: string,
+  chapterId: string,
+  overrides?: Partial<
+    Pick<
+      ProjectWorkspace["chapters"][number],
+      "title" | "purpose" | "currentBeat" | "desiredMood" | "outline" | "notes" | "draft"
+    >
+  >,
+) {
   const project = await getProjectWorkspace(projectId);
   if (!project) {
     throw new Error("Project not found.");
   }
-
-  const extraction = extractMemoryFromDraft(project, chapterId);
   const chapter = getChapterById(project, chapterId);
   if (!chapter) {
     throw new Error("Chapter not found.");
   }
+  const extraction = extractMemoryFromDraft(project, chapterId, overrides);
   const cleanedDraft = sanitizeManuscriptText(chapter.draft, {
-    chapterTitle: chapter.title,
+    chapterTitle: overrides?.title ?? chapter.title,
     chapterNumber: chapter.number,
     previousChapterDrafts: project.chapters
       .filter((entry) => entry.number < chapter.number)
       .map((entry) => entry.draft)
       .filter(Boolean),
   }).text;
+  const liveChapter = {
+    ...chapter,
+    ...overrides,
+  };
   const draftLower = cleanedDraft.toLowerCase();
 
   await prisma.chapterSummary.deleteMany({
@@ -679,7 +718,7 @@ export async function persistMemoryExtraction(projectId: string, chapterId: stri
       unresolvedQuestions: extraction.candidates
         .filter((candidate) => candidate.classification === "unresolved thread")
         .map((candidate) => candidate.title),
-      bridgeText: `Carry forward ${chapter.requiredInclusions.slice(0, 2).join(", ") || chapter.title}.`,
+      bridgeText: `Carry forward ${liveChapter.requiredInclusions.slice(0, 2).join(", ") || liveChapter.title}.`,
     },
   });
 
@@ -754,7 +793,9 @@ export async function persistMemoryExtraction(projectId: string, chapterId: stri
     }
   }
   const touchedCharacters = project.characters.filter((character) =>
-    draftLower.includes(character.name.toLowerCase()),
+    [character.name, character.role, character.summary]
+      .filter(Boolean)
+      .some((token) => draftLower.includes(String(token).toLowerCase())),
   );
 
   for (const character of touchedCharacters.slice(0, 4)) {
@@ -779,14 +820,14 @@ export async function persistMemoryExtraction(projectId: string, chapterId: stri
     });
   }
 
-  const povCharacter = project.characters.find((character) => character.id === chapter.povCharacterId);
+  const povCharacter = project.characters.find((character) => character.id === liveChapter.povCharacterId);
   if (povCharacter) {
     const arcTitle = `${povCharacter.name} arc`;
     const existingArc = project.plotThreads.find((thread) => thread.title.toLowerCase() === arcTitle.toLowerCase());
     const arcSummary = `${povCharacter.name}'s arc advances in Chapter ${chapter.number}: ${extraction.summary}`;
     const nextMarker = {
       chapterNumber: chapter.number,
-      label: chapter.title,
+      label: liveChapter.title,
       strength: existingArc ? "DEVELOPED" : "INTRODUCED",
       notes: extraction.summary,
     };
@@ -820,7 +861,7 @@ export async function persistMemoryExtraction(projectId: string, chapterId: stri
     }
   }
 
-  const chapterSignal = [chapter.title, chapter.draft]
+  const chapterSignal = [liveChapter.title, liveChapter.purpose, liveChapter.currentBeat, liveChapter.outline, cleanedDraft]
     .filter(Boolean)
     .join("\n")
     .toLowerCase();
@@ -838,7 +879,7 @@ export async function persistMemoryExtraction(projectId: string, chapterId: stri
         : existingMarker?.strength ?? (thread.lastTouchedChapter ? "DEVELOPED" : "INTRODUCED");
     const nextMarker = {
       chapterNumber: chapter.number,
-      label: chapter.title,
+      label: liveChapter.title,
       strength: markerStrength,
       notes: extraction.summary,
     };

@@ -712,7 +712,19 @@ export function ProjectWorkspace({
           extraction: { summary: string; emotionalTone: string };
           report: { verdict: string };
           project: ProjectWorkspaceData;
-        }>(`/api/chapters/${selectedChapter.id}/sync`, { method: "POST" });
+        }>(`/api/chapters/${selectedChapter.id}/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: editorStateRef.current.title,
+            purpose: editorStateRef.current.purpose,
+            currentBeat: editorStateRef.current.currentBeat,
+            desiredMood: editorStateRef.current.desiredMood,
+            outline: editorStateRef.current.outline,
+            notes: editorStateRef.current.notes,
+            draft: editorStateRef.current.draft,
+          }),
+        });
         refreshProject(data.project);
         setSummaryOutput(`${data.extraction.summary}\n\nTone: ${data.extraction.emotionalTone}`);
         lastMemoryFingerprintRef.current = fingerprint;
@@ -1231,7 +1243,19 @@ export function ProjectWorkspace({
         extraction: { summary: string; emotionalTone: string };
         report: { verdict: string };
         project: ProjectWorkspaceData;
-      }>(`/api/chapters/${selectedChapter.id}/sync`, { method: "POST" });
+      }>(`/api/chapters/${selectedChapter.id}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editorStateRef.current.title,
+          purpose: editorStateRef.current.purpose,
+          currentBeat: editorStateRef.current.currentBeat,
+          desiredMood: editorStateRef.current.desiredMood,
+          outline: editorStateRef.current.outline,
+          notes: editorStateRef.current.notes,
+          draft: editorStateRef.current.draft,
+        }),
+      });
       refreshProject(data.project);
       setSummaryOutput(`${data.extraction.summary}\n\nTone: ${data.extraction.emotionalTone}`);
       lastMemoryFingerprintRef.current = [
@@ -1261,7 +1285,19 @@ export function ProjectWorkspace({
       const data = await requestJson<{
         extraction: { summary: string; emotionalTone: string };
         project: ProjectWorkspaceData;
-      }>(`/api/chapters/${selectedChapter.id}/extract-memory`, { method: "POST" });
+      }>(`/api/chapters/${selectedChapter.id}/extract-memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editorStateRef.current.title,
+          purpose: editorStateRef.current.purpose,
+          currentBeat: editorStateRef.current.currentBeat,
+          desiredMood: editorStateRef.current.desiredMood,
+          outline: editorStateRef.current.outline,
+          notes: editorStateRef.current.notes,
+          draft: editorStateRef.current.draft,
+        }),
+      });
       refreshProject(data.project);
       setSummaryOutput(`${data.extraction.summary}\n\nTone: ${data.extraction.emotionalTone}`);
       toast.success("Memory extracted into long-term and short-term stores.");
@@ -1610,7 +1646,9 @@ export function ProjectWorkspace({
 
       <div
         className={cn(
-          phoneShell ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-visible" : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
+          phoneShell
+            ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-visible pb-[9.5rem]"
+            : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
         )}
         style={desktopGridStyle}
       >
@@ -1643,7 +1681,7 @@ export function ProjectWorkspace({
         <section
           className={cn(
             phoneShell
-              ? "grid min-w-0 gap-3 overflow-visible"
+              ? "grid min-w-0 gap-3 overflow-visible pb-4"
               : "grid min-w-0 min-h-0 gap-4 overflow-y-auto pr-1",
             dockPaddingClass,
           )}

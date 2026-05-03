@@ -195,8 +195,8 @@ export function ProjectCopilotBar({
   return (
     <div className={cn("fixed left-0 right-0 z-40 px-3 pb-3 sm:px-4", dockClassName)} id="project-copilot-dock">
       {expanded ? (
-        <Card className={cn("mx-auto max-w-[1600px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 shadow-[0_-14px_34px_var(--shadow)] backdrop-blur", phoneShell ? "max-h-[52dvh] overflow-hidden rounded-[18px]" : "")}>
-          <div className={cn("grid gap-4 p-4", phoneShell ? "max-h-[52dvh] gap-2 overflow-y-auto p-2" : null)}>
+        <Card className={cn("mx-auto max-w-[1600px] border-[color:var(--line-strong)] bg-[color:var(--panel)]/98 shadow-[0_-14px_34px_var(--shadow)] backdrop-blur", phoneShell ? "max-h-[46dvh] overflow-hidden rounded-[18px]" : "")}>
+          <div className={cn("grid gap-4 p-4", phoneShell ? "max-h-[46dvh] gap-2 overflow-y-auto p-2" : null)}>
             <div className={cn("flex flex-wrap items-start justify-between gap-4 border-b border-[color:var(--line)] pb-3", phoneShell ? "gap-2 pb-2" : "")}>
               <div className="grid gap-2">
                 <div className="flex flex-wrap gap-2">
@@ -261,7 +261,7 @@ export function ProjectCopilotBar({
               ref={bodyRef}
               className={cn(
                 "overflow-auto rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] p-4",
-                phoneShell ? "max-h-[96px] p-2" : "max-h-[240px]",
+                phoneShell ? "max-h-[84px] p-2" : "max-h-[240px]",
               )}
             >
               <div className="grid gap-3">

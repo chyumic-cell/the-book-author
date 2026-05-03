@@ -828,6 +828,19 @@ export function ChaptersTab({
     }
   }, [pendingSuggestionTarget, phoneShell]);
 
+  useEffect(() => {
+    if (!phoneShell || !showPhoneDraftEditor) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [phoneShell, showPhoneDraftEditor]);
+
   async function handleQuickModelSwitch(modelId: string) {
     if (!modelId) {
       return;
@@ -1474,6 +1487,11 @@ export function ChaptersTab({
                           <p className="text-sm text-[var(--muted)]">
                             Manual drafting is tucked away on phones so AI writing can stay front and center.
                           </p>
+                          <p className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-3 text-sm leading-6 text-[var(--muted)]">
+                            {editor.draft.trim()
+                              ? `${editor.draft.trim().slice(0, 220)}${editor.draft.trim().length > 220 ? "..." : ""}`
+                              : "No manuscript drafted yet. Use the AI studio to write the chapter, then open the manuscript here for a focused full-screen edit."}
+                          </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Button onClick={() => setShowPhoneDraftEditor(true)}>Open manuscript editor</Button>
@@ -1490,7 +1508,7 @@ export function ChaptersTab({
                     <div
                       className={cn(
                         phoneShell
-                          ? "relative z-10 px-0 pb-2 pt-1"
+                          ? "fixed inset-0 z-[75] flex flex-col bg-[rgba(15,23,42,0.45)] px-3 pb-3 pt-3 backdrop-blur-[2px]"
                           : "",
                       )}
                     >
@@ -1498,7 +1516,7 @@ export function ChaptersTab({
                       className={cn(
                         "paper-sheet mx-auto w-full max-w-[920px]",
                         phoneShell
-                          ? "flex min-h-0 flex-col overflow-visible rounded-[20px] border border-[color:var(--line-strong)] bg-white shadow-[0_18px_40px_var(--shadow)]"
+                          ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-[color:var(--line-strong)] bg-white shadow-[0_18px_40px_var(--shadow)]"
                           : "rounded-[4px]",
                       )}
                     >
@@ -1513,7 +1531,7 @@ export function ChaptersTab({
                         {phoneShell ? (
                           <div className="pb-1">
                             <Button onClick={() => setShowPhoneDraftEditor(false)} variant="secondary">
-                              Hide manuscript
+                              Return to planning
                             </Button>
                           </div>
                         ) : null}
@@ -1542,7 +1560,14 @@ export function ChaptersTab({
                       </div>
                     </div>
 
-                      <div className={cn("relative", phoneShell ? "min-h-0" : null)}>
+                      <div className={cn("relative", phoneShell ? "min-h-0 flex-1 overflow-y-auto bg-[color:var(--panel-soft)] px-3 py-3" : null)}>
+                      <div
+                        className={cn(
+                          phoneShell
+                            ? "paper-sheet mx-auto flex min-h-full w-full max-w-[920px] flex-col overflow-hidden rounded-[18px] border border-[color:var(--line)] bg-white shadow-[0_10px_28px_var(--shadow)]"
+                            : "",
+                        )}
+                      >
                       {draftSuggestionPreview ? (
                         <InlineSuggestionPreview
                           actionType={draftSuggestionPreview.actionType}
@@ -1563,7 +1588,7 @@ export function ChaptersTab({
                             className={cn(
                               "manuscript-font w-full resize-none overflow-y-auto !border-0 !bg-transparent !shadow-none focus:!shadow-none focus:ring-0",
                               phoneShell
-                                ? "h-[56svh] min-h-[52svh] px-4 py-4 text-[15px] leading-6"
+                                ? "h-[calc(100dvh-13.5rem)] min-h-[68svh] px-4 py-4 text-[15px] leading-7"
                                 : "h-[62vh] min-h-[34rem] px-8 py-10 text-[18px] leading-9 sm:px-12 min-[960px]:h-[calc(100vh-22rem)]",
                             )}
                             style={{
@@ -1574,6 +1599,7 @@ export function ChaptersTab({
                           onChange={(event) => onEditorChange({ draft: event.target.value })}
                         />
                       )}
+                      </div>
 
                       {contextMenu ? (
                         <div
