@@ -99,6 +99,22 @@ function BookLengthPlanner({
   );
 }
 
+function ChapterRunwayActions({
+  busy,
+  onGenerateAllOutlines,
+}: {
+  busy: boolean;
+  onGenerateAllOutlines: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button disabled={busy} onClick={onGenerateAllOutlines}>
+        {busy ? "Building outlines..." : "Build all chapter outlines with AI"}
+      </Button>
+    </div>
+  );
+}
+
 export function StorySkeletonTab({
   busy,
   planningBusy,
@@ -109,6 +125,8 @@ export function StorySkeletonTab({
   onApplyBookPlan,
   onDeleteChapter,
   onGeneratePlan,
+  onGenerateAllChapterOutlines,
+  onAiFieldAction,
   onSaveChapterPlan,
 }: {
   busy: boolean;
@@ -125,6 +143,14 @@ export function StorySkeletonTab({
   onApplyBookPlan: (bookWordTarget: number, chapterCount: number) => Promise<void>;
   onDeleteChapter: (chapterId: string) => Promise<void>;
   onGeneratePlan: () => void;
+  onGenerateAllChapterOutlines: () => void;
+  onAiFieldAction: (options: {
+    itemId: string;
+    itemTitle: string;
+    fieldKey: string;
+    fieldLabel: string;
+    action: "develop" | "expand" | "tighten";
+  }) => Promise<void>;
   onSaveChapterPlan: (
     chapterId: string,
     payload: {
@@ -345,6 +371,8 @@ export function StorySkeletonTab({
         ]}
         items={project.chapters as unknown as Record<string, unknown>[]}
         onAdd={onAddChapter}
+        aiBusyKey={planningBusy ? "busy" : null}
+        onAiFieldAction={onAiFieldAction}
         onDelete={onDeleteChapter}
         onSave={(itemId, payload) =>
           onSaveChapterPlan(itemId, {
@@ -357,6 +385,7 @@ export function StorySkeletonTab({
           })
         }
         title="Chapter runway"
+        topActions={<ChapterRunwayActions busy={planningBusy || busy} onGenerateAllOutlines={onGenerateAllChapterOutlines} />}
       />
 
       <EditableListSection
@@ -373,6 +402,7 @@ export function StorySkeletonTab({
         ]}
         items={project.structureBeats as unknown as Record<string, unknown>[]}
         onAdd={() => mutateSkeleton("structureBeat", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateSkeleton("structureBeat", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateSkeleton("structureBeat", payload, itemId, "PATCH")}
         title="Structure engine"
@@ -396,6 +426,7 @@ export function StorySkeletonTab({
         ]}
         items={project.sceneCards as unknown as Record<string, unknown>[]}
         onAdd={() => mutateSkeleton("sceneCard", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateSkeleton("sceneCard", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateSkeleton("sceneCard", payload, itemId, "PATCH")}
         title="Scene engine"

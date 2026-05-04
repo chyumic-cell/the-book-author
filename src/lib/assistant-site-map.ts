@@ -8,7 +8,7 @@ type FieldSpec = {
 };
 
 type EntitySpec = {
-  entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent";
+  entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent" | "workingNote";
   label: string;
   matchHint: string;
   fields: FieldSpec[];
@@ -139,6 +139,17 @@ export const STORY_BIBLE_ENTITY_SPECS: EntitySpec[] = [
     ],
   },
   {
+    entityType: "workingNote",
+    label: "Book rule",
+    matchHint: "Match by rule name/title.",
+    fields: [
+      { key: "title", label: "Rule name", description: "Short name for the rule, system, or institutional logic.", example: "Saltbinding requires a witness" },
+      { key: "content", label: "Rule / internal logic", description: "Explain how the rule works off-page so the AI can obey it in canon.", example: "Magic can only bind a bargain if both parties speak the same closing phrase in full." },
+      { key: "tags", label: "Tags", description: "Helpful retrieval tags for the rule.", example: "magic\nritual\nlaw" },
+      { key: "status", label: "Status", description: "Whether this rule is active canon.", example: "ACTIVE" },
+    ],
+  },
+  {
     entityType: "timelineEvent",
     label: "Timeline event",
     matchHint: "Match by event label.",
@@ -157,7 +168,7 @@ export function buildAssistantRoutingGuide() {
     "- Use UPDATE_CHAPTER_FIELD or APPEND_CHAPTER_FIELD for chapter title, purpose, current beat, scene list, outline, manuscript, or chapter notes.",
     "- Use UPDATE_BOOK_SETUP when the request changes global book setup such as genre, audience, POV, tense, target lengths, story brief, plot direction, pacing notes, prose style, themes, comparable titles, series data, or author name.",
     "- Use UPDATE_STYLE_PROFILE when the request changes style sliders or written style rules such as prose density, pacing, darkness, dialogue ratio, commercial balance, aesthetic guide, style guide, or voice rules.",
-    "- Use UPSERT_STORY_BIBLE_ENTITY when the request belongs in Characters, Relationships, Plot Threads, Locations, Factions, or Timeline.",
+    "- Use UPSERT_STORY_BIBLE_ENTITY when the request belongs in Characters, Relationships, Plot Threads, Locations, Factions, Timeline, or Book Rules.",
     "- Use CREATE_STRUCTURE_BEAT and CREATE_SCENE_CARD only for actual structure beats or scene cards.",
     "- Do not dump planning requests into notes if a real field exists for them.",
     "- When the user asks to plan all chapters, create one chapter-field action per chapter that needs a title, purpose, beat, outline, or scene list update.",
@@ -257,6 +268,12 @@ export function buildAssistantSiteMap(project: ProjectWorkspace) {
             id: event.id,
             label: event.label,
           })),
+          bookRules: project.workingNotes
+            .filter((note) => note.tags.some((tag) => String(tag).trim().toLowerCase() === "book-rule"))
+            .map((note) => ({
+              id: note.id,
+              title: note.title,
+            })),
         },
       },
     },

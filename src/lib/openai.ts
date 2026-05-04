@@ -9,6 +9,7 @@ import {
   cleanGeneratedText,
   cleanInlineSuggestionAgainstContext,
   cleanInlineSuggestionText,
+  cleanStructuredText,
   cleanSummaryText,
   sanitizeManuscriptText,
 } from "@/lib/ai-output";
@@ -1147,6 +1148,7 @@ async function runPromptTask(options: {
   mockContent?: string;
   clean?: (value: string) => string;
   chapter?: ChapterRecord;
+  enforceOutlineDepth?: boolean;
   enforceChapterLength?: boolean;
   repairChapterEnding?: boolean;
 }) {
@@ -1165,6 +1167,15 @@ async function runPromptTask(options: {
     throw new Error("AI did not return any visible text.");
   }
   let cleaned = options.clean ? options.clean(content) : content.trim();
+
+  if (options.enforceOutlineDepth && options.chapter && cleaned.trim()) {
+    cleaned = await repairThinOutlineIfNeeded({
+      project: options.project,
+      chapter: options.chapter,
+      context: options.context,
+      content: cleaned,
+    });
+  }
 
   if (options.enforceChapterLength && options.chapter && cleaned.trim()) {
     cleaned = await expandShortChapterIfNeeded({
@@ -1188,6 +1199,40 @@ async function runPromptTask(options: {
     content: cleaned.trim() ? cleaned : content.trim(),
     contextPackage: options.context,
   };
+}
+
+async function repairThinOutlineIfNeeded(options: {
+  project: ProjectWorkspace;
+  chapter: ChapterRecord;
+  context: ContextPackage;
+  content: string;
+}) {
+  const currentWords = roughWordCount(options.content);
+  const numberedSteps = (options.content.match(/^\s*(?:\d+[\).\:-]|[-*])\s+/gm) ?? []).length;
+  const seemsThin = currentWords < 110 || numberedSteps < 4;
+  if (!seemsThin) {
+    return options.content;
+  }
+
+  const repairPrompt = buildPromptEnvelope(
+    "Repair thin chapter outline",
+    options.project,
+    options.context,
+    [
+      formatChapterInstruction(options.chapter, "outline"),
+      "The previous outline was too thin or incomplete.",
+      "Return a stronger scene-by-scene outline with at least 6 concrete beats.",
+      "Each beat should say what happens, what pressure changes, and why the reader has to keep going.",
+      "Do not give vague headings only. Do not return notes about how you would outline it. Return the actual outline.",
+      "Previous outline:",
+      options.content,
+    ].join("\n\n"),
+  );
+  const repairedRaw = await generateTextWithProvider(repairPrompt, {
+    maxOutputTokens: Math.max(1400, wordBudgetToTokens(260, 500, 2200)),
+  });
+  const repaired = repairedRaw ? cleanStructuredText(repairedRaw) : "";
+  return roughWordCount(repaired) > currentWords ? repaired : options.content;
 }
 
 async function enforceInlineLengthIfNeeded(options: {
@@ -1453,6 +1498,10 @@ function buildAssistScopedInstruction(
     actionType === "CUSTOM_EDIT"
       ? "Treat the writer's custom instruction as the top priority for the selected text."
       : "",
+    "Never describe what you are about to do.",
+    "Never explain the style plan, continuity plan, or reasoning.",
+    "Never mention the selected text, the rewrite process, the prompt, the instruction, or the surrounding context.",
+    "Do not say things like 'we need to rewrite', 'the rewrite should', 'we must apply style', or 'should we italicize'.",
     "Return only the rewritten replacement text for the selected span.",
     "Do not repeat unchanged text from before or after the selection.",
     "Do not add commentary, labels, markdown, or wrapper quotation marks around the whole answer.",
@@ -1504,7 +1553,9 @@ export async function generateChapterOutline(projectId: string, chapterId: strin
     instruction: withAdditionalInstruction(formatChapterInstruction(chapter, "outline"), additionalInstruction),
     maxOutputTokens: 1100,
     mockContent: mockOutline(project, chapter.title, context),
-    clean: cleanGeneratedText,
+    clean: cleanStructuredText,
+    chapter,
+    enforceOutlineDepth: true,
   });
 }
 

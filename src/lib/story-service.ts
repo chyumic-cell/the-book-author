@@ -10,6 +10,7 @@ import { cleanGeneratedText, cleanInlineSuggestionText, cleanStructuredText, san
 import { getProjectWorkspace } from "@/lib/project-data";
 import { syncChapterToStoryState } from "@/lib/story-sync";
 import { toSlug } from "@/lib/utils";
+import { ensureBookRuleTags, isBookRuleNote } from "@/lib/book-rules";
 
 import type { z } from "zod";
 
@@ -643,6 +644,37 @@ export async function mutateStoryBible(projectId: string, mutation: StoryBibleMu
             },
           });
 
+    case "workingNote":
+      if (method === "DELETE" && mutation.id) {
+        return prisma.workingNote.delete({ where: { id: mutation.id } });
+      }
+
+      return mutation.id
+        ? prisma.workingNote.update({
+            where: { id: mutation.id },
+            data: {
+              linkedChapterId: pickNullableString(payload, "linkedChapterId"),
+              title: pickString(payload, "title"),
+              content: pickString(payload, "content"),
+              type: "RESEARCH",
+              status: (pickString(payload, "status") || "ACTIVE") as never,
+              tags: ensureBookRuleTags(pickArray(payload, "tags")),
+            },
+          })
+        : prisma.workingNote.create({
+            data: {
+              projectId,
+              linkedChapterId: pickNullableString(payload, "linkedChapterId"),
+              title: pickString(payload, "title") || "New book rule",
+              content:
+                pickString(payload, "content") ||
+                "Explain the world rule, organizational logic, or off-page canon here.",
+              type: "RESEARCH",
+              status: (pickString(payload, "status") || "ACTIVE") as never,
+              tags: ensureBookRuleTags(pickArray(payload, "tags")),
+            },
+          });
+
     default:
       throw new Error("Unsupported story bible entity.");
   }
@@ -697,7 +729,9 @@ export async function mutateIdeaLab(projectId: string, mutation: IdeaLabMutation
               content: pickString(payload, "content"),
               type: (pickString(payload, "type") || "SANDBOX") as never,
               status: (pickString(payload, "status") || "ACTIVE") as never,
-              tags: pickArray(payload, "tags"),
+              tags: isBookRuleNote({ tags: pickArray(payload, "tags") })
+                ? ensureBookRuleTags(pickArray(payload, "tags"))
+                : pickArray(payload, "tags"),
             },
           })
         : prisma.workingNote.create({
@@ -708,7 +742,9 @@ export async function mutateIdeaLab(projectId: string, mutation: IdeaLabMutation
               content: pickString(payload, "content") || "Try alternate ideas here without committing them to canon.",
               type: (pickString(payload, "type") || "SANDBOX") as never,
               status: (pickString(payload, "status") || "ACTIVE") as never,
-              tags: pickArray(payload, "tags"),
+              tags: isBookRuleNote({ tags: pickArray(payload, "tags") })
+                ? ensureBookRuleTags(pickArray(payload, "tags"))
+                : pickArray(payload, "tags"),
             },
           });
 

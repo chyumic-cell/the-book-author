@@ -78,6 +78,8 @@ const DEFAULT_MANUSCRIPT_ZOOM = 100;
 const MANUSCRIPT_ZOOM_MIN = 80;
 const MANUSCRIPT_ZOOM_MAX = 160;
 const AUTOSAVE_DELAY_MS = 5 * 60 * 1000;
+
+type PlanningAiAction = "develop" | "expand" | "tighten";
 const STORAGE_KEYS = {
   leftPaneWidth: "storyforge-left-pane-width",
   rightPaneWidth: "storyforge-right-pane-width",
@@ -776,7 +778,7 @@ export function ProjectWorkspace({
   }, [project.id]);
 
   async function mutateStoryBible(
-    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent",
+    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent" | "workingNote",
     payload: Record<string, unknown>,
     id?: string,
     method: "POST" | "PATCH" | "DELETE" = "PATCH",
@@ -936,6 +938,108 @@ export function ProjectWorkspace({
     }
   }
 
+  async function handlePlanningAiFieldAction(options: {
+    scope: "SKELETON" | "STORY_BIBLE";
+    sectionLabel: string;
+    itemId: string;
+    itemTitle: string;
+    fieldKey: string;
+    fieldLabel: string;
+    action: PlanningAiAction;
+  }) {
+    const busyKey = `planning-ai:${options.scope}:${options.itemId}:${options.fieldKey}:${options.action}`;
+    setBusyAction(busyKey);
+    try {
+      const actionInstruction =
+        options.action === "expand"
+          ? "Expand it into fuller, more specific, more useful planning prose."
+          : options.action === "tighten"
+            ? "Tighten it into a cleaner, shorter, sharper version without losing the key idea."
+            : "Develop or create this field so it becomes specific, usable, and well-synced with the rest of the project.";
+
+      const data = await requestJson<{
+        reply: string;
+        project: ProjectWorkspaceData;
+        contextPackage: ContextPackage | null;
+      }>(`/api/projects/${project.id}/assistant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: [
+            `Update only ${options.scope === "SKELETON" ? "Story Skeleton" : "Story Bible"} -> ${options.sectionLabel} -> ${options.itemTitle} -> ${options.fieldLabel}.`,
+            actionInstruction,
+            "Use all existing project, chapter, bible, skeleton, memory, continuity, and series context as binding context.",
+            "Preserve continuity with already written and already planned material.",
+            "Do not modify any other field or any other record.",
+            `Target item id: ${options.itemId}. Target field key: ${options.fieldKey}.`,
+          ].join(" "),
+          role: options.scope === "SKELETON" ? "OUTLINE_ARCHITECT" : "COWRITER",
+          scope: options.scope,
+          chapterId: null,
+          applyChanges: true,
+        }),
+      });
+
+      refreshProject(data.project);
+      setContextPackage(data.contextPackage);
+      toast.success(`${options.fieldLabel} updated with AI.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update that field with AI.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleCharacterAiAction(options: {
+    characterId: string;
+    action: "develop-dossier" | "expand-summary" | "tighten-summary";
+  }) {
+    const targetCharacter = project.characters.find((entry) => entry.id === options.characterId);
+    if (!targetCharacter) {
+      return;
+    }
+
+    const busyKey = `character-ai:${options.characterId}:${options.action}`;
+    setBusyAction(busyKey);
+    try {
+      const instruction =
+        options.action === "develop-dossier"
+          ? `Update only Story Bible -> Character Master -> ${targetCharacter.name}. Deepen the dossier, quick profile, and current state so they become fuller, more specific, and better synced with the existing manuscript, plans, and series canon.`
+          : options.action === "expand-summary"
+            ? `Update only Story Bible -> Character Master -> ${targetCharacter.name} -> Summary. Expand it into a fuller, more specific character summary that remains canon-safe.`
+            : `Update only Story Bible -> Character Master -> ${targetCharacter.name} -> Summary. Tighten it into a shorter, cleaner, sharper summary without losing essential canon.`;
+
+      const data = await requestJson<{
+        reply: string;
+        project: ProjectWorkspaceData;
+        contextPackage: ContextPackage | null;
+      }>(`/api/projects/${project.id}/assistant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: [
+            instruction,
+            "Use all existing project, chapter, bible, skeleton, memory, continuity, and series context as binding context.",
+            "Do not alter other characters unless required for strict continuity.",
+            `Target character id: ${options.characterId}.`,
+          ].join(" "),
+          role: "COWRITER",
+          scope: "STORY_BIBLE",
+          chapterId: null,
+          applyChanges: true,
+        }),
+      });
+
+      refreshProject(data.project);
+      setContextPackage(data.contextPackage);
+      toast.success(`${targetCharacter.name} updated with AI.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update that character with AI.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function handleOutlineGenerate() {
     if (!selectedChapter) {
       return;
@@ -952,6 +1056,53 @@ export function ProjectWorkspace({
       toast.success("Outline preview inserted into the outline field.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not generate outline.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleGenerateAllChapterOutlines() {
+    if (project.chapters.length === 0) {
+      return;
+    }
+
+    setBusyAction("outline-all");
+    try {
+      if (selectedChapter && activeTab === "chapters") {
+        await persistChapter(false);
+      }
+
+      let latestProject: ProjectWorkspaceData | null = null;
+      let latestContext: ContextPackage | null = null;
+
+      for (const chapter of project.chapters) {
+        const outlineData = await requestJson<{
+          run: AiAssistRunRecord;
+          contextPackage: ContextPackage;
+        }>(`/api/chapters/${chapter.id}/generate/outline`, { method: "POST" });
+
+        latestContext = outlineData.contextPackage;
+
+        const saveData = await requestJson<{ project: ProjectWorkspaceData }>(`/api/chapters/${chapter.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outline: outlineData.run.suggestion,
+          }),
+        });
+
+        latestProject = saveData.project;
+      }
+
+      if (latestProject) {
+        refreshProject(latestProject);
+      }
+      if (latestContext) {
+        setContextPackage(latestContext);
+      }
+      toast.success("All chapter outlines were generated and saved into the chapter runway.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not build all chapter outlines.");
     } finally {
       setBusyAction(null);
     }
@@ -1729,15 +1880,36 @@ export function ProjectWorkspace({
               seriesBooks={project.series?.books.filter((book) => book.projectId !== project.id) ?? []}
             />
           )}
-          {activeTab === "bible" && <StoryBibleTab mutateStoryBible={mutateStoryBible} project={project} />}
+          {activeTab === "bible" && (
+            <StoryBibleTab
+              mutateStoryBible={mutateStoryBible}
+              onAiFieldAction={(options) =>
+                handlePlanningAiFieldAction({
+                  ...options,
+                  scope: "STORY_BIBLE",
+                  sectionLabel: "Story Bible",
+                })
+              }
+              onCharacterAiAction={handleCharacterAiAction}
+              project={project}
+            />
+          )}
             {activeTab === "skeleton" && (
               <StorySkeletonTab
                 busy={busyAction === "story-plan"}
                 mutateSkeleton={mutateSkeleton}
                 onAddChapter={handleAddChapter}
+                onAiFieldAction={(options) =>
+                  handlePlanningAiFieldAction({
+                    ...options,
+                    scope: "SKELETON",
+                    sectionLabel: "Story Skeleton",
+                  })
+                }
                 onApplyBookPlan={handleApplyBookPlan}
                 onDeleteChapter={handleDeleteChapter}
                 onGeneratePlan={handleStoryPlan}
+                onGenerateAllChapterOutlines={handleGenerateAllChapterOutlines}
                 onSaveChapterPlan={handleSaveChapterPlan}
                 planningBusy={busyAction === "structure-plan" || busyAction === "chapter-plan-save" || busyAction === "delete-chapter"}
                 project={project}

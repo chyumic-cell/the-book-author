@@ -78,7 +78,7 @@ export const chapterPatchSchema = z.object({
 });
 
 export const storyBibleMutationSchema = z.object({
-  entityType: z.enum(["character", "relationship", "plotThread", "location", "faction", "timelineEvent"]),
+  entityType: z.enum(["character", "relationship", "plotThread", "location", "faction", "timelineEvent", "workingNote"]),
   id: z.string().optional(),
   payload: z.record(z.string(), z.unknown()),
 });

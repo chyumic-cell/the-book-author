@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { buildCharacterPromptCard, buildCharacterVoicePromptCard } from "@/lib/character-dossier";
+import { isBookRuleNote } from "@/lib/book-rules";
 import { cleanCharacterNotes, cleanSummaryText, sanitizeManuscriptText } from "@/lib/ai-output";
 import { prisma } from "@/lib/prisma";
 import { getChapterById, getLatestChapterSummary, getProjectWorkspace } from "@/lib/project-data";
@@ -266,6 +267,25 @@ function buildStoryBibleContext(
   const relevantLocations = pickRelevantLocations(project, chapter, localExcerpt);
   const relevantFactions = pickRelevantFactions(project, chapter, localExcerpt);
   const relevantTimelineEvents = pickRelevantTimelineEvents(project, chapter);
+  const relevantBookRules = (project.workingNotes ?? [])
+    .filter((note) => isBookRuleNote(note))
+    .map((note) => ({
+      note,
+      score:
+        scoreTextMatch(`${note.title} ${note.content} ${note.tags.join(" ")}`, [
+          chapter.title,
+          chapter.purpose,
+          chapter.currentBeat,
+          chapter.desiredMood,
+          ...chapter.keyBeats,
+          ...chapter.requiredInclusions,
+          ...(localExcerpt ? [localExcerpt] : []),
+        ].filter(Boolean)) + 0.5,
+    }))
+    .filter(({ score }) => score > 0.5)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5)
+    .map(({ note }) => note);
 
   return [
     project.oneLineHook ? `Hook: ${project.oneLineHook}` : "",
@@ -284,6 +304,9 @@ function buildStoryBibleContext(
     ),
     ...relevantTimelineEvents.map((event) =>
       `Timeline: ${event.label} - ${compactText(event.description, 180)}`,
+    ),
+    ...relevantBookRules.map((note) =>
+      `Book rule: ${note.title} - ${compactText(note.content, 220)}`,
     ),
   ].filter(Boolean);
 }

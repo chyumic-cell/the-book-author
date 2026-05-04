@@ -34,7 +34,8 @@ type AssistantStoryBibleEntityType =
   | "plotThread"
   | "location"
   | "faction"
-  | "timelineEvent";
+  | "timelineEvent"
+  | "workingNote";
 type AssistantBookSetupFieldKey = keyof BookSettingsRecord;
 type AssistantStyleFieldKey = keyof StyleProfileRecord;
 
@@ -1383,11 +1384,15 @@ function inferAssistantIntent(message: string, scope: ProjectChatScope): Assista
     lower.includes("character dossier") ||
     lower.includes("character master") ||
     lower.includes("character") ||
-    lower.includes("plot thread") ||
-    lower.includes("mystery") ||
-    lower.includes("location") ||
-    lower.includes("faction") ||
-    lower.includes("timeline");
+      lower.includes("plot thread") ||
+      lower.includes("mystery") ||
+      lower.includes("location") ||
+      lower.includes("faction") ||
+      lower.includes("timeline") ||
+      lower.includes("book rule") ||
+      lower.includes("world rule") ||
+      lower.includes("magic system") ||
+      lower.includes("organization rule");
 
   return {
     wantsOutline:
@@ -1554,6 +1559,16 @@ function findStoryBibleEntity(
     );
   }
 
+  if (entityType === "workingNote") {
+    return (
+      (entityId ? project.workingNotes.find((entry) => entry.id === entityId) : null) ??
+      (normalizedMatch
+        ? project.workingNotes.find((entry) => entry.title.trim().toLowerCase() === normalizedMatch) ?? null
+        : null) ??
+      (payloadTitle ? project.workingNotes.find((entry) => entry.title.trim().toLowerCase() === payloadTitle) ?? null : null)
+    );
+  }
+
   if (entityType === "relationship") {
     return (
       (entityId ? project.relationships.find((entry) => entry.id === entityId) : null) ??
@@ -1605,6 +1620,13 @@ function storyBibleTargetLabel(entityType: AssistantStoryBibleEntityType, entity
     return label ? `Timeline: ${label}` : "Story bible timeline";
   }
 
+  if (entityType === "workingNote") {
+    const title =
+      (entity && typeof entity === "object" && "title" in entity ? String((entity as { title?: unknown }).title ?? "") : "") ||
+      String(payload?.title ?? "").trim();
+    return title ? `Book rule: ${title}` : "Story bible book rule";
+  }
+
   return "Relationship";
 }
 
@@ -1648,7 +1670,7 @@ function cleanExtractedEntityLabel(value: string) {
 }
 
 function extractEntityLabelFromMessage(message: string, entityType: AssistantStoryBibleEntityType) {
-  const patternsByType: Record<AssistantStoryBibleEntityType, RegExp[]> = {
+  const patternsByType: Record<string, RegExp[]> = {
     character: [
       /character(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
       /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+character/i,
@@ -1671,6 +1693,10 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
     timelineEvent: [
       /(?:timeline\s+event|event)(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
       /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+(?:timeline\s+event|event)/i,
+    ],
+    workingNote: [
+      /(?:book\s+rule|world\s+rule|rule)(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
+      /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+(?:book\s+rule|world\s+rule|rule)/i,
     ],
   };
 
@@ -1696,6 +1722,8 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
             ? "plot thread "
             : entityType === "timelineEvent"
               ? "event "
+              : entityType === "workingNote"
+                ? "book rule "
               : "";
   if (prefix) {
     const prefixIndex = lowerMessage.indexOf(prefix);
@@ -1721,6 +1749,8 @@ function getStoryBibleIdentityField(entityType: AssistantStoryBibleEntityType) {
       return "title";
     case "timelineEvent":
       return "label";
+    case "workingNote":
+      return "title";
     default:
       return null;
   }
@@ -1741,7 +1771,7 @@ function ensureStoryBibleIdentityValue(
   const currentValue = String(next[identityField] ?? "").trim();
   const currentLooksPlaceholder =
     !currentValue ||
-    /^new\s+(?:character|location|faction|plot thread|timeline event)$/i.test(currentValue) ||
+    /^new\s+(?:character|location|faction|plot thread|timeline event|book rule)$/i.test(currentValue) ||
     /^untitled$/i.test(currentValue);
   const fallbackValue =
     (!currentLooksPlaceholder ? currentValue : "") ||
@@ -2614,6 +2644,21 @@ function buildFallbackPlan(input: {
         });
       }
 
+      if (
+        lower.includes("book rule") ||
+        lower.includes("world rule") ||
+        lower.includes("magic system") ||
+        lower.includes("organization rule")
+      ) {
+        storyBibleActions.push({
+          kind: "UPSERT_STORY_BIBLE_ENTITY",
+          entityType: "workingNote",
+          entityMatch: extractEntityLabelFromMessage(input.message, "workingNote"),
+          payload: {},
+          summary: "Updated the relevant book rule entry in the story bible.",
+        });
+      }
+
       if (storyBibleActions.length > 0) {
         actions.push(...storyBibleActions);
         nextTab = "bible";
@@ -2787,7 +2832,7 @@ async function buildLivePlan(input: {
     "Use UPDATE_CHAPTER_FIELD or APPEND_CHAPTER_FIELD for writable chapter surfaces such as draft, outline, notes, title, purpose, currentBeat, desiredMood, keyBeats, requiredInclusions, forbiddenElements, and sceneList.",
     "Use UPDATE_BOOK_SETUP for Book Setup fields such as storyBrief, plotDirection, genre, audience, POV, tense, target lengths, pacing notes, prose style, themes, comparable titles, author name, or series fields.",
     "Use UPDATE_STYLE_PROFILE for style sliders and written style instructions such as proseDensity, pacing, darkness, dialogueDescriptionRatio, literaryCommercialBalance, aestheticGuide, styleGuide, or voiceRules.",
-    "Use UPSERT_STORY_BIBLE_ENTITY for Characters, Relationships, Plot Threads, Locations, Factions, and Timeline entries.",
+    "Use UPSERT_STORY_BIBLE_ENTITY for Characters, Relationships, Plot Threads, Locations, Factions, Timeline entries, and Book Rules.",
     "Use chapterNumber when you need to target a specific chapter but do not know its chapterId.",
     "For chapter-writing actions, include fieldKey.",
     "For UPDATE_BOOK_SETUP and UPDATE_STYLE_PROFILE, include payload as a JSON object containing only the fields to change.",
@@ -2801,7 +2846,7 @@ async function buildLivePlan(input: {
     "Do not write to draft/manuscript when the request is about planning, outlines, chapter titles, skeletons, setup, or bible work.",
     "If you are unsure which field should hold the content, leave content blank and still emit the correct structured action so a second writing step can generate the field safely.",
     "If the user asks for direct edits to the selected chapter text, prefer UPDATE_CHAPTER_FIELD on draft or outline instead of notes.",
-    "If the user asks to improve or flesh out a character, location, faction, plot thread, or timeline item, prefer UPSERT_STORY_BIBLE_ENTITY rather than chapter notes.",
+    "If the user asks to improve or flesh out a character, location, faction, plot thread, timeline item, or book rule, prefer UPSERT_STORY_BIBLE_ENTITY rather than chapter notes.",
     "If the user asks for chapter titles, title fields must be real chapter titles. Never treat act names, part labels, or section labels as chapter titles.",
     "If the user asks for outlines, put them in outline fields, not notes, not scene cards, and not act headers.",
     "If the user asks to fill several parts of the app at once, emit every needed action in one plan rather than choosing only one surface.",
@@ -3447,7 +3492,16 @@ async function materializeStoryBibleEntityAction(input: {
   chapterId: string | null;
   action: AssistantPlanAction;
 }) {
-  const entityType = input.action.entityType;
+  const lowerMessage = input.message.toLowerCase();
+  const forcedBookRuleEntityType =
+    lowerMessage.includes("book rule") ||
+    lowerMessage.includes("world rule") ||
+    lowerMessage.includes("magic system") ||
+    lowerMessage.includes("organization rule");
+  const entityType =
+    forcedBookRuleEntityType && input.action.entityType !== "workingNote"
+      ? "workingNote"
+      : input.action.entityType;
   if (!entityType || !STORY_BIBLE_ENTITY_TYPES.has(entityType)) {
     return input.action;
   }
@@ -3473,12 +3527,13 @@ async function materializeStoryBibleEntityAction(input: {
       ? String((existingEntity as { label?: unknown }).label ?? "")
       : "");
   const cleanedPayload = cleanStoryBiblePayload(input.action.payload, entityType);
-  if (Object.keys(cleanedPayload).length > 0 && !payloadLooksEmpty(cleanedPayload)) {
-    return {
-      ...input.action,
-      entityMatch: seedLabel || input.action.entityMatch,
-      entityId:
-        input.action.entityId ??
+    if (Object.keys(cleanedPayload).length > 0 && !payloadLooksEmpty(cleanedPayload)) {
+      return {
+        ...input.action,
+        entityType,
+        entityMatch: seedLabel || input.action.entityMatch,
+        entityId:
+          input.action.entityId ??
         (existingEntity && typeof existingEntity === "object" && "id" in existingEntity
           ? String((existingEntity as { id?: unknown }).id ?? "")
           : undefined),
@@ -3604,12 +3659,20 @@ async function materializeStoryBibleEntityAction(input: {
           label: seedLabel,
           description: `${seedLabel} is a timeline event that matters to the story chronology and causality.`,
         };
+      } else if (entityType === "workingNote") {
+        nextPayload = {
+          title: seedLabel,
+          content: `${seedLabel} is a binding book rule that should explain off-page world logic clearly enough for canon-safe drafting.`,
+          tags: ["book-rule"],
+          status: "ACTIVE",
+        };
       }
     }
   }
 
   return {
     ...input.action,
+    entityType,
     entityMatch: seedLabel || input.action.entityMatch,
     entityId:
       input.action.entityId ??

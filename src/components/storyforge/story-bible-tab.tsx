@@ -9,19 +9,31 @@ import { Chip } from "@/components/ui/chip";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { EditableListSection } from "@/components/storyforge/editable-list-section";
+import { BOOK_RULE_TAG, ensureBookRuleTags, isBookRuleNote } from "@/lib/book-rules";
 import type { ProjectWorkspace } from "@/types/storyforge";
+import type { EditableAiAction } from "@/components/storyforge/editable-list-section";
 
 export function StoryBibleTab({
   project,
   mutateStoryBible,
+  onAiFieldAction,
+  onCharacterAiAction,
 }: {
   project: ProjectWorkspace;
   mutateStoryBible: (
-    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent",
+    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent" | "workingNote",
     payload: Record<string, unknown>,
     id?: string,
     method?: "POST" | "PATCH" | "DELETE",
   ) => Promise<void>;
+  onAiFieldAction: (options: {
+    itemId: string;
+    itemTitle: string;
+    fieldKey: string;
+    fieldLabel: string;
+    action: EditableAiAction;
+  }) => Promise<void>;
+  onCharacterAiAction: (options: { characterId: string; action: "develop-dossier" | "expand-summary" | "tighten-summary" }) => Promise<void>;
 }) {
   const baseRelationshipDrafts = useMemo(
     () =>
@@ -66,6 +78,10 @@ export function StoryBibleTab({
       ),
     [baseRelationshipDrafts, relationshipDraftOverrides],
   );
+  const bookRules = useMemo(
+    () => project.workingNotes.filter((note) => isBookRuleNote(note)),
+    [project.workingNotes],
+  );
 
   async function handleAddRelationship() {
     if (project.characters.length < 2) {
@@ -92,7 +108,49 @@ export function StoryBibleTab({
       <CharacterMasterView
         characters={project.characters}
         mutateStoryBible={mutateStoryBible}
+        onAiAction={onCharacterAiAction}
         projectId={project.id}
+      />
+
+      <EditableListSection
+        key={`book-rules-${bookRules.map((item) => item.id).join("-")}`}
+        description="Store off-page canon here: magic systems, organization rules, social customs, technology constraints, ritual logic, or any world rule the AI must understand without forcing you to explain it directly in the prose."
+        fields={[
+          { key: "title", label: "Rule name" },
+          { key: "content", label: "Rule / internal logic", type: "textarea" },
+          { key: "tags", label: "Tags", type: "tags" },
+          { key: "status", label: "Status" },
+        ]}
+        items={bookRules as unknown as Record<string, unknown>[]}
+        onAdd={() =>
+          mutateStoryBible(
+            "workingNote",
+            {
+              title: "New book rule",
+              content: "Explain the world rule, system logic, or institutional process here.",
+              type: "RESEARCH",
+              tags: [BOOK_RULE_TAG],
+              status: "ACTIVE",
+            },
+            undefined,
+            "POST",
+          )
+        }
+        onAiFieldAction={onAiFieldAction}
+        onDelete={(itemId) => mutateStoryBible("workingNote", {}, itemId, "DELETE")}
+        onSave={(itemId, payload) =>
+          mutateStoryBible(
+            "workingNote",
+            {
+              ...payload,
+              type: "RESEARCH",
+              tags: ensureBookRuleTags(Array.isArray(payload.tags) ? payload.tags.map(String) : [BOOK_RULE_TAG]),
+            },
+            itemId,
+            "PATCH",
+          )
+        }
+        title="Book rules"
       />
 
       <EditableListSection
@@ -108,6 +166,7 @@ export function StoryBibleTab({
         ]}
         items={project.plotThreads as unknown as Record<string, unknown>[]}
         onAdd={() => mutateStoryBible("plotThread", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateStoryBible("plotThread", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateStoryBible("plotThread", payload, itemId, "PATCH")}
         title="Plot threads and mysteries"
@@ -126,6 +185,7 @@ export function StoryBibleTab({
         ]}
         items={project.locations as unknown as Record<string, unknown>[]}
         onAdd={() => mutateStoryBible("location", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateStoryBible("location", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateStoryBible("location", payload, itemId, "PATCH")}
         title="Locations"
@@ -144,6 +204,7 @@ export function StoryBibleTab({
         ]}
         items={project.factions as unknown as Record<string, unknown>[]}
         onAdd={() => mutateStoryBible("faction", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateStoryBible("faction", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateStoryBible("faction", payload, itemId, "PATCH")}
         title="Factions"
@@ -160,6 +221,7 @@ export function StoryBibleTab({
         ]}
         items={project.timelineEvents as unknown as Record<string, unknown>[]}
         onAdd={() => mutateStoryBible("timelineEvent", {}, undefined, "POST")}
+        onAiFieldAction={onAiFieldAction}
         onDelete={(itemId) => mutateStoryBible("timelineEvent", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateStoryBible("timelineEvent", payload, itemId, "PATCH")}
         title="Timeline"

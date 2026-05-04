@@ -14,6 +14,8 @@ export type EditableField = {
   type?: "text" | "textarea" | "number" | "tags" | "boolean";
 };
 
+export type EditableAiAction = "develop" | "expand" | "tighten";
+
 function splitLines(value: string) {
   return value
     .split(/\n|,/)
@@ -30,6 +32,9 @@ export function EditableListSection({
   description,
   items,
   fields,
+  topActions,
+  aiBusyKey,
+  onAiFieldAction,
   onSave,
   onAdd,
   onDelete,
@@ -38,6 +43,15 @@ export function EditableListSection({
   description: string;
   items: Record<string, unknown>[];
   fields: EditableField[];
+  topActions?: React.ReactNode;
+  aiBusyKey?: string | null;
+  onAiFieldAction?: (options: {
+    itemId: string;
+    itemTitle: string;
+    fieldKey: string;
+    fieldLabel: string;
+    action: EditableAiAction;
+  }) => Promise<void>;
   onSave: (itemId: string, payload: Record<string, unknown>) => Promise<void>;
   onAdd: () => Promise<void>;
   onDelete: (itemId: string) => Promise<void>;
@@ -93,6 +107,7 @@ export function EditableListSection({
           <p className="text-sm text-[var(--muted)]">{description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {topActions}
           <Chip>{itemCountLabel}</Chip>
           <Button onClick={() => setExpandedIds(items.map((item) => String(item.id)))} variant="ghost">
             Expand all
@@ -157,6 +172,52 @@ export function EditableListSection({
               <div className={cn("grid gap-3 overflow-hidden transition-[max-height,opacity] duration-200", expanded ? "mt-4 opacity-100" : "mt-0 max-h-0 opacity-0")}>
                 {fields.map((field) => (
                   <Field key={field.key} label={field.label}>
+                    {(field.type === "text" || field.type === "textarea" || field.type === "tags" || !field.type) && onAiFieldAction ? (
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <Button
+                          disabled={aiBusyKey === `${itemId}:${field.key}:develop`}
+                          onClick={() => void onAiFieldAction({
+                            itemId,
+                            itemTitle,
+                            fieldKey: field.key,
+                            fieldLabel: field.label,
+                            action: "develop",
+                          })}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {aiBusyKey === `${itemId}:${field.key}:develop` ? "AI working..." : "AI develop"}
+                        </Button>
+                        <Button
+                          disabled={aiBusyKey === `${itemId}:${field.key}:expand`}
+                          onClick={() => void onAiFieldAction({
+                            itemId,
+                            itemTitle,
+                            fieldKey: field.key,
+                            fieldLabel: field.label,
+                            action: "expand",
+                          })}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {aiBusyKey === `${itemId}:${field.key}:expand` ? "AI working..." : "Expand"}
+                        </Button>
+                        <Button
+                          disabled={aiBusyKey === `${itemId}:${field.key}:tighten`}
+                          onClick={() => void onAiFieldAction({
+                            itemId,
+                            itemTitle,
+                            fieldKey: field.key,
+                            fieldLabel: field.label,
+                            action: "tighten",
+                          })}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {aiBusyKey === `${itemId}:${field.key}:tighten` ? "AI working..." : "Tighten"}
+                        </Button>
+                      </div>
+                    ) : null}
                     {field.type === "textarea" || field.type === "tags" ? (
                       <textarea
                         rows={field.type === "tags" ? 3 : 5}

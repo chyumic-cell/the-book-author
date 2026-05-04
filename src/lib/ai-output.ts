@@ -13,6 +13,10 @@ const editorialHeadingPattern =
   /^(?:\*\*|#+\s*)?(?:structural improvements?|editorial (?:notes?|assessment)|revision notes?|change summary|why this works|storyforge note|coach note|end of chapter|architecture fix|revision plan|chapter\s+\d+(?:\s*[-:]\s*.+)?)(?::)?(?:\*\*)?$/i;
 const editorialParagraphPattern =
   /(?:the chapter now|the chapter ends with|the chapter closes with|this chapter ends|this chapter closes|the scene ends with|the scene closes with|clear pov anchoring|concrete goal|active opposition|meaningful change|character moment|escalating stakes|storyforge|revision pass|coach note|why this works|editorial note|editorial assessment|architecture fix|revision plan|return only final revised chapter prose|we are scrubbing|okay,\s*i will|here is the revised chapter|here is the full revised chapter|i will rewrite|i will revise)/i;
+const inlineMetaLeadPattern =
+  /^(?:we need to|i need to|we should|i should|let(?:'s| us)|the rewrite should|the selected text|rewrite only|improve the selected text|add tension by|we must apply style|the original likely|should we|we'?ll italic|use the text immediately before|return only the replacement prose|follow Bell-style|keep internal thought italicized)(?:\b|:)/i;
+const inlineMetaSentencePattern =
+  /(?:\bwe need to\b|\bi need to\b|\bwe should\b|\bthe rewrite should\b|\bthe selected text\b|\boriginal selected text\b|\breturn only the replacement prose\b|\bwe must apply style\b|\bshould we italicize\b|\bthe original likely\b|\bwe'?ll italic(?:ize)?\b|\buse the text immediately before\b|\bfollow Bell-style\b|\bkeep internal thought italicized\b)/i;
 const editorialListPattern = /^(?:[-*]|\d+\.)\s+/;
 const playScriptDialoguePattern = /^([A-Z][\p{L}'’.-]*(?:\s+[A-Z][\p{L}'’.-]*){0,3})\s*:\s+(.+)$/u;
 const nonSpeakerLabels = new Set(["Chapter", "Scene", "Act", "Part", "Note"]);
@@ -293,6 +297,12 @@ export function cleanInlineSuggestionText(value: string) {
   const cleanedParagraphs = paragraphs
     .map((paragraph) => sanitizeParagraphLines(paragraph))
     .filter(Boolean)
+    .map((paragraph) => {
+      const sentences = splitSentences(paragraph).filter((sentence) => !inlineMetaSentencePattern.test(sentence.trim()));
+      return sentences.join(" ").trim();
+    })
+    .filter(Boolean)
+    .filter((paragraph) => !inlineMetaLeadPattern.test(paragraph.trim()))
     .map((paragraph) => balanceDialogueQuotes(paragraph, issues))
     .filter(Boolean);
 

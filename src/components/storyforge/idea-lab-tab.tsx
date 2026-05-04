@@ -4,6 +4,7 @@ import { EditableListSection } from "@/components/storyforge/editable-list-secti
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { APP_NAME } from "@/lib/brand";
+import { isBookRuleNote } from "@/lib/book-rules";
 import type { ProjectWorkspace } from "@/types/storyforge";
 
 export function IdeaLabTab({
@@ -18,13 +19,15 @@ export function IdeaLabTab({
     method?: "POST" | "PATCH" | "DELETE",
   ) => Promise<void>;
 }) {
+  const sandboxNotes = project.workingNotes.filter((note) => !isBookRuleNote(note));
+
   return (
     <div className="grid gap-4">
       <Card className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="grid gap-3">
           <div className="flex flex-wrap gap-2">
             <Chip>{project.ideaEntries.length} ideas</Chip>
-            <Chip>{project.workingNotes.length} sandbox notes</Chip>
+            <Chip>{sandboxNotes.length} sandbox notes</Chip>
           </div>
           <div>
             <h3 className="text-3xl">Idea Lab</h3>
@@ -64,7 +67,7 @@ export function IdeaLabTab({
       />
 
       <EditableListSection
-        key={`notes-${project.workingNotes.map((item) => item.id).join("-")}`}
+        key={`notes-${sandboxNotes.map((item) => item.id).join("-")}`}
         description="Sandbox notes can be linked to a chapter or kept loose while you experiment."
         fields={[
           { key: "title", label: "Title" },
@@ -74,7 +77,7 @@ export function IdeaLabTab({
           { key: "tags", label: "Tags", type: "tags" },
           { key: "status", label: "Status" },
         ]}
-        items={project.workingNotes as unknown as Record<string, unknown>[]}
+        items={sandboxNotes as unknown as Record<string, unknown>[]}
         onAdd={() => mutateIdeaLab("workingNote", {}, undefined, "POST")}
         onDelete={(itemId) => mutateIdeaLab("workingNote", {}, itemId, "DELETE")}
         onSave={(itemId, payload) => mutateIdeaLab("workingNote", payload, itemId, "PATCH")}
