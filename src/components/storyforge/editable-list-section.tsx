@@ -90,7 +90,6 @@ export function EditableListSection({
       ),
     [baseDrafts, draftOverrides],
   );
-
   const itemCountLabel = useMemo(() => `${items.length} ${items.length === 1 ? "entry" : "entries"}`, [items.length]);
 
   function toggleExpanded(itemId: string) {
@@ -157,6 +156,12 @@ export function EditableListSection({
                               : draft[field.key],
                           ]),
                         ),
+                      ).then(() =>
+                        setDraftOverrides((current) => {
+                          const next = { ...current };
+                          delete next[itemId];
+                          return next;
+                        }),
                       )
                     }
                     variant="secondary"
@@ -172,17 +177,25 @@ export function EditableListSection({
               <div className={cn("grid gap-3 overflow-hidden transition-[max-height,opacity] duration-200", expanded ? "mt-4 opacity-100" : "mt-0 max-h-0 opacity-0")}>
                 {fields.map((field) => (
                   <Field key={field.key} label={field.label}>
-                    {(field.type === "text" || field.type === "textarea" || field.type === "tags" || !field.type) && onAiFieldAction ? (
+                    {((field.type === "text" || field.type === "textarea" || !field.type) && onAiFieldAction) ? (
                       <div className="mb-2 flex flex-wrap gap-2">
                         <Button
                           disabled={aiBusyKey === `${itemId}:${field.key}:develop`}
-                          onClick={() => void onAiFieldAction({
-                            itemId,
-                            itemTitle,
-                            fieldKey: field.key,
-                            fieldLabel: field.label,
-                            action: "develop",
-                          })}
+                          onClick={() =>
+                            void onAiFieldAction({
+                              itemId,
+                              itemTitle,
+                              fieldKey: field.key,
+                              fieldLabel: field.label,
+                              action: "develop",
+                            }).then(() =>
+                              setDraftOverrides((current) => {
+                                const next = { ...current };
+                                delete next[itemId];
+                                return next;
+                              }),
+                            )
+                          }
                           type="button"
                           variant="ghost"
                         >
@@ -190,13 +203,21 @@ export function EditableListSection({
                         </Button>
                         <Button
                           disabled={aiBusyKey === `${itemId}:${field.key}:expand`}
-                          onClick={() => void onAiFieldAction({
-                            itemId,
-                            itemTitle,
-                            fieldKey: field.key,
-                            fieldLabel: field.label,
-                            action: "expand",
-                          })}
+                          onClick={() =>
+                            void onAiFieldAction({
+                              itemId,
+                              itemTitle,
+                              fieldKey: field.key,
+                              fieldLabel: field.label,
+                              action: "expand",
+                            }).then(() =>
+                              setDraftOverrides((current) => {
+                                const next = { ...current };
+                                delete next[itemId];
+                                return next;
+                              }),
+                            )
+                          }
                           type="button"
                           variant="ghost"
                         >
@@ -204,13 +225,21 @@ export function EditableListSection({
                         </Button>
                         <Button
                           disabled={aiBusyKey === `${itemId}:${field.key}:tighten`}
-                          onClick={() => void onAiFieldAction({
-                            itemId,
-                            itemTitle,
-                            fieldKey: field.key,
-                            fieldLabel: field.label,
-                            action: "tighten",
-                          })}
+                          onClick={() =>
+                            void onAiFieldAction({
+                              itemId,
+                              itemTitle,
+                              fieldKey: field.key,
+                              fieldLabel: field.label,
+                              action: "tighten",
+                            }).then(() =>
+                              setDraftOverrides((current) => {
+                                const next = { ...current };
+                                delete next[itemId];
+                                return next;
+                              }),
+                            )
+                          }
                           type="button"
                           variant="ghost"
                         >

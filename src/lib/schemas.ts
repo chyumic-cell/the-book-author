@@ -180,6 +180,20 @@ export const projectChatSchema = z.object({
   applyChanges: z.boolean().default(true),
 });
 
+export const targetedFieldAiSchema = z.object({
+  scope: z.enum(["SKELETON", "STORY_BIBLE"]),
+  itemId: z.string().min(1),
+  itemTitle: z.string().optional().default(""),
+  fieldKey: z.string().min(1),
+  fieldLabel: z.string().optional().default(""),
+  action: z.enum(["develop", "expand", "tighten"]),
+});
+
+export const targetedCharacterAiSchema = z.object({
+  characterId: z.string().min(1),
+  action: z.enum(["develop-dossier", "expand-summary", "tighten-summary"]),
+});
+
 export const autopilotRequestSchema = z.object({
   action: z.enum(["start", "resume", "status"]).default("start"),
   mode: z.enum(["CURRENT_CHAPTER", "BOOK"]).default("CURRENT_CHAPTER"),

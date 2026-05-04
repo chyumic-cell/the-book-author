@@ -938,9 +938,9 @@ export function ProjectWorkspace({
     }
   }
 
-  async function handlePlanningAiFieldAction(options: {
-    scope: "SKELETON" | "STORY_BIBLE";
-    sectionLabel: string;
+    async function handlePlanningAiFieldAction(options: {
+      scope: "SKELETON" | "STORY_BIBLE";
+      sectionLabel: string;
     itemId: string;
     itemTitle: string;
     fieldKey: string;
@@ -948,37 +948,23 @@ export function ProjectWorkspace({
     action: PlanningAiAction;
   }) {
     const busyKey = `planning-ai:${options.scope}:${options.itemId}:${options.fieldKey}:${options.action}`;
-    setBusyAction(busyKey);
-    try {
-      const actionInstruction =
-        options.action === "expand"
-          ? "Expand it into fuller, more specific, more useful planning prose."
-          : options.action === "tighten"
-            ? "Tighten it into a cleaner, shorter, sharper version without losing the key idea."
-            : "Develop or create this field so it becomes specific, usable, and well-synced with the rest of the project.";
-
-      const data = await requestJson<{
-        reply: string;
-        project: ProjectWorkspaceData;
-        contextPackage: ContextPackage | null;
-      }>(`/api/projects/${project.id}/assistant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: [
-            `Update only ${options.scope === "SKELETON" ? "Story Skeleton" : "Story Bible"} -> ${options.sectionLabel} -> ${options.itemTitle} -> ${options.fieldLabel}.`,
-            actionInstruction,
-            "Use all existing project, chapter, bible, skeleton, memory, continuity, and series context as binding context.",
-            "Preserve continuity with already written and already planned material.",
-            "Do not modify any other field or any other record.",
-            `Target item id: ${options.itemId}. Target field key: ${options.fieldKey}.`,
-          ].join(" "),
-          role: options.scope === "SKELETON" ? "OUTLINE_ARCHITECT" : "COWRITER",
-          scope: options.scope,
-          chapterId: null,
-          applyChanges: true,
-        }),
-      });
+      setBusyAction(busyKey);
+      try {
+        const data = await requestJson<{
+          project: ProjectWorkspaceData;
+          contextPackage: ContextPackage | null;
+        }>(`/api/projects/${project.id}/targeted-ai`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scope: options.scope,
+            itemId: options.itemId,
+            itemTitle: options.itemTitle,
+            fieldKey: options.fieldKey,
+            fieldLabel: options.fieldLabel,
+            action: options.action,
+          }),
+        });
 
       refreshProject(data.project);
       setContextPackage(data.contextPackage);
@@ -1000,35 +986,20 @@ export function ProjectWorkspace({
     }
 
     const busyKey = `character-ai:${options.characterId}:${options.action}`;
-    setBusyAction(busyKey);
-    try {
-      const instruction =
-        options.action === "develop-dossier"
-          ? `Update only Story Bible -> Character Master -> ${targetCharacter.name}. Deepen the dossier, quick profile, and current state so they become fuller, more specific, and better synced with the existing manuscript, plans, and series canon.`
-          : options.action === "expand-summary"
-            ? `Update only Story Bible -> Character Master -> ${targetCharacter.name} -> Summary. Expand it into a fuller, more specific character summary that remains canon-safe.`
-            : `Update only Story Bible -> Character Master -> ${targetCharacter.name} -> Summary. Tighten it into a shorter, cleaner, sharper summary without losing essential canon.`;
-
-      const data = await requestJson<{
-        reply: string;
-        project: ProjectWorkspaceData;
-        contextPackage: ContextPackage | null;
-      }>(`/api/projects/${project.id}/assistant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: [
-            instruction,
-            "Use all existing project, chapter, bible, skeleton, memory, continuity, and series context as binding context.",
-            "Do not alter other characters unless required for strict continuity.",
-            `Target character id: ${options.characterId}.`,
-          ].join(" "),
-          role: "COWRITER",
-          scope: "STORY_BIBLE",
-          chapterId: null,
-          applyChanges: true,
-        }),
-      });
+      setBusyAction(busyKey);
+      try {
+        const data = await requestJson<{
+          project: ProjectWorkspaceData;
+          contextPackage: ContextPackage | null;
+        }>(`/api/projects/${project.id}/targeted-ai`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "character",
+            characterId: options.characterId,
+            action: options.action,
+          }),
+        });
 
       refreshProject(data.project);
       setContextPackage(data.contextPackage);
