@@ -1,7 +1,7 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
 import { cleanGeneratedText, cleanSummaryText } from "@/lib/ai-output";
 import { buildContextPackage } from "@/lib/memory";
-import { generateTextWithProvider, interpretCharacterProfile } from "@/lib/openai";
+import { generateChapterOutline, generateTextWithProvider, interpretCharacterProfile } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { mutateStoryBible, updateChapter } from "@/lib/story-service";
@@ -49,6 +49,18 @@ const chapterListFields = new Set<AssistFieldKey>([
   "sceneList",
 ]);
 
+const chapterAutofillFields: AssistFieldKey[] = [
+  "title",
+  "purpose",
+  "currentBeat",
+  "keyBeats",
+  "requiredInclusions",
+  "forbiddenElements",
+  "desiredMood",
+  "sceneList",
+  "outline",
+];
+
 function splitLines(value: string) {
   return value
     .split(/\r?\n|,/)
@@ -91,6 +103,56 @@ function cleanFieldText(fieldKey: string, value: string, fallback: string) {
     .replace(/^(?:summary|description|notes|outline|purpose|title|rule name|rule \/ internal logic)\s*:\s*/i, "")
     .trim();
   return cleaned || fallback;
+}
+
+function chapterFieldValue(chapter: ProjectWorkspace["chapters"][number], fieldKey: AssistFieldKey) {
+  if (chapterListFields.has(fieldKey)) {
+    return (chapter[fieldKey] as string[]).join("\n");
+  }
+  return String(chapter[fieldKey] ?? "");
+}
+
+function chapterFieldLooksThin(fieldKey: AssistFieldKey, value: string, chapterNumber: number) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (fieldKey === "title") {
+    return normalized === `chapter ${chapterNumber}` || looksLikeWeakTitle(value);
+  }
+  if (fieldKey === "purpose") {
+    return normalized === "advance the next major movement of the story.";
+  }
+  if (fieldKey === "currentBeat") {
+    return normalized === "fresh pressure enters the chapter." || normalized === "inciting movement";
+  }
+  if (fieldKey === "desiredMood") {
+    return normalized.split(/\s+/).length <= 2;
+  }
+  if (fieldKey === "outline") {
+    return normalized.length < 180;
+  }
+  if (chapterListFields.has(fieldKey)) {
+    return splitLines(value).length <= 1;
+  }
+  return normalized.length < 40;
+}
+
+function storyBibleFieldLooksThin(fieldKey: string, value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (fieldKey === "name" || fieldKey === "title" || fieldKey === "label") {
+    return normalized.length < 3;
+  }
+  if (fieldKey === "summary" || fieldKey === "description" || fieldKey === "content" || fieldKey === "notes") {
+    return normalized.length < 50;
+  }
+  if (fieldKey === "tags") {
+    return splitLines(value).length === 0;
+  }
+  return normalized.length < 20;
 }
 
 function looksLikeMetaOutput(value: string) {
@@ -180,6 +242,45 @@ function normalizeChapterFieldUpdate(fieldKey: AssistFieldKey, currentValue: str
   }
 
   return { [fieldKey]: cleanFieldText(fieldKey, generated, currentValue) } as Parameters<typeof updateChapter>[1];
+}
+
+function normalizeChapterAutofillValue(
+  fieldKey: AssistFieldKey,
+  currentValue: string,
+  rawValue: unknown,
+  chapterNumber: number,
+) {
+  if (typeof rawValue !== "string" && !Array.isArray(rawValue)) {
+    return null;
+  }
+
+  const candidate = Array.isArray(rawValue) ? rawValue.join("\n") : rawValue;
+  const cleaned =
+    fieldKey === "title"
+      ? cleanTitle(String(candidate), currentValue || `Chapter ${chapterNumber}`)
+      : cleanFieldText(fieldKey, String(candidate), currentValue);
+
+  if (!cleaned || looksLikeMetaOutput(cleaned)) {
+    return null;
+  }
+
+  if (fieldKey === "title" && looksLikeWeakTitle(cleaned)) {
+    return null;
+  }
+
+  return chapterListFields.has(fieldKey) ? splitLines(cleaned) : cleaned;
+}
+
+function normalizeStoryBibleAutofillValue(fieldKey: string, currentValue: string, rawValue: unknown) {
+  if (typeof rawValue !== "string" && !Array.isArray(rawValue)) {
+    return null;
+  }
+  const candidate = Array.isArray(rawValue) ? rawValue.join("\n") : rawValue;
+  const cleaned = cleanFieldText(fieldKey, String(candidate), currentValue);
+  if (!cleaned || looksLikeMetaOutput(cleaned)) {
+    return null;
+  }
+  return fieldKey === "tags" ? splitLines(cleaned) : cleaned;
 }
 
 function parseJsonObject(raw: string) {
@@ -290,6 +391,182 @@ function normalizeStoryBibleFieldValue(fieldKey: string, raw: string, currentVal
   return cleaned;
 }
 
+function splitStructuredOutlineLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function applyChapterPayloadToLocalChapter(
+  chapter: ProjectWorkspace["chapters"][number],
+  payload: Record<string, unknown>,
+) {
+  return {
+    ...chapter,
+    ...payload,
+    keyBeats: Array.isArray(payload.keyBeats) ? payload.keyBeats as string[] : chapter.keyBeats,
+    requiredInclusions: Array.isArray(payload.requiredInclusions) ? payload.requiredInclusions as string[] : chapter.requiredInclusions,
+    forbiddenElements: Array.isArray(payload.forbiddenElements) ? payload.forbiddenElements as string[] : chapter.forbiddenElements,
+    sceneList: Array.isArray(payload.sceneList) ? payload.sceneList as string[] : chapter.sceneList,
+  };
+}
+
+async function generateSinglePlanningFieldValue(options: {
+  project: ProjectWorkspace;
+  chapter: ProjectWorkspace["chapters"][number];
+  fieldKey: AssistFieldKey;
+  fieldLabel: string;
+  action: Exclude<PlanningAction, "develop"> | "develop";
+}) {
+  const { project, chapter, fieldKey, fieldLabel, action } = options;
+  const currentValue = chapterFieldValue(chapter, fieldKey);
+  const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
+  const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
+  const nextChapter = project.chapters.find((entry) => entry.number === chapter.number + 1) ?? null;
+  const fieldSpec = CHAPTER_FIELD_SPECS.find((field) => field.key === fieldKey);
+  const thinCurrent = chapterFieldLooksThin(fieldKey, currentValue, chapter.number);
+  const prompt = buildPromptEnvelope(
+    `Update ${fieldLabel || fieldSpec?.label || fieldKey}`,
+    project,
+    context,
+    [
+      `Target area: Story Skeleton -> Chapter Runway -> ${chapter.title || `Chapter ${chapter.number}`} -> ${fieldLabel || fieldKey}.`,
+      "Update only this one field. Do not write to notes. Do not write to the manuscript unless the target field is the manuscript.",
+      "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
+      "Do not contradict already written or already planned material. Extend, refine, reconcile, or sharpen it.",
+      thinCurrent
+        ? "The current field value is blank, generic, or placeholder-level. Replace it with specific canon-safe content. Do not repeat the placeholder wording."
+        : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      chapterFieldInstruction(fieldKey, action),
+      fieldSpec ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}` : "",
+      previousChapter
+        ? `Previous chapter context: Chapter ${previousChapter.number} - ${previousChapter.title}. Purpose: ${previousChapter.purpose}`
+        : "",
+      nextChapter
+        ? `Next chapter target: Chapter ${nextChapter.number} - ${nextChapter.title}. Purpose: ${nextChapter.purpose}`
+        : "",
+      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      "Return only the final text to store in this field. No explanations, no labels, no markdown fences.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    "You are a precise outlining and planning partner. Write directly into the target planning field, not around it.",
+  );
+
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: fieldKey === "outline" ? 1400 : 900 });
+  let generated = raw?.trim();
+  if (!generated) {
+    return null;
+  }
+  if (fieldKey !== "title" && looksLikeMetaOutput(generated)) {
+    generated = await repairMetaOutput({
+      project,
+      context,
+      task: `Repair ${fieldLabel || fieldSpec?.label || fieldKey}`,
+      instruction: chapterFieldInstruction(fieldKey, action),
+      badOutput: generated,
+      roleInstruction: "Return only the corrected field content.",
+      maxOutputTokens: fieldKey === "outline" ? 1400 : 900,
+    });
+  }
+  if (fieldKey === "title") {
+    const cleanedTitle = cleanTitle(generated, currentValue);
+    if (looksLikeWeakTitle(cleanedTitle)) {
+      const repairPrompt = buildPromptEnvelope(
+        "Repair chapter title",
+        project,
+        context,
+        [
+          `Target chapter: Chapter ${chapter.number}.`,
+          "The previous result was not a usable chapter title.",
+          "Return only a commercially strong chapter title, 2 to 6 words.",
+          "No explanation. No reasoning. No labels. No punctuation at the end.",
+          `Story premise: ${project.premise}`,
+          `Chapter purpose: ${chapter.purpose}`,
+          `Chapter outline: ${chapter.outline}`,
+          `Rejected result: ${generated}`,
+        ].join("\n\n"),
+        "Return only the final title.",
+      );
+      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 80 });
+      generated = repaired?.trim() || generated;
+    }
+  }
+
+  return generated;
+}
+
+async function generateSingleStoryBibleFieldValue(options: {
+  project: ProjectWorkspace;
+  entityType: StoryBibleEntityType;
+  entity: Record<string, unknown>;
+  itemTitle: string;
+  fieldKey: string;
+  fieldLabel: string;
+  action: Exclude<PlanningAction, "develop"> | "develop";
+  contextChapterId: string;
+}) {
+  const { project, entityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId } = options;
+  const spec = STORY_BIBLE_ENTITY_SPECS.find((entry) => entry.entityType === entityType);
+  const fieldSpec = spec?.fields.find((field) => field.key === fieldKey);
+  const currentValue = getEntityValue(entity, fieldKey);
+  const context = buildContextPackage(project, contextChapterId, currentValue);
+  const thinCurrent = storyBibleFieldLooksThin(fieldKey, currentValue);
+  const prompt = buildPromptEnvelope(
+    `Update ${spec?.label ?? "Story Bible field"}`,
+    project,
+    context,
+    [
+      `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${itemTitle || String(entity.name ?? entity.title ?? entity.label ?? "Untitled")} -> ${fieldLabel || fieldKey}.`,
+      "Update only this exact field on this exact record.",
+      "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
+      "Do not invent contradictions. Improve what already exists and keep it synchronized with the rest of the project.",
+      thinCurrent
+        ? "The current field value is blank, generic, or thin. Replace it with specific canon-safe content instead of repeating the placeholder."
+        : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      action === "expand"
+        ? "Expand this field into something fuller, more specific, and more useful."
+        : action === "tighten"
+          ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
+          : "Develop this field so it becomes specific, useful, and canon-safe.",
+      fieldSpec ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}` : "",
+      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      "Return only the final value for this field. No commentary, no JSON, no labels.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    "You are a canon-safe story bible editor. Write the exact field value, not notes about it.",
+  );
+
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 900 });
+  let generated = raw?.trim();
+  if (!generated) {
+    return null;
+  }
+  if (looksLikeMetaOutput(generated)) {
+    generated = await repairMetaOutput({
+      project,
+      context,
+      task: `Repair ${spec?.label ?? "Story Bible"} field`,
+      instruction: [
+        `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${itemTitle || String(entity.name ?? entity.title ?? entity.label ?? "Untitled")} -> ${fieldLabel || fieldKey}.`,
+        "Update only this exact field on this exact record.",
+        action === "expand"
+          ? "Expand this field into something fuller, more specific, and more useful."
+          : action === "tighten"
+            ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
+            : "Develop this field so it becomes specific, useful, and canon-safe.",
+        "Return only the final value for this field.",
+      ].join("\n\n"),
+      badOutput: generated,
+      roleInstruction: "Return only the corrected Story Bible field value.",
+      maxOutputTokens: 900,
+    });
+  }
+  return generated;
+}
+
 function findStoryBibleEntity(project: ProjectWorkspace, itemId: string): {
   entityType: StoryBibleEntityType;
   entity: Record<string, unknown>;
@@ -340,81 +617,139 @@ export async function runTargetedPlanningFieldAi(input: {
     throw new Error("Chapter not found.");
   }
 
-  const currentValue =
-    chapterListFields.has(input.fieldKey)
-      ? (chapter[input.fieldKey] as string[]).join("\n")
-      : String(chapter[input.fieldKey] ?? "");
-  const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
-  const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
-  const nextChapter = project.chapters.find((entry) => entry.number === chapter.number + 1) ?? null;
-  const fieldSpec = CHAPTER_FIELD_SPECS.find((field) => field.key === input.fieldKey);
-  const prompt = buildPromptEnvelope(
-    `Update ${input.fieldLabel || fieldSpec?.label || input.fieldKey}`,
-    project,
-    context,
-    [
-      `Target area: Story Skeleton -> Chapter Runway -> ${input.itemTitle || chapter.title || `Chapter ${chapter.number}`} -> ${input.fieldLabel || input.fieldKey}.`,
-      "Update only this one field. Do not write to notes. Do not write to the manuscript unless the target field is the manuscript.",
-      "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
-      "Do not contradict already written or already planned material. Extend, refine, reconcile, or sharpen it.",
-      chapterFieldInstruction(input.fieldKey, input.action),
-      fieldSpec
-        ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}`
-        : "",
-      previousChapter
-        ? `Previous chapter context: Chapter ${previousChapter.number} - ${previousChapter.title}. Purpose: ${previousChapter.purpose}`
-        : "",
-      nextChapter
-        ? `Next chapter target: Chapter ${nextChapter.number} - ${nextChapter.title}. Purpose: ${nextChapter.purpose}`
-        : "",
-      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
-      "Return only the final text to store in this field. No explanations, no labels, no markdown fences.",
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-    "You are a precise outlining and planning partner. Write directly into the target planning field, not around it.",
-  );
+  const currentValue = chapterFieldValue(chapter, input.fieldKey);
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: input.fieldKey === "outline" ? 1400 : 900 });
-  let generated = raw?.trim();
-  if (!generated) {
-    throw new Error("AI did not return any visible planning text.");
-  }
-
-  if (input.fieldKey !== "title" && looksLikeMetaOutput(generated)) {
-    generated = await repairMetaOutput({
+  if (input.action === "develop") {
+    const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
+    const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
+    const nextChapter = project.chapters.find((entry) => entry.number === chapter.number + 1) ?? null;
+    const targetFields = chapterAutofillFields.filter((fieldKey) =>
+      fieldKey === input.fieldKey || chapterFieldLooksThin(fieldKey, chapterFieldValue(chapter, fieldKey), chapter.number),
+    );
+    const targetFieldSpecs = CHAPTER_FIELD_SPECS.filter((field) => targetFields.includes(field.key as AssistFieldKey));
+    const developPrompt = buildPromptEnvelope(
+      "Develop chapter runway entry",
       project,
       context,
-      task: `Repair ${input.fieldLabel || fieldSpec?.label || input.fieldKey}`,
-      instruction: chapterFieldInstruction(input.fieldKey, input.action),
-      badOutput: generated,
-      roleInstruction: "Return only the corrected field content.",
-      maxOutputTokens: input.fieldKey === "outline" ? 1400 : 900,
+      [
+        `Target area: Story Skeleton -> Chapter Runway -> ${input.itemTitle || chapter.title || `Chapter ${chapter.number}`}.`,
+        "Complete the chapter runway entry as a synchronized whole, not as isolated fragments.",
+        "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
+        "Keep strong existing content. Improve thin, placeholder, or missing fields.",
+        "Return strict JSON only.",
+        `Fields to fill or improve: ${targetFieldSpecs.map((field) => `${field.label} (${field.key})`).join(", ")}.`,
+        "Use strings for normal text fields and arrays of strings for list fields.",
+        `JSON shape:\n${JSON.stringify(Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, chapterListFields.has(fieldKey) ? ["item one", "item two"] : ""])), null, 2)}`,
+        "Current chapter record:",
+        JSON.stringify(
+          Object.fromEntries(
+            chapterAutofillFields.map((fieldKey) => [fieldKey, chapterFieldValue(chapter, fieldKey)]),
+          ),
+          null,
+          2,
+        ),
+        "Field guidance:",
+        targetFieldSpecs.map((field) => `- ${field.key}: ${field.description}. Example: ${field.example}`).join("\n"),
+        previousChapter
+          ? `Previous chapter context: Chapter ${previousChapter.number} - ${previousChapter.title}. Purpose: ${previousChapter.purpose}`
+          : "",
+        nextChapter
+          ? `Next chapter target: Chapter ${nextChapter.number} - ${nextChapter.title}. Purpose: ${nextChapter.purpose}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      "You are a commercially sharp outlining architect. Return only valid JSON for the target chapter runway record.",
+    );
+
+    const payload: Parameters<typeof updateChapter>[1] = {};
+    const rawDevelop = await generateTextWithProvider(developPrompt, { maxOutputTokens: 2200 });
+    const parsed = rawDevelop ? parseJsonObject(rawDevelop) : null;
+    if (parsed) {
+      for (const fieldKey of targetFields) {
+        const normalized = normalizeChapterAutofillValue(
+          fieldKey,
+          chapterFieldValue(chapter, fieldKey),
+          parsed[fieldKey],
+          chapter.number,
+        );
+        if (normalized == null) {
+          continue;
+        }
+        (payload as Record<string, unknown>)[fieldKey] = normalized;
+      }
+    }
+
+    let workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
+
+    if (targetFields.includes("outline") && chapterFieldLooksThin("outline", chapterFieldValue(workingChapter, "outline"), chapter.number)) {
+      const generatedOutline = await generateChapterOutline(project.id, chapter.id, "Build a concrete commercially strong chapter outline that can support the chapter runway fields.").catch(() => null);
+      const outlineContent = generatedOutline?.content?.trim() ?? "";
+      if (outlineContent && !chapterFieldLooksThin("outline", outlineContent, chapter.number)) {
+        payload.outline = cleanFieldText("outline", outlineContent, chapter.outline);
+        const outlineLines = splitStructuredOutlineLines(outlineContent);
+        if (outlineLines.length >= 3) {
+          if (!payload.sceneList || (Array.isArray(payload.sceneList) && payload.sceneList.length <= 1)) {
+            payload.sceneList = outlineLines.slice(0, 8);
+          }
+          if (!payload.keyBeats || (Array.isArray(payload.keyBeats) && payload.keyBeats.length <= 1)) {
+            payload.keyBeats = outlineLines.slice(0, 6);
+          }
+        }
+        workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
+      }
+    }
+
+    const missingFields = targetFields.filter((fieldKey) => {
+      const asText = chapterFieldValue(workingChapter, fieldKey);
+      return chapterFieldLooksThin(fieldKey, asText, chapter.number);
     });
+
+    for (const fieldKey of missingFields) {
+      const generated = await generateSinglePlanningFieldValue({
+        project,
+        chapter: workingChapter,
+        fieldKey,
+        fieldLabel: CHAPTER_FIELD_SPECS.find((field) => field.key === fieldKey)?.label ?? fieldKey,
+        action: "develop",
+      });
+      if (!generated) {
+        continue;
+      }
+      const normalized = normalizeChapterAutofillValue(
+        fieldKey,
+        chapterFieldValue(chapter, fieldKey),
+        generated,
+        chapter.number,
+      );
+      if (normalized != null) {
+        (payload as Record<string, unknown>)[fieldKey] = normalized;
+        workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      throw new Error("AI returned chapter-runway content, but none of it was usable.");
+    }
+
+    await updateChapter(chapter.id, payload);
+
+    const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
+    return {
+      project: nextProject,
+      contextPackage: buildContextPackage(nextProject, chapter.id),
+    };
   }
 
-  if (input.fieldKey === "title") {
-    const cleanedTitle = cleanTitle(generated, currentValue);
-    if (looksLikeWeakTitle(cleanedTitle)) {
-      const repairPrompt = buildPromptEnvelope(
-        "Repair chapter title",
-        project,
-        context,
-        [
-          `Target chapter: Chapter ${chapter.number}.`,
-          "The previous result was not a usable chapter title.",
-          "Return only a commercially strong chapter title, 2 to 6 words.",
-          "No explanation. No reasoning. No labels. No punctuation at the end.",
-          `Story premise: ${project.premise}`,
-          `Chapter purpose: ${chapter.purpose}`,
-          `Chapter outline: ${chapter.outline}`,
-          `Rejected result: ${generated}`,
-        ].join("\n\n"),
-        "Return only the final title.",
-      );
-      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 80 });
-      generated = repaired?.trim() || generated;
-    }
+  const generated = await generateSinglePlanningFieldValue({
+    project,
+    chapter,
+    fieldKey: input.fieldKey,
+    fieldLabel: input.fieldLabel,
+    action: input.action,
+  });
+  if (!generated) {
+    throw new Error("AI did not return any visible planning text.");
   }
 
   await updateChapter(chapter.id, normalizeChapterFieldUpdate(input.fieldKey, currentValue, generated));
@@ -444,64 +779,223 @@ export async function runTargetedStoryBibleFieldAi(input: {
   }
 
   const spec = STORY_BIBLE_ENTITY_SPECS.find((entry) => entry.entityType === match.entityType);
-  const fieldSpec = spec?.fields.find((field) => field.key === input.fieldKey);
   const contextChapterId = lastUsefulChapterId(project);
   if (!contextChapterId) {
     throw new Error("Project has no chapter context yet.");
   }
 
   const currentValue = getEntityValue(match.entity, input.fieldKey);
-  const context = buildContextPackage(project, contextChapterId, currentValue);
-  const prompt = buildPromptEnvelope(
-    `Update ${spec?.label ?? "Story Bible field"}`,
-    project,
-    context,
-    [
-      `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${input.itemTitle || String(match.entity.name ?? match.entity.title ?? match.entity.label ?? "Untitled")} -> ${input.fieldLabel || input.fieldKey}.`,
-      "Update only this exact field on this exact record.",
-      "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
-      "Do not invent contradictions. Improve what already exists and keep it synchronized with the rest of the project.",
-      input.action === "expand"
-        ? "Expand this field into something fuller, more specific, and more useful."
-        : input.action === "tighten"
-          ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
-          : "Develop this field so it becomes specific, useful, and canon-safe.",
-      fieldSpec
-        ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}`
-        : "",
-      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
-      "Return only the final value for this field. No commentary, no JSON, no labels.",
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
-    "You are a canon-safe story bible editor. Write the exact field value, not notes about it.",
-  );
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 900 });
-  let generated = raw?.trim();
-  if (!generated) {
-    throw new Error("AI did not return any visible Story Bible text.");
-  }
-
-  if (looksLikeMetaOutput(generated)) {
-    generated = await repairMetaOutput({
+  if (input.action === "develop") {
+    const context = buildContextPackage(project, contextChapterId, currentValue);
+    if (match.entityType === "character") {
+      await runTargetedCharacterAi({
+        projectId: input.projectId,
+        characterId: input.itemId,
+        action: "develop-dossier",
+      }).catch(() => null);
+      const refreshedProject = (await getProjectWorkspace(input.projectId)) ?? project;
+      const refreshedCharacter =
+        refreshedProject.characters.find((entry) => entry.id === input.itemId) ??
+        (match.entity as unknown as CharacterRecord);
+      const character = refreshedCharacter;
+      const refreshedContext = buildContextPackage(
+        refreshedProject,
+        contextChapterId,
+        character.summary || character.dossier.freeTextCore || currentValue,
+      );
+      const prompt = buildPromptEnvelope(
+        "Develop character record",
+        refreshedProject,
+        refreshedContext,
+        [
+          `Target area: Story Bible -> Character -> ${character.name}.`,
+          "Fill the important character-facing text fields as a synchronized whole.",
+          "Use all existing manuscript, chapter plans, story bible, memory, continuity, and series canon as binding truth.",
+          "Replace generic placeholders with specific content. Do not return commentary.",
+          "Return strict JSON only.",
+          'JSON shape:\n{"role":"","archetype":"","summary":"","goal":"","fear":"","secret":"","wound":"","notes":""}',
+          "Current character snapshot:",
+          JSON.stringify(
+            {
+              name: character.name,
+              role: character.role,
+              archetype: character.archetype,
+              summary: character.summary,
+              goal: character.goal,
+              fear: character.fear,
+              secret: character.secret,
+              wound: character.wound,
+              notes: character.notes,
+              dossier: character.dossier.freeTextCore,
+              currentState: character.currentState,
+            },
+            null,
+            2,
+          ),
+        ].join("\n\n"),
+        "Return only valid JSON for the target character fields.",
+      );
+      const rawCharacterDevelop = await generateTextWithProvider(prompt, { maxOutputTokens: 1400 });
+      const parsedCharacterDevelop = rawCharacterDevelop ? parseJsonObject(rawCharacterDevelop) : null;
+      const payload: Record<string, unknown> = {};
+      const characterFields = ["role", "archetype", "summary", "goal", "fear", "secret", "wound", "notes"];
+      if (parsedCharacterDevelop) {
+        for (const fieldKey of characterFields) {
+          const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), parsedCharacterDevelop[fieldKey]);
+          if (normalized != null) {
+            payload[fieldKey] = normalized;
+          }
+        }
+      }
+      for (const fieldKey of characterFields) {
+        const current = Object.prototype.hasOwnProperty.call(payload, fieldKey) ? payload[fieldKey] : getEntityValue(match.entity, fieldKey);
+        const asText = Array.isArray(current) ? current.join("\n") : String(current ?? "");
+        if (!storyBibleFieldLooksThin(fieldKey, asText)) {
+          continue;
+        }
+        const generated = await generateSingleStoryBibleFieldValue({
+          project: refreshedProject,
+          entityType: match.entityType,
+          entity: character as unknown as Record<string, unknown>,
+          itemTitle: input.itemTitle,
+          fieldKey,
+          fieldLabel: spec?.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey,
+          action: "develop",
+          contextChapterId,
+        });
+        if (!generated) {
+          continue;
+        }
+        const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), generated);
+        if (normalized != null) {
+          payload[fieldKey] = normalized;
+        }
+      }
+      if (Object.keys(payload).length === 0) {
+        throw new Error("AI returned character content, but none of it was usable.");
+      }
+      await mutateStoryBible(
+        refreshedProject.id,
+        {
+          entityType: match.entityType,
+          id: input.itemId,
+          payload,
+        },
+        "PATCH",
+      );
+      const nextProject = (await getProjectWorkspace(input.projectId)) ?? refreshedProject;
+      return {
+        project: nextProject,
+        contextPackage: buildContextPackage(nextProject, contextChapterId),
+      };
+    }
+    const targetFields =
+      spec?.fields
+        .filter((field) => field.key === input.fieldKey || storyBibleFieldLooksThin(field.key, getEntityValue(match.entity, field.key)))
+        .map((field) => field.key) ?? [input.fieldKey];
+    const targetFieldSpecs = spec?.fields.filter((field) => targetFields.includes(field.key)) ?? [];
+    const developPrompt = buildPromptEnvelope(
+      `Develop ${spec?.label ?? "Story Bible entry"}`,
       project,
       context,
-      task: `Repair ${spec?.label ?? "Story Bible"} field`,
-      instruction: [
-        `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${input.itemTitle || String(match.entity.name ?? match.entity.title ?? match.entity.label ?? "Untitled")} -> ${input.fieldLabel || input.fieldKey}.`,
-        "Update only this exact field on this exact record.",
-        input.action === "expand"
-          ? "Expand this field into something fuller, more specific, and more useful."
-          : input.action === "tighten"
-            ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
-            : "Develop this field so it becomes specific, useful, and canon-safe.",
-        "Return only the final value for this field.",
-      ].join("\n\n"),
-      badOutput: generated,
-      roleInstruction: "Return only the corrected Story Bible field value.",
-      maxOutputTokens: 900,
+      [
+        `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${input.itemTitle || String(match.entity.name ?? match.entity.title ?? match.entity.label ?? "Untitled")}.`,
+        "Develop this record as a synchronized canon entry, not as a single-field note.",
+        "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
+        "Keep strong existing content. Fill blank or thin fields where the canon supports them.",
+        "Return strict JSON only.",
+        `Fields to fill or improve: ${targetFieldSpecs.map((field) => `${field.label} (${field.key})`).join(", ")}.`,
+        "Use strings for normal fields and arrays of strings for tags.",
+        `JSON shape:\n${JSON.stringify(Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, fieldKey === "tags" ? ["tag-one", "tag-two"] : ""])), null, 2)}`,
+        "Current entry:",
+        JSON.stringify(
+          Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, getEntityValue(match.entity, fieldKey)])),
+          null,
+          2,
+        ),
+        "Field guidance:",
+        targetFieldSpecs.map((field) => `- ${field.key}: ${field.description}. Example: ${field.example}`).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      "You are a canon-safe story bible architect. Return only valid JSON for the target record.",
+    );
+
+    const payload: Record<string, unknown> = {};
+    const rawDevelop = await generateTextWithProvider(developPrompt, { maxOutputTokens: 1800 });
+    const parsed = rawDevelop ? parseJsonObject(rawDevelop) : null;
+    if (parsed) {
+      for (const fieldKey of targetFields) {
+        const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), parsed[fieldKey]);
+        if (normalized == null) {
+          continue;
+        }
+        payload[fieldKey] = normalized;
+      }
+    }
+
+    const missingFields = targetFields.filter((fieldKey) => {
+      const current = Object.prototype.hasOwnProperty.call(payload, fieldKey)
+        ? payload[fieldKey]
+        : getEntityValue(match.entity, fieldKey);
+      const asText = Array.isArray(current) ? current.join("\n") : String(current ?? "");
+      return storyBibleFieldLooksThin(fieldKey, asText);
     });
+
+    for (const fieldKey of missingFields) {
+      const generated = await generateSingleStoryBibleFieldValue({
+        project,
+        entityType: match.entityType,
+        entity: match.entity,
+        itemTitle: input.itemTitle,
+        fieldKey,
+        fieldLabel: spec?.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey,
+        action: "develop",
+        contextChapterId,
+      });
+      if (!generated) {
+        continue;
+      }
+      const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), generated);
+      if (normalized != null) {
+        payload[fieldKey] = normalized;
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      throw new Error("AI returned Story Bible content, but none of it was usable.");
+    }
+
+    await mutateStoryBible(
+      project.id,
+      {
+        entityType: match.entityType,
+        id: input.itemId,
+        payload,
+      },
+      "PATCH",
+    );
+
+    const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
+    return {
+      project: nextProject,
+      contextPackage: buildContextPackage(nextProject, contextChapterId),
+    };
+  }
+
+  const generated = await generateSingleStoryBibleFieldValue({
+    project,
+    entityType: match.entityType,
+    entity: match.entity,
+    itemTitle: input.itemTitle,
+    fieldKey: input.fieldKey,
+    fieldLabel: input.fieldLabel,
+    action: input.action,
+    contextChapterId,
+  });
+  if (!generated) {
+    throw new Error("AI did not return any visible Story Bible text.");
   }
 
   await mutateStoryBible(
