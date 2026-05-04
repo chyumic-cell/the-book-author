@@ -200,15 +200,17 @@ export function CharacterMasterView({
   projectId,
   characters,
   mutateStoryBible,
+  onAiAction,
 }: {
   projectId: string;
   characters: CharacterRecord[];
   mutateStoryBible: (
-    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent",
+    entityType: "character" | "relationship" | "plotThread" | "location" | "faction" | "timelineEvent" | "workingNote",
     payload: Record<string, unknown>,
     id?: string,
     method?: "POST" | "PATCH" | "DELETE",
   ) => Promise<void>;
+  onAiAction: (options: { characterId: string; action: "develop-dossier" | "expand-summary" | "tighten-summary" }) => Promise<void>;
 }) {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(characters[0]?.id ?? null);
   const [drafts, setDrafts] = useState<Record<string, CharacterRecord>>({});
@@ -271,6 +273,32 @@ export function CharacterMasterView({
     toast.success("Character dossier saved.");
   }
 
+  async function deleteCharacter() {
+    if (!character) {
+      return;
+    }
+
+    const confirmed =
+      typeof window === "undefined"
+        ? true
+        : window.confirm(`Delete character "${character.name}"? This cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    await mutateStoryBible("character", {}, character.id, "DELETE");
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[character.id];
+      return next;
+    });
+    setSuggestions([]);
+    setDetailsExpanded(false);
+    setSelectedCharacterId(null);
+    toast.success("Character deleted.");
+  }
+
   async function interpretNotes() {
     if (!draft) {
       return;
@@ -310,6 +338,19 @@ export function CharacterMasterView({
           <Button onClick={() => setDeepMode((current) => !current)} variant="ghost">
             {deepMode ? "Quick edit mode" : "Deep edit mode"}
           </Button>
+          {character ? (
+            <>
+              <Button onClick={() => void onAiAction({ characterId: character.id, action: "develop-dossier" })} variant="ghost">
+                AI build dossier
+              </Button>
+              <Button onClick={() => void onAiAction({ characterId: character.id, action: "expand-summary" })} variant="ghost">
+                Expand summary
+              </Button>
+              <Button onClick={() => void onAiAction({ characterId: character.id, action: "tighten-summary" })} variant="ghost">
+                Tighten summary
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -366,6 +407,9 @@ export function CharacterMasterView({
                 <div className="flex flex-wrap gap-2">
                   <Button disabled={loadingSuggestions} onClick={() => void interpretNotes()} variant="secondary">
                     {loadingSuggestions ? "Interpreting..." : "Interpret notes with AI"}
+                  </Button>
+                  <Button onClick={() => void deleteCharacter()} variant="ghost">
+                    Delete character
                   </Button>
                   <Button onClick={() => void saveCharacter()}>Save dossier</Button>
                 </div>
