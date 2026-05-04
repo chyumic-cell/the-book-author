@@ -16,6 +16,83 @@ import { getOpenRouterOptionLabel } from "@/lib/openrouter-model-display";
 import type { SetupDraft } from "@/components/storyforge/workspace-helpers";
 import type { OpenRouterModelRecord, ProviderSettingsRecord } from "@/types/storyforge";
 
+const STYLE_FIELD_HINTS: Record<
+  | "guidanceIntensity"
+  | "proseDensity"
+  | "pacing"
+  | "darkness"
+  | "romanceIntensity"
+  | "humorLevel"
+  | "actionFrequency"
+  | "mysteryDensity"
+  | "dialogueDescriptionRatio"
+  | "literaryCommercialBalance"
+  | "aestheticGuide"
+  | "styleGuide"
+  | "voiceRules",
+  { low?: string; high?: string; effect: string }
+> = {
+  guidanceIntensity: {
+    low: "Lower settings make the AI follow your existing material more lightly and intervene less aggressively.",
+    high: "Higher settings make the AI push harder toward the requested style and structure, even when revising weak material.",
+    effect: "This controls how forcefully the AI applies your craft and commercial-writing instructions.",
+  },
+  proseDensity: {
+    low: "Lower numbers produce leaner, cleaner prose with fewer descriptive layers and less lyrical phrasing.",
+    high: "Higher numbers produce richer, more textured prose with more imagery, interiority, and sentence layering.",
+    effect: "This changes how sparse or lush the writing feels on the page.",
+  },
+  pacing: {
+    low: "Lower numbers slow scenes down, linger longer, and allow more breathing room between beats.",
+    high: "Higher numbers speed scenes up, tighten transitions, and push events to move more quickly.",
+    effect: "This controls how fast the story feels as the AI outlines, drafts, and revises.",
+  },
+  darkness: {
+    low: "Lower numbers keep the tone lighter, safer, and less emotionally punishing.",
+    high: "Higher numbers allow heavier dread, cruelty, pain, moral damage, and darker consequences.",
+    effect: "This sets how grim or emotionally harsh the story is allowed to become.",
+  },
+  romanceIntensity: {
+    low: "Lower numbers keep romance faint, secondary, or mostly implied.",
+    high: "Higher numbers make attraction, longing, chemistry, and romantic stakes more central.",
+    effect: "This controls how strongly romantic material shows up in the story.",
+  },
+  humorLevel: {
+    low: "Lower numbers keep the tone serious and use very little wit or comic relief.",
+    high: "Higher numbers give the AI permission to add more banter, irony, playfulness, and relief.",
+    effect: "This changes how often the writing uses humor to color scenes and character voice.",
+  },
+  actionFrequency: {
+    low: "Lower numbers keep action rare and give more space to setup, psychology, and aftermath.",
+    high: "Higher numbers make conflict, movement, danger, and physical events happen more often.",
+    effect: "This controls how action-heavy the book feels overall.",
+  },
+  mysteryDensity: {
+    low: "Lower numbers keep fewer questions hanging over scenes and reveal things more directly.",
+    high: "Higher numbers layer in more uncertainty, hidden motives, withheld facts, and unresolved questions.",
+    effect: "This sets how much suspense, curiosity, and revelation-pressure the AI should build.",
+  },
+  dialogueDescriptionRatio: {
+    low: "Lower numbers tilt the book more toward description, narration, and interior writing than spoken lines.",
+    high: "Higher numbers tilt the book more toward spoken interaction, back-and-forth exchanges, and voiced conflict.",
+    effect: "This changes the balance between characters talking and the prose describing or narrating.",
+  },
+  literaryCommercialBalance: {
+    low: "Lower numbers lean more literary: more atmosphere, ambiguity, style, and patience.",
+    high: "Higher numbers lean more commercial: stronger hooks, cleaner momentum, bigger beats, and easier readability.",
+    effect: "This tells the AI where to sit between artistic/literary writing and page-turning commercial writing.",
+  },
+  aestheticGuide: {
+    effect: "Use this to describe the visual, emotional, and atmospheric feel you want the writing to create.",
+  },
+  styleGuide: {
+    effect: "Use this to give specific craft instructions about prose habits, structure, tone, and what the AI should or should not do.",
+  },
+  voiceRules: {
+    effect: "Use this to define how the narrative voice and character voices should sound, behave, and stay distinct.",
+  },
+};
+
 export function SettingsTab({
   draft,
   busy,
@@ -195,6 +272,15 @@ export function SettingsTab({
           ),
     )
     .slice(0, 18);
+
+  function buildHint(key: keyof typeof STYLE_FIELD_HINTS) {
+    const hint = STYLE_FIELD_HINTS[key];
+    if (!hint.low && !hint.high) {
+      return hint.effect;
+    }
+
+    return [hint.low, hint.high, hint.effect].filter(Boolean).join(" ");
+  }
 
   return (
     <div className="grid gap-4">
@@ -506,6 +592,7 @@ export function SettingsTab({
               <option value="STRONG">Strong</option>
               <option value="AGGRESSIVE">Aggressive commercial pacing</option>
             </select>
+            <span className="text-xs text-[var(--muted)]">{buildHint("guidanceIntensity")}</span>
           </Field>
           {[
             ["proseDensity", "Prose density"],
@@ -518,7 +605,7 @@ export function SettingsTab({
             ["dialogueDescriptionRatio", "Dialogue / description"],
             ["literaryCommercialBalance", "Literary / commercial"],
           ].map(([key, label]) => (
-            <Field key={key} label={label}>
+            <Field key={key} label={label} hint={buildHint(key as keyof typeof STYLE_FIELD_HINTS)}>
               <input
                 inputMode="numeric"
                 max={10}
@@ -532,13 +619,13 @@ export function SettingsTab({
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Aesthetic guide">
+          <Field hint={buildHint("aestheticGuide")} label="Aesthetic guide">
             <textarea rows={4} value={draft.aestheticGuide} onChange={(event) => onChange({ aestheticGuide: event.target.value })} />
           </Field>
-          <Field label="Style guide">
+          <Field hint={buildHint("styleGuide")} label="Style guide">
             <textarea rows={4} value={draft.styleGuide} onChange={(event) => onChange({ styleGuide: event.target.value })} />
           </Field>
-          <Field className="md:col-span-2" label="Voice rules">
+          <Field className="md:col-span-2" hint={buildHint("voiceRules")} label="Voice rules">
             <textarea rows={4} value={draft.voiceRules} onChange={(event) => onChange({ voiceRules: event.target.value })} />
           </Field>
         </div>
