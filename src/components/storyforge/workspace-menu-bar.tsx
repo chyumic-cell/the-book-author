@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 
 import { AppBrandMark } from "@/components/brand/app-brand-mark";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,8 @@ function RibbonLink({
 
 export function WorkspaceMenuBar({
   activeTab,
+  aiStatusLabel,
+  aiWorking,
   autopilotStatus,
   saveState,
   projectId,
@@ -148,6 +151,8 @@ export function WorkspaceMenuBar({
   onZoomReset,
 }: {
   activeTab: StoryForgeTab;
+  aiStatusLabel: string;
+  aiWorking: boolean;
   autopilotStatus: string;
   saveState: "idle" | "saving" | "saved" | "error";
   projectId: string;
@@ -544,7 +549,15 @@ export function WorkspaceMenuBar({
                 {RIBBON_TABS.find((tab) => tab.id === activeRibbonTab)?.label ?? "Home"}
               </p>
             </div>
-            <Chip className="border-white/18 bg-white/14 text-white">{saveState}</Chip>
+            <div className="flex items-center gap-2">
+              <Chip className="border-white/18 bg-white/14 text-white">
+                <span className="inline-flex items-center gap-1.5">
+                  <RefreshCw className={cn("h-3.5 w-3.5", aiWorking && "animate-spin")} />
+                  <span className="max-w-[8.5rem] truncate">{aiStatusLabel}</span>
+                </span>
+              </Chip>
+              <Chip className="border-white/18 bg-white/14 text-white">{saveState}</Chip>
+            </div>
           </div>
         </div>
 
@@ -633,6 +646,12 @@ export function WorkspaceMenuBar({
 
         <div className="flex flex-wrap items-center gap-2">
           <Chip className="border-white/18 bg-white/14 text-white">Ctrl+S saves</Chip>
+          <Chip className="border-white/18 bg-white/14 text-white">
+            <span className="inline-flex items-center gap-1.5">
+              <RefreshCw className={cn("h-3.5 w-3.5", aiWorking && "animate-spin")} />
+              <span>AI: {aiStatusLabel}</span>
+            </span>
+          </Chip>
           <Chip className="border-white/18 bg-white/14 text-white">Status: {saveState}</Chip>
         </div>
       </div>

@@ -91,6 +91,27 @@ const STORAGE_KEYS = {
   showChapterOutline: "storyforge-show-chapter-outline",
 } as const;
 
+const AI_STATUS_LABELS: Record<string, string> = {
+  "setup-save": "Saving setup",
+  "chapter-plan-save": "Saving chapter plan",
+  "delete-chapter": "Deleting chapter",
+  "structure-plan": "Building structure",
+  "story-plan": "Planning story",
+  outline: "Generating outline",
+  "outline-all": "Building all outlines",
+  draft: "Generating chapter",
+  "autopilot-start": "Running AI book pass",
+  "autopilot-resume": "Resuming AI run",
+  summary: "Summarizing chapter",
+  sync: "Syncing chapter",
+  extract: "Extracting memory",
+  continuity: "Checking continuity",
+  "guide-chapter": "Running chapter guide",
+  "guide-book": "Running whole-book guide",
+  "guide-fix": "Applying guide fix",
+  "add-chapter": "Adding chapter",
+};
+
 function editorStatesEqual(left: EditorState, right: EditorState) {
   return shallowEqualByKeys(left, right, EDITOR_STATE_KEYS);
 }
@@ -232,6 +253,13 @@ export function ProjectWorkspace({
   const shouldShowOuterInspector = shouldShowInspector && desktopShell;
   const canUndo = editorPastRef.current.length > 0;
   const canRedo = editorFutureRef.current.length > 0;
+  const autopilotActive = autopilotRun?.status === "RUNNING";
+  const aiWorking = busyAction !== null || autopilotActive;
+  const aiStatusLabel = busyAction
+    ? AI_STATUS_LABELS[busyAction] ?? "Working"
+    : autopilotActive
+      ? `AI run ${autopilotRun?.status.toLowerCase()}`
+      : "Idle";
 
   const clampPaneWidth = useCallback((value: number, side: "left" | "right" | "chapterContext") => {
     const viewport = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -1719,6 +1747,8 @@ export function ProjectWorkspace({
     >
         <WorkspaceMenuBar
           activeTab={activeTab}
+          aiStatusLabel={aiStatusLabel}
+          aiWorking={aiWorking}
           autopilotStatus={autopilotRun?.status ?? "IDLE"}
           canRedo={canRedo}
           canUndo={canUndo}
