@@ -384,6 +384,11 @@ export function CharacterMasterView({
                 <div className="mt-1 text-xs text-[var(--muted)]">
                   {character.quickProfile.profession || character.role || character.summary}
                 </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button onClick={() => void deleteCharacter()} variant="ghost">
+                    Delete character
+                  </Button>
+                </div>
               </div>
             ) : null}
             <Button onClick={() => setDetailsExpanded((current) => !current)} variant="ghost">

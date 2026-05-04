@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { storyForgeTabs } from "@/lib/defaults";
+import { isBookRuleNote } from "@/lib/book-rules";
 import { cn } from "@/lib/utils";
 import type { ProjectWorkspace, StoryForgeTab } from "@/types/storyforge";
 
@@ -128,6 +129,8 @@ export function ProjectSidebar({
     premise: string;
   }[];
 }) {
+  const sidebarWorkingNotes = project.workingNotes.filter((note) => !isBookRuleNote(note));
+
   return (
     <aside className={cn("flex h-full min-h-0 flex-col gap-3 overflow-y-auto pr-1", className)}>
       <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--panel)] p-3">
@@ -145,22 +148,6 @@ export function ProjectSidebar({
         </div>
         <p className="mt-2 line-clamp-3 text-xs text-[var(--muted)]">{project.premise}</p>
       </div>
-
-      <TreeSection count={project.chapters.length} title="Chapters">
-        {project.chapters.map((chapter) => (
-          <ChapterPaneButton
-            key={chapter.id}
-            active={activeTab === "chapters" && selectedChapterId === chapter.id}
-            chapterNumber={chapter.number}
-            purpose={chapter.purpose}
-            title={chapter.title}
-            onClick={() => {
-              onSelectChapter(chapter.id);
-              onTabChange("chapters");
-            }}
-          />
-        ))}
-      </TreeSection>
 
       <TreeSection count={storyForgeTabs.length} title="Views">
         {storyForgeTabs.map((tab) => (
@@ -197,7 +184,7 @@ export function ProjectSidebar({
         ))}
       </TreeSection>
 
-      <TreeSection count={project.ideaEntries.length + project.workingNotes.length} defaultOpen={false} title="Idea Vault">
+      <TreeSection count={project.ideaEntries.length + sidebarWorkingNotes.length} defaultOpen={false} title="Idea Vault">
         {project.ideaEntries.slice(0, 8).map((idea) => (
           <TreeButton
             key={idea.id}
@@ -207,13 +194,29 @@ export function ProjectSidebar({
             onClick={() => onTabChange("ideaLab")}
           />
         ))}
-        {project.workingNotes.slice(0, 6).map((note) => (
+        {sidebarWorkingNotes.slice(0, 6).map((note) => (
           <TreeButton
             key={note.id}
             active={activeTab === "ideaLab"}
             label={note.title}
             secondary={note.type.replaceAll("_", " ")}
             onClick={() => onTabChange("ideaLab")}
+          />
+        ))}
+      </TreeSection>
+
+      <TreeSection count={project.chapters.length} defaultOpen={false} title="Chapters">
+        {project.chapters.map((chapter) => (
+          <ChapterPaneButton
+            key={chapter.id}
+            active={activeTab === "chapters" && selectedChapterId === chapter.id}
+            chapterNumber={chapter.number}
+            purpose={chapter.purpose}
+            title={chapter.title}
+            onClick={() => {
+              onSelectChapter(chapter.id);
+              onTabChange("chapters");
+            }}
           />
         ))}
       </TreeSection>
