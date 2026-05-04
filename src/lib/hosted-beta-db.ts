@@ -54,6 +54,7 @@ export async function ensureHostedBetaSchema() {
       `;
 
       await sql`ALTER TABLE beta_users ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'FREE'`;
+      await sql`ALTER TABLE beta_users ADD COLUMN IF NOT EXISTS provider_settings_json TEXT NOT NULL DEFAULT ''`;
       await sql`UPDATE beta_users SET role = 'OWNER' WHERE role = 'ADMIN'`;
       await sql`UPDATE beta_users SET role = 'CUSTOMER' WHERE role = 'USER'`;
       await sql`

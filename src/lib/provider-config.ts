@@ -6,7 +6,9 @@ import path from "node:path";
 import type { ProviderKind, ProviderSettingsRecord } from "@/types/storyforge";
 
 import { APP_NAME } from "@/lib/brand";
+import { getOptionalBetaSession } from "@/lib/beta-auth";
 import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
+import { runHostedBetaQuery } from "@/lib/hosted-beta-db";
 import { providerModelSwitchSchema, providerSettingsSchema } from "@/lib/schemas";
 
 const providerConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
@@ -39,6 +41,8 @@ type ProviderSecrets = {
     model: string;
   };
 };
+
+type HostedProviderSecretsPayload = Partial<ProviderSecrets>;
 
 export type ResolvedProviderConfig = {
   kind: Exclude<ProviderKind, "MOCK">;
@@ -119,7 +123,42 @@ function maskKey(value: string) {
 
 async function readProviderSecrets(): Promise<ProviderSecrets> {
   if (useHostedReadOnlyProviderConfig) {
-    return defaultSecrets;
+    const session = await getOptionalBetaSession();
+    if (!session) {
+      return defaultSecrets;
+    }
+
+    const hostedSecrets = await runHostedBetaQuery(async (sql) => {
+      const rows = (await sql`
+        SELECT provider_settings_json
+        FROM beta_users
+        WHERE id = ${session.user.id}
+        LIMIT 1
+      `) as Array<Record<string, unknown>>;
+
+      const raw = String(rows[0]?.provider_settings_json ?? "").trim();
+      if (!raw) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(raw) as HostedProviderSecretsPayload;
+      } catch {
+        return null;
+      }
+    });
+
+    if (!hostedSecrets) {
+      return defaultSecrets;
+    }
+
+    return {
+      ...defaultSecrets,
+      ...hostedSecrets,
+      openai: { ...defaultSecrets.openai, ...(hostedSecrets.openai ?? {}) },
+      openrouter: { ...defaultSecrets.openrouter, ...(hostedSecrets.openrouter ?? {}) },
+      custom: { ...defaultSecrets.custom, ...(hostedSecrets.custom ?? {}) },
+    };
   }
 
   try {
@@ -140,7 +179,19 @@ async function readProviderSecrets(): Promise<ProviderSecrets> {
 
 async function writeProviderSecrets(nextSecrets: ProviderSecrets) {
   if (useHostedReadOnlyProviderConfig) {
-    throw new Error("Provider settings are managed by the hosted deployment right now and cannot be edited from the web app.");
+    const session = await getOptionalBetaSession();
+    if (!session) {
+      throw new Error("Sign in to change AI provider settings on the hosted app.");
+    }
+
+    await runHostedBetaQuery(async (sql) => {
+      await sql`
+        UPDATE beta_users
+        SET provider_settings_json = ${JSON.stringify(nextSecrets)}, updated_at = NOW()
+        WHERE id = ${session.user.id}
+      `;
+    });
+    return;
   }
 
   await fs.writeFile(providerConfigPath, JSON.stringify(nextSecrets, null, 2));
