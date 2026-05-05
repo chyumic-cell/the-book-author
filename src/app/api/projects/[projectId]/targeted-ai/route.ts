@@ -1,6 +1,7 @@
 import { fail, ok } from "@/lib/api";
 import {
   runTargetedCharacterAi,
+  runTargetedSkeletonFieldAi,
   runTargetedPlanningFieldAi,
   runTargetedStoryBibleFieldAi,
 } from "@/lib/targeted-field-ai";
@@ -30,7 +31,7 @@ export async function POST(
 
     const input = targetedFieldAiSchema.parse(body);
     const result =
-      input.scope === "SKELETON"
+      input.scope === "SKELETON" && (input.targetEntityType === "chapter" || !input.targetEntityType)
         ? await runTargetedPlanningFieldAi({
             projectId,
             itemId: input.itemId,
@@ -41,6 +42,18 @@ export async function POST(
             currentValue: input.currentValue,
             draftItem: input.draftItem,
           })
+        : input.scope === "SKELETON"
+          ? await runTargetedSkeletonFieldAi({
+              projectId,
+              targetEntityType: input.targetEntityType as "structureBeat" | "sceneCard",
+              itemId: input.itemId,
+              itemTitle: input.itemTitle,
+              fieldKey: input.fieldKey,
+              fieldLabel: input.fieldLabel,
+              action: input.action,
+              currentValue: input.currentValue,
+              draftItem: input.draftItem,
+            })
         : await runTargetedStoryBibleFieldAi({
             projectId,
             itemId: input.itemId,

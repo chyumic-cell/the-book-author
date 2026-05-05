@@ -182,6 +182,7 @@ export const projectChatSchema = z.object({
 
 export const targetedFieldAiSchema = z.object({
   scope: z.enum(["SKELETON", "STORY_BIBLE"]),
+  targetEntityType: z.enum(["chapter", "structureBeat", "sceneCard"]).optional(),
   itemId: z.string().min(1),
   itemTitle: z.string().optional().default(""),
   fieldKey: z.string().min(1),

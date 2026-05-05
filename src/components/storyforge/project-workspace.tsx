@@ -967,9 +967,10 @@ export function ProjectWorkspace({
     }
   }
 
-    async function handlePlanningAiFieldAction(options: {
+  async function handlePlanningAiFieldAction(options: {
       scope: "SKELETON" | "STORY_BIBLE";
       sectionLabel: string;
+    targetEntityType?: "chapter" | "structureBeat" | "sceneCard";
     itemId: string;
     itemTitle: string;
     fieldKey: string;
@@ -987,9 +988,10 @@ export function ProjectWorkspace({
         }>(`/api/projects/${project.id}/targeted-ai`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            scope: options.scope,
-            itemId: options.itemId,
+            body: JSON.stringify({
+              scope: options.scope,
+              targetEntityType: options.targetEntityType,
+              itemId: options.itemId,
             itemTitle: options.itemTitle,
             fieldKey: options.fieldKey,
             fieldLabel: options.fieldLabel,

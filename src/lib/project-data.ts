@@ -380,6 +380,9 @@ export async function getProjectWorkspace(projectId: string): Promise<ProjectWor
     wordCount: wordCount(chapter.draft),
     summaries: chapter.summaries.map(mapChapterSummary),
   }));
+  const chapterLabelById = new Map(
+    chapters.map((chapter) => [chapter.id, `Chapter ${chapter.number}: ${chapter.title}`]),
+  );
 
   const series = seriesDetail
     ? {
@@ -535,6 +538,7 @@ export async function getProjectWorkspace(projectId: string): Promise<ProjectWor
       customFields: normalizeCharacterCustomFields(character.customFields),
       pinnedFields: asStringArray(character.pinnedFields),
     })),
+    // Human-readable references keep the editor usable while the backend still resolves back to real IDs.
     relationships: project.relationships.map((relationship) => ({
       id: relationship.id,
       sourceCharacterId: relationship.sourceCharacterId,
@@ -607,9 +611,22 @@ export async function getProjectWorkspace(projectId: string): Promise<ProjectWor
       tags: asStringArray(idea.tags),
       isFavorite: idea.isFavorite,
     })),
-    workingNotes: project.workingNotes.map(mapWorkingNote),
-    structureBeats: project.structureBeats.map(mapStructureBeat),
-    sceneCards: project.sceneCards.map(mapSceneCard),
+    workingNotes: project.workingNotes.map((note) => ({
+      ...mapWorkingNote(note),
+      linkedChapterId: note.linkedChapterId ? chapterLabelById.get(note.linkedChapterId) ?? note.linkedChapterId : null,
+    })),
+    structureBeats: project.structureBeats.map((beat) => ({
+      ...mapStructureBeat(beat),
+      chapterId: beat.chapterId ? chapterLabelById.get(beat.chapterId) ?? beat.chapterId : null,
+    })),
+    sceneCards: project.sceneCards.map((scene) => ({
+      ...mapSceneCard(scene),
+      chapterId: scene.chapterId ? chapterLabelById.get(scene.chapterId) ?? scene.chapterId : null,
+      povCharacterId:
+        scene.povCharacterId
+          ? project.characters.find((character) => character.id === scene.povCharacterId)?.name ?? scene.povCharacterId
+          : null,
+    })),
     chapters,
     longTermMemoryItems: project.longTermMemoryItems.map(mapMemoryItem),
     shortTermMemoryItems: project.shortTermMemoryItems.map(mapMemoryItem),

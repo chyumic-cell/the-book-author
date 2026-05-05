@@ -4,7 +4,7 @@ import { buildContextPackage } from "@/lib/memory";
 import { generateTextWithProvider } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
-import { mutateStoryBible, updateChapter } from "@/lib/story-service";
+import { mutateSkeleton, mutateStoryBible, updateChapter } from "@/lib/story-service";
 import { compactText } from "@/lib/utils";
 import type {
   AssistFieldKey,
@@ -21,6 +21,7 @@ type StoryBibleEntityType =
   | "faction"
   | "timelineEvent"
   | "workingNote";
+type SkeletonEntityType = "structureBeat" | "sceneCard";
 
 const chapterListFields = new Set<AssistFieldKey>([
   "keyBeats",
@@ -251,6 +252,17 @@ function normalizeStoryBibleFieldValue(fieldKey: string, raw: string, currentVal
   return cleaned;
 }
 
+function normalizeSkeletonFieldValue(fieldKey: string, raw: string, currentValue: string) {
+  if (fieldKey === "orderIndex") {
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : Number(currentValue || 1) || 1;
+  }
+  if (fieldKey === "frozen") {
+    return /^true|yes|1$/i.test(raw.trim());
+  }
+  return cleanFieldText(fieldKey, raw, currentValue);
+}
+
 function normalizeDraftFieldValue(raw: unknown) {
   if (Array.isArray(raw)) {
     return raw.map((entry) => String(entry).trim()).filter(Boolean);
@@ -339,6 +351,100 @@ function mergeDraftIntoEntity(
     ...entity,
     ...buildStoryBibleDraftPayload(draftItem),
   };
+}
+
+function findSkeletonEntity(
+  project: ProjectWorkspace,
+  targetEntityType: SkeletonEntityType,
+  itemId: string,
+): Record<string, unknown> | null {
+  const pool =
+    targetEntityType === "structureBeat"
+      ? (project.structureBeats as unknown as Record<string, unknown>[])
+      : (project.sceneCards as unknown as Record<string, unknown>[]);
+  return pool.find((entry) => String(entry.id) === itemId) ?? null;
+}
+
+function skeletonFieldLooksThin(fieldKey: string, value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (fieldKey === "label" || fieldKey === "title") {
+    return normalized.length < 6;
+  }
+  if (fieldKey === "description" || fieldKey === "summary" || fieldKey === "notes" || fieldKey === "goal" || fieldKey === "conflict" || fieldKey === "outcome") {
+    return normalized.length < 50;
+  }
+  return normalized.length < 12;
+}
+
+async function generateSingleSkeletonFieldValue(options: {
+  project: ProjectWorkspace;
+  targetEntityType: SkeletonEntityType;
+  entity: Record<string, unknown>;
+  itemTitle: string;
+  fieldKey: string;
+  fieldLabel: string;
+  action: PlanningAction;
+  contextChapterId: string;
+}) {
+  const { project, targetEntityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId } = options;
+  const currentValue = getEntityValue(entity, fieldKey);
+  const context = buildContextPackage(project, contextChapterId, currentValue);
+  const thinCurrent = skeletonFieldLooksThin(fieldKey, currentValue);
+  const prompt = buildPromptEnvelope(
+    `Update ${targetEntityType === "structureBeat" ? "Structure Engine" : "Scene Engine"} field`,
+    project,
+    context,
+    [
+      `Target area: Story Skeleton -> ${targetEntityType === "structureBeat" ? "Structure engine" : "Scene engine"} -> ${itemTitle || String(entity.label ?? entity.title ?? "Untitled")} -> ${fieldLabel || fieldKey}.`,
+      "Update only this exact field on this exact record.",
+      "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
+      "Do not contradict the rest of the project. Keep everything synchronized.",
+      currentValue
+        ? "Base the result on what is already written in this exact textbox. Preserve the core idea and improve it."
+        : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
+      thinCurrent
+        ? "The current field value is blank, generic, or placeholder-level. Replace it with specific canon-safe content."
+        : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      action === "expand"
+        ? "Expand this field into something fuller, more specific, and more useful."
+        : action === "tighten"
+          ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
+          : "Develop this field so it becomes specific, useful, and structurally intelligent.",
+      fieldKey === "label" || fieldKey === "title"
+        ? "Return only a concise, strong label or title."
+        : fieldKey === "type" || fieldKey === "status" || fieldKey === "outcomeType"
+          ? "Return only the single best canonical value for this field, not commentary."
+          : fieldKey === "chapterId"
+            ? "Return a human chapter reference like 'Chapter 3' or 'Chapter 3: The Crossing', or leave it blank if this item should not link to a chapter."
+            : fieldKey === "povCharacterId"
+              ? "Return the exact character name that should own this scene, or leave it blank."
+              : "Return only the final text for this exact field.",
+      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      "Return only the final field value. No JSON, no labels, no commentary.",
+    ].join("\n\n"),
+    "You are a precise story-structure editor. Write the exact field value, not notes about what you would do.",
+  );
+
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 700 });
+  let generated = raw?.trim();
+  if (!generated) {
+    return null;
+  }
+  if (looksLikeMetaOutput(generated)) {
+    generated = await repairMetaOutput({
+      project,
+      context,
+      task: `Repair ${targetEntityType} field`,
+      instruction: `Return only the corrected value for ${fieldLabel || fieldKey}.`,
+      badOutput: generated,
+      roleInstruction: "Return only the corrected Story Skeleton field value.",
+      maxOutputTokens: 700,
+    });
+  }
+  return generated;
 }
 
 function buildCharacterDraftPayload(draftCharacter?: Record<string, unknown>) {
@@ -509,41 +615,42 @@ function compactCharacterCanon(
 function buildCharacterFieldRequest(character: CharacterRecord) {
   const request: Record<string, unknown> = {};
   const text = (value: unknown) => String(value ?? "").trim();
+  const isThin = (value: unknown, minimum: number) => text(value).length < minimum;
 
-  if (!text(character.summary)) {
+  if (isThin(character.summary, 90)) {
     request.summary = "";
   }
-  if (!text(character.role)) {
+  if (isThin(character.role, 4)) {
     request.role = "";
   }
-  if (!text(character.goal)) {
+  if (isThin(character.goal, 40)) {
     request.goal = "";
   }
-  if (!text(character.fear)) {
+  if (isThin(character.fear, 30)) {
     request.fear = "";
   }
-  if (!text(character.secret)) {
+  if (isThin(character.secret, 30)) {
     request.secret = "";
   }
-  if (!text(character.wound)) {
+  if (isThin(character.wound, 30)) {
     request.wound = "";
   }
-  if (!text(character.notes)) {
+  if (isThin(character.notes, 70)) {
     request.notes = "";
   }
 
   const quickProfile: Record<string, string> = {};
-  if (!text(character.quickProfile?.age)) quickProfile.age = "";
-  if (!text(character.quickProfile?.profession)) quickProfile.profession = "";
-  if (!text(character.quickProfile?.placeOfLiving)) quickProfile.placeOfLiving = "";
-  if (!text(character.quickProfile?.accent)) quickProfile.accent = "";
-  if (!text(character.quickProfile?.speechPattern)) quickProfile.speechPattern = "";
+  if (isThin(character.quickProfile?.age, 2)) quickProfile.age = "";
+  if (isThin(character.quickProfile?.profession, 4)) quickProfile.profession = "";
+  if (isThin(character.quickProfile?.placeOfLiving, 4)) quickProfile.placeOfLiving = "";
+  if (isThin(character.quickProfile?.accent, 3)) quickProfile.accent = "";
+  if (isThin(character.quickProfile?.speechPattern, 18)) quickProfile.speechPattern = "";
   if (Object.keys(quickProfile).length > 0) {
     request.quickProfile = quickProfile;
   }
 
   const dossier: Record<string, string> = {};
-  if (!text(character.dossier?.freeTextCore)) {
+  if (isThin(character.dossier?.freeTextCore, 180)) {
     dossier.freeTextCore = "";
   }
   if (Object.keys(dossier).length > 0) {
@@ -551,14 +658,14 @@ function buildCharacterFieldRequest(character: CharacterRecord) {
   }
 
   const currentState: Record<string, string> = {};
-  if (!text(character.currentState?.currentKnowledge)) currentState.currentKnowledge = "";
-  if (!text(character.currentState?.unknowns)) currentState.unknowns = "";
-  if (!text(character.currentState?.emotionalState)) currentState.emotionalState = "";
-  if (!text(character.currentState?.physicalCondition)) currentState.physicalCondition = "";
-  if (!text(character.currentState?.loyalties)) currentState.loyalties = "";
-  if (!text(character.currentState?.recentChanges)) currentState.recentChanges = "";
-  if (!text(character.currentState?.continuityRisks)) currentState.continuityRisks = "";
-  if (!text(character.currentState?.lastMeaningfulAppearance)) currentState.lastMeaningfulAppearance = "";
+  if (isThin(character.currentState?.currentKnowledge, 18)) currentState.currentKnowledge = "";
+  if (isThin(character.currentState?.unknowns, 18)) currentState.unknowns = "";
+  if (isThin(character.currentState?.emotionalState, 12)) currentState.emotionalState = "";
+  if (isThin(character.currentState?.physicalCondition, 12)) currentState.physicalCondition = "";
+  if (isThin(character.currentState?.loyalties, 12)) currentState.loyalties = "";
+  if (isThin(character.currentState?.recentChanges, 18)) currentState.recentChanges = "";
+  if (isThin(character.currentState?.continuityRisks, 18)) currentState.continuityRisks = "";
+  if (isThin(character.currentState?.lastMeaningfulAppearance, 18)) currentState.lastMeaningfulAppearance = "";
   if (Object.keys(currentState).length > 0) {
     request.currentState = currentState;
   }
@@ -876,6 +983,69 @@ export async function runTargetedPlanningFieldAi(input: {
   };
 }
 
+export async function runTargetedSkeletonFieldAi(input: {
+  projectId: string;
+  targetEntityType: SkeletonEntityType;
+  itemId: string;
+  itemTitle: string;
+  fieldKey: string;
+  fieldLabel: string;
+  action: PlanningAction;
+  currentValue?: string;
+  draftItem?: Record<string, unknown>;
+}) {
+  const project = await getProjectWorkspace(input.projectId);
+  if (!project) {
+    throw new Error("Project not found.");
+  }
+
+  const entity = findSkeletonEntity(project, input.targetEntityType, input.itemId);
+  if (!entity) {
+    throw new Error(input.targetEntityType === "structureBeat" ? "Structure beat not found." : "Scene card not found.");
+  }
+
+  const contextChapterId = lastUsefulChapterId(project);
+  if (!contextChapterId) {
+    throw new Error("Project has no chapter context yet.");
+  }
+
+  const workingEntity = mergeDraftIntoEntity(entity, input.draftItem);
+  const currentValue = input.currentValue?.trim() ? input.currentValue : getEntityValue(workingEntity, input.fieldKey);
+
+  const generated = await generateSingleSkeletonFieldValue({
+    project,
+    targetEntityType: input.targetEntityType,
+    entity: workingEntity,
+    itemTitle: input.itemTitle,
+    fieldKey: input.fieldKey,
+    fieldLabel: input.fieldLabel,
+    action: input.action,
+    contextChapterId,
+  });
+  if (!generated) {
+    throw new Error("AI did not return any visible Story Skeleton text.");
+  }
+
+  await mutateSkeleton(
+    project.id,
+    {
+      entityType: input.targetEntityType,
+      id: input.itemId,
+      payload: {
+        ...buildStoryBibleDraftPayload(input.draftItem),
+        [input.fieldKey]: normalizeSkeletonFieldValue(input.fieldKey, generated, currentValue),
+      },
+    },
+    "PATCH",
+  );
+
+  const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
+  return {
+    project: nextProject,
+    contextPackage: null,
+  };
+}
+
 export async function runTargetedStoryBibleFieldAi(input: {
   projectId: string;
   itemId: string;
@@ -1010,7 +1180,9 @@ export async function runTargetedCharacterAi(input: {
       compactCanon,
       `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"}.`,
       "Respect what is already written in the character textboxes. Treat those entries as the primary source of truth.",
-      "Fill only the missing or thin fields requested below. Do not rewrite strong existing fields. Do not output commentary.",
+      "Fill every missing or thin field requested below with concrete, human, non-generic content. Do not rewrite strong existing fields.",
+      "Make the character feel specific, lived-in, and story-useful rather than broad or placeholder-like.",
+      "Do not output commentary.",
       "Return strict JSON only for the requested fields.",
       `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
       `Current character snapshot:\n${JSON.stringify(

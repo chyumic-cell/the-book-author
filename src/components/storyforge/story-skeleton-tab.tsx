@@ -362,6 +362,7 @@ export function StorySkeletonTab({
 
       <EditableListSection
         key={`chapter-runway-${project.chapters.map((item) => item.id).join("-")}`}
+        aiEntityType="chapter"
         description="Plan the chapter runway here: title, purpose, beat, outline, and target words for each chapter."
         fields={[
           { key: "title", label: "Title" },
@@ -392,6 +393,7 @@ export function StorySkeletonTab({
 
       <EditableListSection
         key={`beats-${project.structureBeats.map((item) => item.id).join("-")}`}
+        aiEntityType="structureBeat"
         description="The Structure Engine is the book's turning-point map. Use it to place the opening disturbance, doorway beats, midpoint, climax, and resolution so the plot keeps escalating in the right order."
         fields={[
           { key: "type", label: "Beat type" },
@@ -412,6 +414,7 @@ export function StorySkeletonTab({
 
       <EditableListSection
         key={`scenes-${project.sceneCards.map((item) => item.id).join("-")}`}
+        aiEntityType="sceneCard"
                 description={`Every scene card should show goal, conflict, and outcome so ${APP_NAME} can flag filler or static movement.`}
         fields={[
           { key: "title", label: "Title" },

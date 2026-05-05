@@ -32,6 +32,7 @@ export function EditableListSection({
   description,
   items,
   fields,
+  aiEntityType,
   topActions,
   aiBusyKey,
   onAiFieldAction,
@@ -43,9 +44,11 @@ export function EditableListSection({
   description: string;
   items: Record<string, unknown>[];
   fields: EditableField[];
+  aiEntityType?: "chapter" | "structureBeat" | "sceneCard";
   topActions?: React.ReactNode;
   aiBusyKey?: string | null;
   onAiFieldAction?: (options: {
+    targetEntityType?: "chapter" | "structureBeat" | "sceneCard";
     itemId: string;
     itemTitle: string;
     fieldKey: string;
@@ -204,6 +207,7 @@ export function EditableListSection({
                           disabled={aiBusyKey === `${itemId}:${field.key}:develop`}
                           onClick={() =>
                             void onAiFieldAction({
+                              targetEntityType: aiEntityType,
                               itemId,
                               itemTitle,
                               fieldKey: field.key,
@@ -228,6 +232,7 @@ export function EditableListSection({
                           disabled={aiBusyKey === `${itemId}:${field.key}:expand`}
                           onClick={() =>
                             void onAiFieldAction({
+                              targetEntityType: aiEntityType,
                               itemId,
                               itemTitle,
                               fieldKey: field.key,
@@ -252,6 +257,7 @@ export function EditableListSection({
                           disabled={aiBusyKey === `${itemId}:${field.key}:tighten`}
                           onClick={() =>
                             void onAiFieldAction({
+                              targetEntityType: aiEntityType,
                               itemId,
                               itemTitle,
                               fieldKey: field.key,

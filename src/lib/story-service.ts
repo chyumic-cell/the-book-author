@@ -381,15 +381,51 @@ async function resolveProjectChapterId(projectId: string, chapterId: string | nu
     return null;
   }
 
-  const chapter = await prisma.chapter.findFirst({
+  const raw = chapterId.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const exact = await prisma.chapter.findFirst({
     where: {
-      id: chapterId,
+      id: raw,
       projectId,
     },
     select: { id: true },
   });
 
-  return chapter?.id ?? null;
+  if (exact) {
+    return exact.id;
+  }
+
+  const chapters = await prisma.chapter.findMany({
+    where: { projectId },
+    select: { id: true, number: true, title: true },
+  });
+
+  const normalized = raw.toLowerCase();
+  const chapterNumberMatch = normalized.match(/chapter\s+(\d+)/i) ?? normalized.match(/^(\d+)$/);
+  if (chapterNumberMatch) {
+    const chapterNumber = Number(chapterNumberMatch[1]);
+    const byNumber = chapters.find((chapter) => chapter.number === chapterNumber);
+    if (byNumber) {
+      return byNumber.id;
+    }
+  }
+
+  const byExactTitle = chapters.find((chapter) => chapter.title.trim().toLowerCase() === normalized);
+  if (byExactTitle) {
+    return byExactTitle.id;
+  }
+
+  const byLabel = chapters.find(
+    (chapter) => `chapter ${chapter.number}: ${chapter.title}`.trim().toLowerCase() === normalized,
+  );
+  if (byLabel) {
+    return byLabel.id;
+  }
+
+  return null;
 }
 
 async function resolveProjectCharacterId(projectId: string, characterId: string | null) {
@@ -397,15 +433,29 @@ async function resolveProjectCharacterId(projectId: string, characterId: string 
     return null;
   }
 
-  const character = await prisma.character.findFirst({
+  const raw = characterId.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const exact = await prisma.character.findFirst({
     where: {
-      id: characterId,
+      id: raw,
       projectId,
     },
     select: { id: true },
   });
 
-  return character?.id ?? null;
+  if (exact) {
+    return exact.id;
+  }
+
+  const characters = await prisma.character.findMany({
+    where: { projectId },
+    select: { id: true, name: true },
+  });
+  const normalized = raw.toLowerCase();
+  return characters.find((character) => character.name.trim().toLowerCase() === normalized)?.id ?? null;
 }
 
 async function ensureStructureBeatBelongsToProject(projectId: string, structureBeatId: string) {

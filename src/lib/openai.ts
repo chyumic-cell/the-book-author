@@ -223,7 +223,7 @@ function formatChapterInstruction(chapter: ChapterRecord, task: "outline" | "dra
     "End with a complete final paragraph and a finished closing sentence that creates forward pull.",
     "Do not include meta prose such as 'the chapter ends with' or editorial commentary.",
     task === "outline"
-      ? "Return a compact scene-by-scene outline that escalates pressure, reveals change, and ends with momentum."
+      ? "Return a compact scene-by-scene outline as 6 to 9 numbered beats. Each beat should escalate pressure, reveal change, and end with momentum."
       : "Return finished prose only, with no prefatory explanation, bullet notes, revision commentary, markdown end markers, or metadata.",
     task === "draft"
       ? "Do not restart the novel, replay an earlier chapter, or reuse an opening scaffold from a previous chapter unless the instruction explicitly asks for a flashback."
@@ -1208,7 +1208,14 @@ async function repairThinOutlineIfNeeded(options: {
 }) {
   const currentWords = roughWordCount(options.content);
   const numberedSteps = (options.content.match(/^\s*(?:\d+[\).\:-]|[-*])\s+/gm) ?? []).length;
-  const seemsThin = currentWords < 110 || numberedSteps < 4;
+  const normalized = options.content.trim().toLowerCase();
+  const seemsMeta =
+    normalized.includes("i would") ||
+    normalized.includes("the chapter should") ||
+    normalized.includes("this outline") ||
+    normalized.includes("here's") ||
+    normalized.includes("let's");
+  const seemsThin = currentWords < 110 || numberedSteps < 4 || seemsMeta;
   if (!seemsThin) {
     return options.content;
   }
@@ -1220,7 +1227,7 @@ async function repairThinOutlineIfNeeded(options: {
     [
       formatChapterInstruction(options.chapter, "outline"),
       "The previous outline was too thin or incomplete.",
-      "Return a stronger scene-by-scene outline with at least 6 concrete beats.",
+      "Return a stronger scene-by-scene outline with at least 6 concrete numbered beats.",
       "Each beat should say what happens, what pressure changes, and why the reader has to keep going.",
       "Do not give vague headings only. Do not return notes about how you would outline it. Return the actual outline.",
       "Previous outline:",
@@ -1403,7 +1410,11 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
         "Respect the project's dialogue-versus-description settings while expanding.",
       ].join(" ");
     case "IMPROVE_PROSE":
-      return "Rewrite only the selected text with stronger rhythm, specificity, and image-rich clarity.";
+      return [
+        "Rewrite only the selected text with materially stronger prose, not a light polish.",
+        "Increase specificity, sensory clarity, rhythm, subtext, and emotional precision.",
+        "Prefer sharp concrete choices over generic phrasing, and make the passage feel written by a human novelist rather than a neutral assistant.",
+      ].join(" ");
     case "SHARPEN_VOICE":
       return [
         "Rewrite only the selected text so the voice becomes unmistakably more specific and character-driven.",
