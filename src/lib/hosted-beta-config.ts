@@ -54,3 +54,11 @@ export function getOpenRouterKeysUrl() {
 export function getSupportEmailAddress() {
   return (process.env.THE_BOOK_AUTHOR_SUPPORT_EMAIL ?? process.env.STORYFORGE_SUPPORT_EMAIL)?.trim() || "";
 }
+
+export function getDesktopInstallerDownloadUrl() {
+  return (
+    process.env.THE_BOOK_AUTHOR_INSTALLER_URL?.trim() ||
+    process.env.STORYFORGE_INSTALLER_URL?.trim() ||
+    ""
+  );
+}

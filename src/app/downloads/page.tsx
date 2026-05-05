@@ -6,12 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { requireBetaSession } from "@/lib/beta-auth";
 import { APP_INSTALLER_FILENAME, APP_NAME } from "@/lib/brand";
-import { getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
+import { getDesktopInstallerDownloadUrl, getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
 
 export default async function DownloadsPage() {
   const session = await requireBetaSession();
+  const desktopInstallerUrl = getDesktopInstallerDownloadUrl();
 
   return (
       <BetaShell
@@ -34,13 +35,19 @@ export default async function DownloadsPage() {
           <p className="text-sm leading-7 text-[var(--muted)]">
             Install the Windows desktop build to keep your writing workspace and project library on the local machine.
           </p>
-          <a
-            className="inline-flex w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]"
-            download
-            href={`/downloads/${APP_INSTALLER_FILENAME}`}
-          >
-            Download {APP_NAME} - PC
-          </a>
+          {desktopInstallerUrl ? (
+            <a
+              className="inline-flex w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]"
+              download
+              href={`/downloads/${APP_INSTALLER_FILENAME}`}
+            >
+              Download {APP_NAME} - PC
+            </a>
+          ) : (
+            <p className="text-sm leading-7 text-[var(--muted)]">
+              The hosted desktop installer link is being refreshed right now. The web app is still available immediately on this site.
+            </p>
+          )}
           <Link className="font-medium text-[var(--accent)] underline" href="/">
             Open the web app now
           </Link>
