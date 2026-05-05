@@ -542,6 +542,7 @@ const chapterPlanningFieldKeys = new Set<AssistFieldKey>([
 ]);
 
 type AssistantIntent = {
+  wantsFieldAutofill: boolean;
   wantsOutline: boolean;
   wantsTitles: boolean;
   wantsPurpose: boolean;
@@ -564,6 +565,28 @@ type AssistantIntent = {
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function requestSignalsFieldAutofill(lower: string) {
+  return (
+    lower.includes("fill out") ||
+    lower.includes("fill in") ||
+    lower.includes("fill the fields") ||
+    lower.includes("populate") ||
+    lower.includes("flesh out") ||
+    lower.includes("fully develop") ||
+    lower.includes("fully build") ||
+    lower.includes("complete this") ||
+    lower.includes("complete the") ||
+    lower.includes("finish filling") ||
+    lower.includes("all fields") ||
+    lower.includes("all the fields") ||
+    lower.includes("everything relevant") ||
+    lower.includes("where relevant") ||
+    lower.includes("wherever relevant") ||
+    lower.includes("properly build") ||
+    lower.includes("build this out")
+  );
 }
 
 function cleanPlanText(value: string | undefined) {
@@ -669,19 +692,25 @@ function looksLikeWeakTitle(value: string) {
 function looksLikeWeakChapterFieldValue(fieldKey: AssistFieldKey, value: string) {
   switch (fieldKey) {
     case "title":
-      return looksLikeWeakTitle(value);
+      return looksLikeWeakTitle(value) || cleanTitleText(value).length > 80;
     case "outline":
       return cleanOutlineText(value).trim().length < 80 || countStructuredLines(value) < 4;
     case "purpose":
-    case "currentBeat":
       return cleanShortFieldText(fieldKey, value).trim().length < 18;
+    case "currentBeat": {
+      const cleaned = cleanShortFieldText(fieldKey, value).trim();
+      return cleaned.length < 18 || cleaned.length > 120;
+    }
     case "desiredMood":
-      return cleanShortFieldText(fieldKey, value).trim().length < 6;
+      return cleanShortFieldText(fieldKey, value).trim().length < 6 || cleanShortFieldText(fieldKey, value).trim().length > 120;
     case "sceneList":
+      return cleanStringList(value).length < 2 || cleanStringList(value).length > 8;
     case "keyBeats":
+      return cleanStringList(value).length < 2 || cleanStringList(value).length > 8;
     case "requiredInclusions":
+      return cleanStringList(value).length < 1 || cleanStringList(value).length > 6;
     case "forbiddenElements":
-      return cleanStringList(value).length < 2;
+      return cleanStringList(value).length < 1 || cleanStringList(value).length > 5;
     default:
       return false;
   }
@@ -694,6 +723,11 @@ function cleanChapterFieldContent(
   value: string,
   fallback = "",
 ) {
+  if (CHAPTER_LIST_FIELDS.has(fieldKey)) {
+    const cleanedList = cleanStringList(value);
+    return cleanedList.length > 0 ? cleanedList.join("\n") : cleanStringList(fallback).join("\n");
+  }
+
   switch (fieldKey) {
     case "title":
       return cleanTitleText(value, fallback);
@@ -1343,6 +1377,7 @@ function cleanStoryBiblePayload(
 
 function inferAssistantIntent(message: string, scope: ProjectChatScope): AssistantIntent {
   const lower = message.toLowerCase();
+  const wantsFieldAutofill = requestSignalsFieldAutofill(lower);
   const explicitlyRejectsNotes =
     /(?:do not|don't|not|instead of|rather than)[^.]{0,40}\bnotes?\b/.test(lower) ||
     /(?:don'?t|do not)\s+write[^.]{0,40}\bnotes?\b/.test(lower);
@@ -1395,6 +1430,7 @@ function inferAssistantIntent(message: string, scope: ProjectChatScope): Assista
       lower.includes("organization rule");
 
   return {
+    wantsFieldAutofill,
     wantsOutline:
       lower.includes("outline") ||
       lower.includes("outlines") ||
@@ -1807,6 +1843,43 @@ function buildEmergencyPlanningFallback(
     return chapter.currentBeat.trim() || "Pressure rises and the chapter's objective starts to shift.";
   }
 
+  if (fieldKey === "keyBeats") {
+    return [
+      "The chapter opens under active pressure rather than calm setup.",
+      "The protagonist makes a move toward the chapter objective.",
+      "Opposition complicates the move and raises the cost.",
+      "The chapter ends on a turn that creates forward pull.",
+    ].join("\n");
+  }
+
+  if (fieldKey === "sceneList") {
+    return [
+      "Opening pressure scene",
+      "Investigation or confrontation scene",
+      "Complication / reversal scene",
+      "Exit beat with stronger danger or uncertainty",
+    ].join("\n");
+  }
+
+  if (fieldKey === "requiredInclusions") {
+    return [
+      "A concrete movement toward the chapter objective",
+      "At least one new pressure point or complication",
+      "A chapter-ending turn that changes what comes next",
+    ].join("\n");
+  }
+
+  if (fieldKey === "forbiddenElements") {
+    return [
+      "Static repetition of the previous chapter",
+      "Expository drift without active pressure",
+    ].join("\n");
+  }
+
+  if (fieldKey === "desiredMood") {
+    return chapter.desiredMood.trim() || "Tense, atmospheric, and morally charged.";
+  }
+
   if (fieldKey === "purpose") {
     return chapter.purpose.trim() || "Advance the next major movement of the story while increasing pressure and consequence.";
   }
@@ -1862,6 +1935,12 @@ function planHasChapterFieldAction(plan: AssistantPlan, fieldKey: AssistFieldKey
 function getRequestedPlanningFieldKeys(intent: AssistantIntent, scope: ProjectChatScope) {
   const fields = new Set<AssistFieldKey>();
 
+  if (intent.wantsFieldAutofill && scope === "SKELETON") {
+    for (const fieldKey of chapterPlanningFieldKeys) {
+      fields.add(fieldKey);
+    }
+  }
+
   if (intent.wantsTitles) fields.add("title");
   if (intent.wantsPurpose) fields.add("purpose");
   if (intent.wantsCurrentBeat) fields.add("currentBeat");
@@ -1872,11 +1951,10 @@ function getRequestedPlanningFieldKeys(intent: AssistantIntent, scope: ProjectCh
   if (intent.wantsSceneList) fields.add("sceneList");
   if (intent.wantsOutline) fields.add("outline");
 
-  if (fields.size === 0 && scope === "SKELETON" && intent.wantsAllChapters) {
-    fields.add("title");
-    fields.add("purpose");
-    fields.add("currentBeat");
-    fields.add("outline");
+  if (fields.size === 0 && scope === "SKELETON" && (intent.wantsAllChapters || intent.wantsFieldAutofill)) {
+    for (const fieldKey of chapterPlanningFieldKeys) {
+      fields.add(fieldKey);
+    }
   }
 
   return fields;
@@ -1904,6 +1982,7 @@ function livePlanNeedsFallback(input: {
 
   const needsPlanningFields =
     input.scope === "SKELETON" ||
+    input.intent.wantsFieldAutofill ||
     input.intent.wantsAllChapters ||
     input.intent.wantsOutline ||
     input.intent.wantsTitles ||
@@ -1914,6 +1993,19 @@ function livePlanNeedsFallback(input: {
     input.intent.wantsRequiredInclusions ||
     input.intent.wantsForbiddenElements ||
     input.intent.wantsDesiredMood;
+
+  if (
+    input.intent.wantsFieldAutofill &&
+    input.scope === "SKELETON" &&
+    livePlan.actions.filter(
+      (action) =>
+        action.kind === "UPDATE_CHAPTER_FIELD" &&
+        !!action.fieldKey &&
+        chapterPlanningFieldKeys.has(action.fieldKey),
+    ).length < 4
+  ) {
+    return true;
+  }
 
   if (
     needsPlanningFields &&
@@ -2322,6 +2414,7 @@ function buildFallbackPlan(input: {
 }): AssistantPlan {
   const lower = input.message.toLowerCase();
   const intent = inferAssistantIntent(input.message, input.scope);
+  const requestedPlanningFields = getRequestedPlanningFieldKeys(intent, input.scope);
   const actions: AssistantPlanAction[] = [];
   let nextTab: StoryForgeTab | null = null;
 
@@ -2329,6 +2422,7 @@ function buildFallbackPlan(input: {
     if (
       input.scope === "SKELETON" &&
       (
+        intent.wantsFieldAutofill ||
         intent.wantsAllChapters ||
         intent.wantsOutline ||
         intent.wantsTitles ||
@@ -2341,8 +2435,18 @@ function buildFallbackPlan(input: {
         intent.wantsDesiredMood
       )
     ) {
-      for (const chapter of input.project.chapters) {
-        if (intent.wantsTitles) {
+      const fallbackSkeletonChapter =
+        (input.chapterId ? getChapterById(input.project, input.chapterId) : null) ??
+        input.project.chapters[0] ??
+        null;
+      const chaptersToPlan = intent.wantsAllChapters
+        ? input.project.chapters
+        : fallbackSkeletonChapter
+          ? [fallbackSkeletonChapter]
+          : [];
+
+      for (const chapter of chaptersToPlan) {
+        if (requestedPlanningFields.has("title")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2353,7 +2457,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsPurpose) {
+        if (requestedPlanningFields.has("purpose")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2364,7 +2468,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsCurrentBeat) {
+        if (requestedPlanningFields.has("currentBeat")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2375,7 +2479,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsKeyBeats) {
+        if (requestedPlanningFields.has("keyBeats")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2386,7 +2490,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsSceneList) {
+        if (requestedPlanningFields.has("sceneList")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2397,7 +2501,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsRequiredInclusions) {
+        if (requestedPlanningFields.has("requiredInclusions")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2408,7 +2512,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsForbiddenElements) {
+        if (requestedPlanningFields.has("forbiddenElements")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2419,7 +2523,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsDesiredMood) {
+        if (requestedPlanningFields.has("desiredMood")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2430,7 +2534,7 @@ function buildFallbackPlan(input: {
           });
         }
 
-        if (intent.wantsOutline) {
+        if (requestedPlanningFields.has("outline")) {
           actions.push({
             kind: "UPDATE_CHAPTER_FIELD",
             chapterId: chapter.id,
@@ -2813,6 +2917,9 @@ async function buildLivePlan(input: {
     `Current AI role: ${input.role}.`,
     `Current scope: ${normalizeScope(input.scope)}.`,
     `Detected intent: ${JSON.stringify(intent)}.`,
+    intent.wantsFieldAutofill
+      ? "The user wants the relevant fields filled out comprehensively. First decide which writable fields in the active layer need values, then emit every needed action so those fields can all be completed."
+      : "",
     "Supported actions:",
     "- CREATE_IDEA_ENTRY",
     "- CREATE_WORKING_NOTE",
@@ -2840,6 +2947,9 @@ async function buildLivePlan(input: {
     "If the user asks to add prose to the manuscript, use fieldKey draft.",
     "If the user asks to update or add to the outline, use fieldKey outline.",
     "If the user asks for chapter outlines, chapter names, chapter purposes, story skeleton planning, or book planning, prefer chapter title/purpose/currentBeat/outline/sceneList actions and skeleton actions.",
+    "If the user asks to fill something out, populate all relevant writable fields in that record instead of picking a single box and stopping there.",
+    "When planning a whole chapter runway entry, the relevant fields usually include title, purpose, currentBeat, keyBeats, requiredInclusions, forbiddenElements, desiredMood, sceneList, and outline.",
+    "When planning a Story Bible entry, prefer a usable full record with the identity field plus summary-level and support fields, not a title-only stub.",
     "If the user asks to plan all chapters or each chapter, emit one action per chapter that needs updating.",
     "Do not create structure beats or scene cards unless the user explicitly asks for beats, scene cards, or structural milestones.",
     "Do not use APPEND_CHAPTER_NOTES or CREATE_WORKING_NOTE unless the user explicitly wants notes, reminders, or saved instructions.",
@@ -3666,6 +3776,122 @@ async function materializeStoryBibleEntityAction(input: {
           tags: ["book-rule"],
           status: "ACTIVE",
         };
+      }
+    }
+  }
+
+  const wantsComprehensiveStoryBibleFill =
+    requestSignalsFieldAutofill(lowerMessage) ||
+    (entityType === "character" && shouldAutofillCharacterRecord(nextPayload, existingEntity)) ||
+    (entityType === "plotThread" && shouldAutofillPlotThreadRecord(nextPayload, existingEntity));
+
+  if (wantsComprehensiveStoryBibleFill) {
+    const preferredFieldOrder =
+      entityType === "character"
+        ? ["name", "role", "archetype", "summary", "goal", "fear", "secret", "wound", "notes"]
+        : entityType === "plotThread"
+          ? ["title", "summary", "status", "promisedPayoff", "notes"]
+          : spec.fields.map((field) => field.key);
+    const fieldsToFill = preferredFieldOrder.filter((fieldKey) => {
+      const currentValue = nextPayload[fieldKey] ?? (currentSnapshot as Record<string, unknown>)[fieldKey];
+      if (fieldKey === getStoryBibleIdentityField(entityType)) {
+        return false;
+      }
+      if (fieldKey === "quickProfile" || fieldKey === "dossier" || fieldKey === "currentState" || fieldKey === "progressMarkers") {
+        return false;
+      }
+      if (Array.isArray(currentValue)) {
+        return currentValue.filter((entry) => String(entry ?? "").trim()).length < 2;
+      }
+      if (typeof currentValue === "number") {
+        return !Number.isFinite(currentValue);
+      }
+      if (currentValue && typeof currentValue === "object") {
+        return Object.keys(currentValue as Record<string, unknown>).length === 0;
+      }
+
+      const textValue = cleanGeneratedText(String(currentValue ?? "").trim());
+      if (!textValue) {
+        return true;
+      }
+      if (fieldKey === "name" || fieldKey === "title" || fieldKey === "label") {
+        return textValue.length < 3 || /^new\s+/i.test(textValue) || /^untitled$/i.test(textValue);
+      }
+      if (fieldKey === "summary" || fieldKey === "description" || fieldKey === "content") {
+        return textValue.length < 60;
+      }
+      if (fieldKey === "role" || fieldKey === "archetype" || fieldKey === "status") {
+        return textValue.length < 4;
+      }
+      if (fieldKey === "goal" || fieldKey === "fear" || fieldKey === "secret" || fieldKey === "wound" || fieldKey === "promisedPayoff") {
+        return textValue.length < 18;
+      }
+
+      return textValue.length < 12;
+    });
+
+    for (const fieldKey of fieldsToFill) {
+      const fieldSpec = spec.fields.find((field) => field.key === fieldKey);
+      if (!fieldSpec) {
+        continue;
+      }
+
+      const evolvingRecord = {
+        ...(currentSnapshot as Record<string, unknown>),
+        ...nextPayload,
+      };
+      const currentFieldValue = evolvingRecord[fieldKey];
+      const expectsArray =
+        Array.isArray(currentFieldValue) ||
+        ["tags", "quirks", "coreTraits", "virtues", "flaws"].includes(fieldKey);
+      const expectsNumber = fieldKey === "heat" || fieldKey === "lastTouchedChapter";
+      const fieldPrompt = buildPromptEnvelope(
+        `Fill ${spec.label} field ${fieldKey}`,
+        input.project,
+        context,
+        [
+          "Return strict JSON only.",
+          expectsArray
+            ? 'Use this shape: {"value":["...","..."]}'
+            : expectsNumber
+              ? 'Use this shape: {"value": 3}'
+              : 'Use this shape: {"value":"..."}',
+          `You are filling one field in a Story Bible ${spec.label.toLowerCase()} record.`,
+          "First understand the whole record. Then write only the missing field so it matches the existing canon and the sibling fields already filled.",
+          "Do not rewrite the whole record. Do not explain your reasoning. Return only the final field value.",
+          `Field to fill: ${fieldKey}.`,
+          `Field description: ${fieldSpec.description}`,
+          `Example: ${fieldSpec.example}`,
+          seedLabel ? `Entity label anchor: ${seedLabel}` : "",
+          "Current evolving entity record:",
+          JSON.stringify(evolvingRecord, null, 2),
+          "User instruction:",
+          input.message,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        `Current AI role: ${input.role}.`,
+      );
+
+      const fieldRaw = await generateTextWithProvider(fieldPrompt, {
+        maxOutputTokens: expectsArray ? 600 : expectsNumber ? 300 : 800,
+      });
+      const fieldParsed = fieldRaw ? parseJsonObject(fieldRaw) : null;
+      const fieldValueRaw =
+        fieldParsed && "value" in fieldParsed ? fieldParsed.value : fieldParsed?.[fieldKey] ?? fieldParsed;
+      const normalizedField = cleanStoryBiblePayload({ [fieldKey]: fieldValueRaw }, entityType)[fieldKey];
+
+      const shouldKeepValue =
+        Array.isArray(normalizedField)
+          ? normalizedField.length > 0
+          : typeof normalizedField === "number"
+            ? Number.isFinite(normalizedField)
+            : normalizedField && typeof normalizedField === "object"
+              ? Object.keys(normalizedField as Record<string, unknown>).length > 0
+              : Boolean(String(normalizedField ?? "").trim());
+
+      if (shouldKeepValue) {
+        nextPayload[fieldKey] = normalizedField;
       }
     }
   }
