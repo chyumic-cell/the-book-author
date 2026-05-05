@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { generateChapterDraft, generateChapterOutline } from "@/lib/openai";
@@ -10,7 +11,16 @@ import { syncChapterToStoryState } from "@/lib/story-sync";
 import { updateChapter } from "@/lib/story-service";
 import type { AiAutopilotMode, AutopilotRunRecord, ProjectWorkspace } from "@/types/storyforge";
 
-const autopilotConfigRoot = process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
+function resolveAutopilotConfigRoot() {
+  // Vercel deployments run from a read-only bundle, so hosted runs need temp storage.
+  if (process.env.VERCEL || process.env.THE_BOOK_AUTHOR_HOSTED_BETA === "true" || process.env.STORYFORGE_HOSTED_BETA === "true") {
+    return os.tmpdir();
+  }
+
+  return process.env.THE_BOOK_AUTHOR_CONFIG_DIR || process.env.STORYFORGE_CONFIG_DIR || process.cwd();
+}
+
+const autopilotConfigRoot = resolveAutopilotConfigRoot();
 const autopilotConfigPath = path.join(autopilotConfigRoot, ".the-book-author.autopilot.json");
 
 type AutopilotStore = {
@@ -54,6 +64,7 @@ async function readStore(): Promise<AutopilotStore> {
 }
 
 async function writeStore(store: AutopilotStore) {
+  await fs.mkdir(path.dirname(autopilotConfigPath), { recursive: true });
   await fs.writeFile(autopilotConfigPath, JSON.stringify(store, null, 2), "utf8");
 }
 
