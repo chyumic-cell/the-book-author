@@ -1,7 +1,7 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
 import { cleanGeneratedText, cleanSummaryText } from "@/lib/ai-output";
 import { buildContextPackage } from "@/lib/memory";
-import { generateChapterOutline, generateTextWithProvider, interpretCharacterProfile } from "@/lib/openai";
+import { generateTextWithProvider } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { mutateStoryBible, updateChapter } from "@/lib/story-service";
@@ -21,45 +21,12 @@ type StoryBibleEntityType =
   | "timelineEvent"
   | "workingNote";
 
-const characterArrayPaths = new Set([
-  "quirks",
-  "tags",
-  "dossier.basicIdentity.nicknames",
-  "dossier.personalityBehavior.coreTraits",
-  "dossier.personalityBehavior.virtues",
-  "dossier.personalityBehavior.flaws",
-  "dossier.motivationStory.secrets",
-  "dossier.speechLanguage.otherLanguages",
-  "dossier.speechLanguage.descriptors",
-  "dossier.speechLanguage.repeatedPhrases",
-  "dossier.speechLanguage.favoriteExpressions",
-  "dossier.bodyPresence.distinguishingFeatures",
-  "dossier.bodyPresence.habitsTics",
-  "dossier.relationshipDynamics.friends",
-  "dossier.relationshipDynamics.enemies",
-  "dossier.relationshipDynamics.rivals",
-  "dossier.relationshipDynamics.loversExes",
-  "dossier.relationshipDynamics.family",
-]);
-
 const chapterListFields = new Set<AssistFieldKey>([
   "keyBeats",
   "requiredInclusions",
   "forbiddenElements",
   "sceneList",
 ]);
-
-const chapterAutofillFields: AssistFieldKey[] = [
-  "title",
-  "purpose",
-  "currentBeat",
-  "keyBeats",
-  "requiredInclusions",
-  "forbiddenElements",
-  "desiredMood",
-  "sceneList",
-  "outline",
-];
 
 function splitLines(value: string) {
   return value
@@ -244,45 +211,6 @@ function normalizeChapterFieldUpdate(fieldKey: AssistFieldKey, currentValue: str
   return { [fieldKey]: cleanFieldText(fieldKey, generated, currentValue) } as Parameters<typeof updateChapter>[1];
 }
 
-function normalizeChapterAutofillValue(
-  fieldKey: AssistFieldKey,
-  currentValue: string,
-  rawValue: unknown,
-  chapterNumber: number,
-) {
-  if (typeof rawValue !== "string" && !Array.isArray(rawValue)) {
-    return null;
-  }
-
-  const candidate = Array.isArray(rawValue) ? rawValue.join("\n") : rawValue;
-  const cleaned =
-    fieldKey === "title"
-      ? cleanTitle(String(candidate), currentValue || `Chapter ${chapterNumber}`)
-      : cleanFieldText(fieldKey, String(candidate), currentValue);
-
-  if (!cleaned || looksLikeMetaOutput(cleaned)) {
-    return null;
-  }
-
-  if (fieldKey === "title" && looksLikeWeakTitle(cleaned)) {
-    return null;
-  }
-
-  return chapterListFields.has(fieldKey) ? splitLines(cleaned) : cleaned;
-}
-
-function normalizeStoryBibleAutofillValue(fieldKey: string, currentValue: string, rawValue: unknown) {
-  if (typeof rawValue !== "string" && !Array.isArray(rawValue)) {
-    return null;
-  }
-  const candidate = Array.isArray(rawValue) ? rawValue.join("\n") : rawValue;
-  const cleaned = cleanFieldText(fieldKey, String(candidate), currentValue);
-  if (!cleaned || looksLikeMetaOutput(cleaned)) {
-    return null;
-  }
-  return fieldKey === "tags" ? splitLines(cleaned) : cleaned;
-}
-
 function parseJsonObject(raw: string) {
   const trimmed = raw.replace(/```json|```/gi, "").trim();
   const candidates = [trimmed];
@@ -306,75 +234,6 @@ function parseJsonObject(raw: string) {
   return null;
 }
 
-function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const parts = path.split(".");
-  let cursor = target;
-  parts.forEach((part, index) => {
-    if (index === parts.length - 1) {
-      cursor[part] = value;
-      return;
-    }
-    const next = cursor[part];
-    if (!next || typeof next !== "object" || Array.isArray(next)) {
-      cursor[part] = {};
-    }
-    cursor = cursor[part] as Record<string, unknown>;
-  });
-}
-
-function buildCharacterAutofillPayload(
-  suggestions: Array<{ key: string; value: string }>,
-  currentCharacter: CharacterRecord,
-) {
-  const payload: Record<string, unknown> = {};
-
-  for (const suggestion of suggestions) {
-    const key = suggestion.key.trim();
-    const value = suggestion.value.trim();
-    if (!key || !value) {
-      continue;
-    }
-
-    setNestedValue(
-      payload,
-      key,
-      characterArrayPaths.has(key) ? splitLines(value) : value,
-    );
-  }
-
-  const quickProfile = (payload.quickProfile as Record<string, unknown> | undefined) ?? null;
-  const dossier = (payload.dossier as Record<string, unknown> | undefined) ?? null;
-  const motivationStory =
-    dossier && typeof dossier === "object"
-      ? ((dossier.motivationStory as Record<string, unknown> | undefined) ?? null)
-      : null;
-
-  const inferredProfession =
-    (quickProfile && typeof quickProfile.profession === "string" ? String(quickProfile.profession).trim() : "") ||
-    currentCharacter.quickProfile.profession.trim() ||
-    currentCharacter.dossier.lifePosition.profession.trim() ||
-    currentCharacter.role.trim() ||
-    "";
-
-  if (!String(payload.role ?? "").trim() && inferredProfession) {
-    payload.role = inferredProfession;
-  }
-
-  if (!String(payload.goal ?? "").trim() && motivationStory && typeof motivationStory.shortTermGoal === "string") {
-    payload.goal = String(motivationStory.shortTermGoal).trim();
-  }
-
-  if (inferredProfession) {
-    if (!quickProfile || typeof quickProfile !== "object") {
-      payload.quickProfile = { profession: inferredProfession };
-    } else if (!String(quickProfile.profession ?? "").trim()) {
-      quickProfile.profession = inferredProfession;
-    }
-  }
-
-  return payload;
-}
-
 function getEntityValue(entity: Record<string, unknown>, fieldKey: string) {
   const value = entity[fieldKey];
   if (Array.isArray(value)) {
@@ -391,25 +250,167 @@ function normalizeStoryBibleFieldValue(fieldKey: string, raw: string, currentVal
   return cleaned;
 }
 
-function splitStructuredOutlineLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
-    .filter(Boolean);
+function normalizeDraftFieldValue(raw: unknown) {
+  if (Array.isArray(raw)) {
+    return raw.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : 0;
+  }
+  if (typeof raw === "boolean") {
+    return raw;
+  }
+  if (raw && typeof raw === "object") {
+    return raw;
+  }
+  return String(raw ?? "");
 }
 
-function applyChapterPayloadToLocalChapter(
+function buildChapterDraftPatchFromRecord(draftItem?: Record<string, unknown>) {
+  if (!draftItem) {
+    return {};
+  }
+
+  const patch: Record<string, unknown> = {};
+  for (const fieldKey of [
+    "title",
+    "purpose",
+    "currentBeat",
+    "targetWordCount",
+    "desiredMood",
+    "outline",
+    "draft",
+    "notes",
+    "keyBeats",
+    "requiredInclusions",
+    "forbiddenElements",
+    "sceneList",
+  ] as const) {
+    if (!(fieldKey in draftItem)) {
+      continue;
+    }
+    const raw = draftItem[fieldKey];
+    patch[fieldKey] = chapterListFields.has(fieldKey as AssistFieldKey)
+      ? (Array.isArray(raw) ? raw.map((entry) => String(entry).trim()).filter(Boolean) : splitLines(String(raw ?? "")))
+      : fieldKey === "targetWordCount"
+        ? Number(raw ?? 0)
+        : String(raw ?? "");
+  }
+
+  return patch as Parameters<typeof updateChapter>[1];
+}
+
+function mergeDraftIntoChapter(
   chapter: ProjectWorkspace["chapters"][number],
-  payload: Record<string, unknown>,
+  draftItem?: Record<string, unknown>,
 ) {
+  if (!draftItem) {
+    return chapter;
+  }
+
   return {
     ...chapter,
-    ...payload,
-    keyBeats: Array.isArray(payload.keyBeats) ? payload.keyBeats as string[] : chapter.keyBeats,
-    requiredInclusions: Array.isArray(payload.requiredInclusions) ? payload.requiredInclusions as string[] : chapter.requiredInclusions,
-    forbiddenElements: Array.isArray(payload.forbiddenElements) ? payload.forbiddenElements as string[] : chapter.forbiddenElements,
-    sceneList: Array.isArray(payload.sceneList) ? payload.sceneList as string[] : chapter.sceneList,
+    ...buildChapterDraftPatchFromRecord(draftItem),
   };
+}
+
+function buildStoryBibleDraftPayload(draftItem?: Record<string, unknown>) {
+  if (!draftItem) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(draftItem)
+      .filter(([key]) => key !== "id")
+      .map(([key, value]) => [key, normalizeDraftFieldValue(value)]),
+  );
+}
+
+function mergeDraftIntoEntity(
+  entity: Record<string, unknown>,
+  draftItem?: Record<string, unknown>,
+) {
+  if (!draftItem) {
+    return entity;
+  }
+
+  return {
+    ...entity,
+    ...buildStoryBibleDraftPayload(draftItem),
+  };
+}
+
+function buildCharacterDraftPayload(draftCharacter?: Record<string, unknown>) {
+  if (!draftCharacter) {
+    return {};
+  }
+
+  const payload: Record<string, unknown> = {};
+  for (const fieldKey of [
+    "name",
+    "role",
+    "archetype",
+    "summary",
+    "goal",
+    "fear",
+    "secret",
+    "wound",
+    "notes",
+  ] as const) {
+    if (fieldKey in draftCharacter) {
+      payload[fieldKey] = String(draftCharacter[fieldKey] ?? "");
+    }
+  }
+  if ("quirks" in draftCharacter) {
+    payload.quirks = Array.isArray(draftCharacter.quirks)
+      ? draftCharacter.quirks.map((entry) => String(entry).trim()).filter(Boolean)
+      : splitLines(String(draftCharacter.quirks ?? ""));
+  }
+  if ("tags" in draftCharacter) {
+    payload.tags = Array.isArray(draftCharacter.tags)
+      ? draftCharacter.tags.map((entry) => String(entry).trim()).filter(Boolean)
+      : splitLines(String(draftCharacter.tags ?? ""));
+  }
+  if ("povEligible" in draftCharacter) {
+    payload.povEligible = Boolean(draftCharacter.povEligible);
+  }
+  for (const nestedKey of ["quickProfile", "dossier", "currentState", "customFields", "pinnedFields"] as const) {
+    if (nestedKey in draftCharacter) {
+      payload[nestedKey] = draftCharacter[nestedKey];
+    }
+  }
+
+  return payload;
+}
+
+function mergeCharacterDraft(
+  character: CharacterRecord,
+  draftCharacter?: Record<string, unknown>,
+): CharacterRecord {
+  if (!draftCharacter) {
+    return character;
+  }
+
+  return {
+    ...character,
+    ...buildCharacterDraftPayload(draftCharacter),
+  } as CharacterRecord;
+}
+
+function characterJsonNeedsRepair(parsed: Record<string, unknown> | null) {
+  if (!parsed) {
+    return true;
+  }
+
+  const dossier = parsed.dossier;
+  if (dossier && typeof dossier === "object") {
+    const freeTextCore = String((dossier as Record<string, unknown>).freeTextCore ?? "").trim();
+    if (freeTextCore && looksLikeMetaOutput(freeTextCore)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function generateSinglePlanningFieldValue(options: {
@@ -435,6 +436,9 @@ async function generateSinglePlanningFieldValue(options: {
       "Update only this one field. Do not write to notes. Do not write to the manuscript unless the target field is the manuscript.",
       "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
       "Do not contradict already written or already planned material. Extend, refine, reconcile, or sharpen it.",
+      currentValue
+        ? "Base the result on what is already written in this exact textbox. Preserve its core idea and improve that existing text instead of wandering away from it."
+        : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
       thinCurrent
         ? "The current field value is blank, generic, or placeholder-level. Replace it with specific canon-safe content. Do not repeat the placeholder wording."
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
@@ -522,6 +526,9 @@ async function generateSingleStoryBibleFieldValue(options: {
       "Update only this exact field on this exact record.",
       "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
       "Do not invent contradictions. Improve what already exists and keep it synchronized with the rest of the project.",
+      currentValue
+        ? "Base the result on what is already written in this exact textbox. Preserve its core idea and improve that existing text instead of drifting into a different record."
+        : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
       thinCurrent
         ? "The current field value is blank, generic, or thin. Replace it with specific canon-safe content instead of repeating the placeholder."
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
@@ -606,6 +613,8 @@ export async function runTargetedPlanningFieldAi(input: {
   fieldKey: AssistFieldKey;
   fieldLabel: string;
   action: PlanningAction;
+  currentValue?: string;
+  draftItem?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
@@ -617,133 +626,14 @@ export async function runTargetedPlanningFieldAi(input: {
     throw new Error("Chapter not found.");
   }
 
-  const currentValue = chapterFieldValue(chapter, input.fieldKey);
-
-  if (input.action === "develop") {
-    const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
-    const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
-    const nextChapter = project.chapters.find((entry) => entry.number === chapter.number + 1) ?? null;
-    const targetFields = chapterAutofillFields.filter((fieldKey) =>
-      fieldKey === input.fieldKey || chapterFieldLooksThin(fieldKey, chapterFieldValue(chapter, fieldKey), chapter.number),
-    );
-    const targetFieldSpecs = CHAPTER_FIELD_SPECS.filter((field) => targetFields.includes(field.key as AssistFieldKey));
-    const developPrompt = buildPromptEnvelope(
-      "Develop chapter runway entry",
-      project,
-      context,
-      [
-        `Target area: Story Skeleton -> Chapter Runway -> ${input.itemTitle || chapter.title || `Chapter ${chapter.number}`}.`,
-        "Complete the chapter runway entry as a synchronized whole, not as isolated fragments.",
-        "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
-        "Keep strong existing content. Improve thin, placeholder, or missing fields.",
-        "Return strict JSON only.",
-        `Fields to fill or improve: ${targetFieldSpecs.map((field) => `${field.label} (${field.key})`).join(", ")}.`,
-        "Use strings for normal text fields and arrays of strings for list fields.",
-        `JSON shape:\n${JSON.stringify(Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, chapterListFields.has(fieldKey) ? ["item one", "item two"] : ""])), null, 2)}`,
-        "Current chapter record:",
-        JSON.stringify(
-          Object.fromEntries(
-            chapterAutofillFields.map((fieldKey) => [fieldKey, chapterFieldValue(chapter, fieldKey)]),
-          ),
-          null,
-          2,
-        ),
-        "Field guidance:",
-        targetFieldSpecs.map((field) => `- ${field.key}: ${field.description}. Example: ${field.example}`).join("\n"),
-        previousChapter
-          ? `Previous chapter context: Chapter ${previousChapter.number} - ${previousChapter.title}. Purpose: ${previousChapter.purpose}`
-          : "",
-        nextChapter
-          ? `Next chapter target: Chapter ${nextChapter.number} - ${nextChapter.title}. Purpose: ${nextChapter.purpose}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      "You are a commercially sharp outlining architect. Return only valid JSON for the target chapter runway record.",
-    );
-
-    const payload: Parameters<typeof updateChapter>[1] = {};
-    const rawDevelop = await generateTextWithProvider(developPrompt, { maxOutputTokens: 2200 });
-    const parsed = rawDevelop ? parseJsonObject(rawDevelop) : null;
-    if (parsed) {
-      for (const fieldKey of targetFields) {
-        const normalized = normalizeChapterAutofillValue(
-          fieldKey,
-          chapterFieldValue(chapter, fieldKey),
-          parsed[fieldKey],
-          chapter.number,
-        );
-        if (normalized == null) {
-          continue;
-        }
-        (payload as Record<string, unknown>)[fieldKey] = normalized;
-      }
-    }
-
-    let workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
-
-    if (targetFields.includes("outline") && chapterFieldLooksThin("outline", chapterFieldValue(workingChapter, "outline"), chapter.number)) {
-      const generatedOutline = await generateChapterOutline(project.id, chapter.id, "Build a concrete commercially strong chapter outline that can support the chapter runway fields.").catch(() => null);
-      const outlineContent = generatedOutline?.content?.trim() ?? "";
-      if (outlineContent && !chapterFieldLooksThin("outline", outlineContent, chapter.number)) {
-        payload.outline = cleanFieldText("outline", outlineContent, chapter.outline);
-        const outlineLines = splitStructuredOutlineLines(outlineContent);
-        if (outlineLines.length >= 3) {
-          if (!payload.sceneList || (Array.isArray(payload.sceneList) && payload.sceneList.length <= 1)) {
-            payload.sceneList = outlineLines.slice(0, 8);
-          }
-          if (!payload.keyBeats || (Array.isArray(payload.keyBeats) && payload.keyBeats.length <= 1)) {
-            payload.keyBeats = outlineLines.slice(0, 6);
-          }
-        }
-        workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
-      }
-    }
-
-    const missingFields = targetFields.filter((fieldKey) => {
-      const asText = chapterFieldValue(workingChapter, fieldKey);
-      return chapterFieldLooksThin(fieldKey, asText, chapter.number);
-    });
-
-    for (const fieldKey of missingFields) {
-      const generated = await generateSinglePlanningFieldValue({
-        project,
-        chapter: workingChapter,
-        fieldKey,
-        fieldLabel: CHAPTER_FIELD_SPECS.find((field) => field.key === fieldKey)?.label ?? fieldKey,
-        action: "develop",
-      });
-      if (!generated) {
-        continue;
-      }
-      const normalized = normalizeChapterAutofillValue(
-        fieldKey,
-        chapterFieldValue(chapter, fieldKey),
-        generated,
-        chapter.number,
-      );
-      if (normalized != null) {
-        (payload as Record<string, unknown>)[fieldKey] = normalized;
-        workingChapter = applyChapterPayloadToLocalChapter(chapter, payload);
-      }
-    }
-
-    if (Object.keys(payload).length === 0) {
-      throw new Error("AI returned chapter-runway content, but none of it was usable.");
-    }
-
-    await updateChapter(chapter.id, payload);
-
-    const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
-    return {
-      project: nextProject,
-      contextPackage: buildContextPackage(nextProject, chapter.id),
-    };
-  }
+  const workingChapter = mergeDraftIntoChapter(chapter, input.draftItem);
+  const currentValue = input.currentValue?.trim()
+    ? input.currentValue
+    : chapterFieldValue(workingChapter, input.fieldKey);
 
   const generated = await generateSinglePlanningFieldValue({
     project,
-    chapter,
+    chapter: workingChapter,
     fieldKey: input.fieldKey,
     fieldLabel: input.fieldLabel,
     action: input.action,
@@ -752,7 +642,10 @@ export async function runTargetedPlanningFieldAi(input: {
     throw new Error("AI did not return any visible planning text.");
   }
 
-  await updateChapter(chapter.id, normalizeChapterFieldUpdate(input.fieldKey, currentValue, generated));
+  await updateChapter(chapter.id, {
+    ...buildChapterDraftPatchFromRecord(input.draftItem),
+    ...normalizeChapterFieldUpdate(input.fieldKey, currentValue, generated),
+  });
   const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
   return {
     project: nextProject,
@@ -767,6 +660,8 @@ export async function runTargetedStoryBibleFieldAi(input: {
   fieldKey: string;
   fieldLabel: string;
   action: PlanningAction;
+  currentValue?: string;
+  draftItem?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
@@ -778,216 +673,20 @@ export async function runTargetedStoryBibleFieldAi(input: {
     throw new Error("Story Bible record not found.");
   }
 
-  const spec = STORY_BIBLE_ENTITY_SPECS.find((entry) => entry.entityType === match.entityType);
   const contextChapterId = lastUsefulChapterId(project);
   if (!contextChapterId) {
     throw new Error("Project has no chapter context yet.");
   }
 
-  const currentValue = getEntityValue(match.entity, input.fieldKey);
-
-  if (input.action === "develop") {
-    const context = buildContextPackage(project, contextChapterId, currentValue);
-    if (match.entityType === "character") {
-      await runTargetedCharacterAi({
-        projectId: input.projectId,
-        characterId: input.itemId,
-        action: "develop-dossier",
-      }).catch(() => null);
-      const refreshedProject = (await getProjectWorkspace(input.projectId)) ?? project;
-      const refreshedCharacter =
-        refreshedProject.characters.find((entry) => entry.id === input.itemId) ??
-        (match.entity as unknown as CharacterRecord);
-      const character = refreshedCharacter;
-      const refreshedContext = buildContextPackage(
-        refreshedProject,
-        contextChapterId,
-        character.summary || character.dossier.freeTextCore || currentValue,
-      );
-      const prompt = buildPromptEnvelope(
-        "Develop character record",
-        refreshedProject,
-        refreshedContext,
-        [
-          `Target area: Story Bible -> Character -> ${character.name}.`,
-          "Fill the important character-facing text fields as a synchronized whole.",
-          "Use all existing manuscript, chapter plans, story bible, memory, continuity, and series canon as binding truth.",
-          "Replace generic placeholders with specific content. Do not return commentary.",
-          "Return strict JSON only.",
-          'JSON shape:\n{"role":"","archetype":"","summary":"","goal":"","fear":"","secret":"","wound":"","notes":""}',
-          "Current character snapshot:",
-          JSON.stringify(
-            {
-              name: character.name,
-              role: character.role,
-              archetype: character.archetype,
-              summary: character.summary,
-              goal: character.goal,
-              fear: character.fear,
-              secret: character.secret,
-              wound: character.wound,
-              notes: character.notes,
-              dossier: character.dossier.freeTextCore,
-              currentState: character.currentState,
-            },
-            null,
-            2,
-          ),
-        ].join("\n\n"),
-        "Return only valid JSON for the target character fields.",
-      );
-      const rawCharacterDevelop = await generateTextWithProvider(prompt, { maxOutputTokens: 1400 });
-      const parsedCharacterDevelop = rawCharacterDevelop ? parseJsonObject(rawCharacterDevelop) : null;
-      const payload: Record<string, unknown> = {};
-      const characterFields = ["role", "archetype", "summary", "goal", "fear", "secret", "wound", "notes"];
-      if (parsedCharacterDevelop) {
-        for (const fieldKey of characterFields) {
-          const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), parsedCharacterDevelop[fieldKey]);
-          if (normalized != null) {
-            payload[fieldKey] = normalized;
-          }
-        }
-      }
-      for (const fieldKey of characterFields) {
-        const current = Object.prototype.hasOwnProperty.call(payload, fieldKey) ? payload[fieldKey] : getEntityValue(match.entity, fieldKey);
-        const asText = Array.isArray(current) ? current.join("\n") : String(current ?? "");
-        if (!storyBibleFieldLooksThin(fieldKey, asText)) {
-          continue;
-        }
-        const generated = await generateSingleStoryBibleFieldValue({
-          project: refreshedProject,
-          entityType: match.entityType,
-          entity: character as unknown as Record<string, unknown>,
-          itemTitle: input.itemTitle,
-          fieldKey,
-          fieldLabel: spec?.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey,
-          action: "develop",
-          contextChapterId,
-        });
-        if (!generated) {
-          continue;
-        }
-        const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), generated);
-        if (normalized != null) {
-          payload[fieldKey] = normalized;
-        }
-      }
-      if (Object.keys(payload).length === 0) {
-        throw new Error("AI returned character content, but none of it was usable.");
-      }
-      await mutateStoryBible(
-        refreshedProject.id,
-        {
-          entityType: match.entityType,
-          id: input.itemId,
-          payload,
-        },
-        "PATCH",
-      );
-      const nextProject = (await getProjectWorkspace(input.projectId)) ?? refreshedProject;
-      return {
-        project: nextProject,
-        contextPackage: buildContextPackage(nextProject, contextChapterId),
-      };
-    }
-    const targetFields =
-      spec?.fields
-        .filter((field) => field.key === input.fieldKey || storyBibleFieldLooksThin(field.key, getEntityValue(match.entity, field.key)))
-        .map((field) => field.key) ?? [input.fieldKey];
-    const targetFieldSpecs = spec?.fields.filter((field) => targetFields.includes(field.key)) ?? [];
-    const developPrompt = buildPromptEnvelope(
-      `Develop ${spec?.label ?? "Story Bible entry"}`,
-      project,
-      context,
-      [
-        `Target area: Story Bible -> ${spec?.label ?? "Entry"} -> ${input.itemTitle || String(match.entity.name ?? match.entity.title ?? match.entity.label ?? "Untitled")}.`,
-        "Develop this record as a synchronized canon entry, not as a single-field note.",
-        "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
-        "Keep strong existing content. Fill blank or thin fields where the canon supports them.",
-        "Return strict JSON only.",
-        `Fields to fill or improve: ${targetFieldSpecs.map((field) => `${field.label} (${field.key})`).join(", ")}.`,
-        "Use strings for normal fields and arrays of strings for tags.",
-        `JSON shape:\n${JSON.stringify(Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, fieldKey === "tags" ? ["tag-one", "tag-two"] : ""])), null, 2)}`,
-        "Current entry:",
-        JSON.stringify(
-          Object.fromEntries(targetFields.map((fieldKey) => [fieldKey, getEntityValue(match.entity, fieldKey)])),
-          null,
-          2,
-        ),
-        "Field guidance:",
-        targetFieldSpecs.map((field) => `- ${field.key}: ${field.description}. Example: ${field.example}`).join("\n"),
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      "You are a canon-safe story bible architect. Return only valid JSON for the target record.",
-    );
-
-    const payload: Record<string, unknown> = {};
-    const rawDevelop = await generateTextWithProvider(developPrompt, { maxOutputTokens: 1800 });
-    const parsed = rawDevelop ? parseJsonObject(rawDevelop) : null;
-    if (parsed) {
-      for (const fieldKey of targetFields) {
-        const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), parsed[fieldKey]);
-        if (normalized == null) {
-          continue;
-        }
-        payload[fieldKey] = normalized;
-      }
-    }
-
-    const missingFields = targetFields.filter((fieldKey) => {
-      const current = Object.prototype.hasOwnProperty.call(payload, fieldKey)
-        ? payload[fieldKey]
-        : getEntityValue(match.entity, fieldKey);
-      const asText = Array.isArray(current) ? current.join("\n") : String(current ?? "");
-      return storyBibleFieldLooksThin(fieldKey, asText);
-    });
-
-    for (const fieldKey of missingFields) {
-      const generated = await generateSingleStoryBibleFieldValue({
-        project,
-        entityType: match.entityType,
-        entity: match.entity,
-        itemTitle: input.itemTitle,
-        fieldKey,
-        fieldLabel: spec?.fields.find((field) => field.key === fieldKey)?.label ?? fieldKey,
-        action: "develop",
-        contextChapterId,
-      });
-      if (!generated) {
-        continue;
-      }
-      const normalized = normalizeStoryBibleAutofillValue(fieldKey, getEntityValue(match.entity, fieldKey), generated);
-      if (normalized != null) {
-        payload[fieldKey] = normalized;
-      }
-    }
-
-    if (Object.keys(payload).length === 0) {
-      throw new Error("AI returned Story Bible content, but none of it was usable.");
-    }
-
-    await mutateStoryBible(
-      project.id,
-      {
-        entityType: match.entityType,
-        id: input.itemId,
-        payload,
-      },
-      "PATCH",
-    );
-
-    const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
-    return {
-      project: nextProject,
-      contextPackage: buildContextPackage(nextProject, contextChapterId),
-    };
-  }
+  const workingEntity = mergeDraftIntoEntity(match.entity, input.draftItem);
+  const currentValue = input.currentValue?.trim()
+    ? input.currentValue
+    : getEntityValue(workingEntity, input.fieldKey);
 
   const generated = await generateSingleStoryBibleFieldValue({
     project,
     entityType: match.entityType,
-    entity: match.entity,
+    entity: workingEntity,
     itemTitle: input.itemTitle,
     fieldKey: input.fieldKey,
     fieldLabel: input.fieldLabel,
@@ -1000,13 +699,14 @@ export async function runTargetedStoryBibleFieldAi(input: {
 
   await mutateStoryBible(
     project.id,
-    {
-      entityType: match.entityType,
-      id: input.itemId,
-      payload: {
-        [input.fieldKey]: normalizeStoryBibleFieldValue(input.fieldKey, generated, currentValue),
+      {
+        entityType: match.entityType,
+        id: input.itemId,
+        payload: {
+          ...buildStoryBibleDraftPayload(input.draftItem),
+          [input.fieldKey]: normalizeStoryBibleFieldValue(input.fieldKey, generated, currentValue),
+        },
       },
-    },
     "PATCH",
   );
 
@@ -1017,27 +717,11 @@ export async function runTargetedStoryBibleFieldAi(input: {
   };
 }
 
-function buildCharacterDevelopPayload(parsed: Record<string, unknown>, fallback: CharacterRecord) {
-  const payload: Record<string, unknown> = {};
-  if (typeof parsed.summary === "string" && parsed.summary.trim()) {
-    payload.summary = cleanFieldText("summary", parsed.summary, fallback.summary);
-  }
-  if (parsed.quickProfile && typeof parsed.quickProfile === "object") {
-    payload.quickProfile = parsed.quickProfile;
-  }
-  if (parsed.dossier && typeof parsed.dossier === "object") {
-    payload.dossier = parsed.dossier;
-  }
-  if (parsed.currentState && typeof parsed.currentState === "object") {
-    payload.currentState = parsed.currentState;
-  }
-  return payload;
-}
-
 export async function runTargetedCharacterAi(input: {
   projectId: string;
   characterId: string;
   action: "develop-dossier" | "expand-summary" | "tighten-summary";
+  draftCharacter?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
@@ -1054,7 +738,13 @@ export async function runTargetedCharacterAi(input: {
     throw new Error("Project has no chapter context yet.");
   }
 
-  const context = buildContextPackage(project, contextChapterId, character.summary || character.dossier.freeTextCore);
+  const workingCharacter = mergeCharacterDraft(character, input.draftCharacter);
+  const draftCharacterPayload = buildCharacterDraftPayload(input.draftCharacter);
+  const context = buildContextPackage(
+    project,
+    contextChapterId,
+    workingCharacter.summary || workingCharacter.dossier.freeTextCore || workingCharacter.notes,
+  );
 
   if (input.action !== "develop-dossier") {
     const prompt = buildPromptEnvelope(
@@ -1062,13 +752,16 @@ export async function runTargetedCharacterAi(input: {
       project,
       context,
       [
-        `Target area: Story Bible -> Character Master -> ${character.name} -> Summary.`,
+        `Target area: Story Bible -> Character Master -> ${workingCharacter.name} -> Summary.`,
         "Update only the character summary.",
         "Use all existing manuscript, planning, series, and story-bible context as binding canon.",
         input.action === "expand-summary"
           ? "Expand the summary into a fuller, more specific, more human portrait."
           : "Tighten the summary into a cleaner, shorter, sharper version without losing essential canon.",
-        `Current summary:\n${character.summary || "(blank)"}`,
+        workingCharacter.summary
+          ? "Base the result on the exact summary already written in this textbox. Preserve its core idea while improving it."
+          : "The summary textbox is blank, so you may draft it freely as long as it stays canon-safe.",
+        `Current summary:\n${workingCharacter.summary || "(blank)"}`,
         "Return only the final summary text.",
       ].join("\n\n"),
       "You are a sharp character editor. Return only the revised summary.",
@@ -1084,7 +777,8 @@ export async function runTargetedCharacterAi(input: {
         entityType: "character",
         id: character.id,
         payload: {
-          summary: cleanFieldText("summary", summary, character.summary),
+          ...draftCharacterPayload,
+          summary: cleanFieldText("summary", summary, workingCharacter.summary),
         },
       },
       "PATCH",
@@ -1095,115 +789,123 @@ export async function runTargetedCharacterAi(input: {
       project,
       context,
       [
-        `Target area: Story Bible -> Character Master -> ${character.name}.`,
+        `Target area: Story Bible -> Character Master -> ${workingCharacter.name}.`,
         "Deepen the character into a fuller, more human, more specific canon-safe dossier.",
         "Use the manuscript, chapter plans, story bible, memory, continuity, and series context as binding source of truth.",
+        "Respect what is already written in the character textboxes. Treat those existing entries as the primary source of truth for this character.",
+        "If a field already has useful content, preserve its core idea and sharpen it only when needed. Fill blanks and thin areas instead of overwriting solid existing material.",
         "Do not rewrite other characters. Do not return commentary about what you are doing.",
-        "Write a rich internal character dossier in plain prose.",
-        "Include background, present pressure, goals, fear, wound, loyalties, contradictions, voice habits, and the current emotional state.",
-        "Return only the dossier prose.",
+        "Return strict JSON only with this shape:",
+        '{"summary":"","role":"","goal":"","fear":"","secret":"","wound":"","notes":"","quickProfile":{"age":"","profession":"","placeOfLiving":"","accent":"","speechPattern":""},"dossier":{"freeTextCore":""},"currentState":{"currentKnowledge":"","unknowns":"","emotionalState":"","physicalCondition":"","loyalties":"","recentChanges":"","continuityRisks":"","lastMeaningfulAppearance":""}}',
+        "Only fill fields you can support from the current textboxes plus project canon. Leave a field as its current value if it is already good.",
         "Current character snapshot:",
         JSON.stringify(
           {
-            name: character.name,
-            role: character.role,
-            archetype: character.archetype,
-            summary: character.summary,
-            quickProfile: character.quickProfile,
-            dossier: character.dossier,
-            currentState: character.currentState,
+            name: workingCharacter.name,
+            role: workingCharacter.role,
+            archetype: workingCharacter.archetype,
+            summary: workingCharacter.summary,
+            goal: workingCharacter.goal,
+            fear: workingCharacter.fear,
+            secret: workingCharacter.secret,
+            wound: workingCharacter.wound,
+            notes: workingCharacter.notes,
+            quickProfile: workingCharacter.quickProfile,
+            dossier: workingCharacter.dossier,
+            currentState: workingCharacter.currentState,
           },
           null,
-            2,
-          ),
+          2,
+        ),
         ].join("\n\n"),
-      "You are a character architect. Return only the character dossier prose for the exact target character.",
+      "You are a character architect. Return only strict JSON for the exact target character.",
     );
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 1800 });
-    const developedDossier = cleanGeneratedText(raw ?? "").trim();
-    if (!developedDossier) {
-      throw new Error("AI did not return usable character dossier prose.");
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 950 });
+    let parsed = raw ? parseJsonObject(raw) : null;
+    if (characterJsonNeedsRepair(parsed)) {
+      const repairPrompt = buildPromptEnvelope(
+        "Repair character dossier JSON",
+        project,
+        context,
+        [
+          `Target area: Story Bible -> Character Master -> ${workingCharacter.name}.`,
+          "Your previous answer was not valid strict JSON for this character dossier update.",
+          "Return strict JSON only with this exact shape:",
+          '{"summary":"","role":"","goal":"","fear":"","secret":"","wound":"","notes":"","quickProfile":{"age":"","profession":"","placeOfLiving":"","accent":"","speechPattern":""},"dossier":{"freeTextCore":""},"currentState":{"currentKnowledge":"","unknowns":"","emotionalState":"","physicalCondition":"","loyalties":"","recentChanges":"","continuityRisks":"","lastMeaningfulAppearance":""}}',
+          "Respect the existing textbox content as primary canon. Preserve strong existing entries. Fill blank or thin entries only when project canon supports them.",
+          "Do not explain. Do not preface. Do not include markdown fences.",
+          `Rejected answer:\n${raw ?? ""}`,
+          `Current character snapshot:\n${JSON.stringify(
+            {
+              name: workingCharacter.name,
+              role: workingCharacter.role,
+              summary: workingCharacter.summary,
+              goal: workingCharacter.goal,
+              fear: workingCharacter.fear,
+              secret: workingCharacter.secret,
+              wound: workingCharacter.wound,
+              notes: workingCharacter.notes,
+              quickProfile: workingCharacter.quickProfile,
+              dossier: workingCharacter.dossier,
+              currentState: workingCharacter.currentState,
+            },
+            null,
+            2,
+          )}`,
+        ].join("\n\n"),
+        "Return only strict JSON for the exact target character.",
+      );
+      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 850 });
+      parsed = repaired ? parseJsonObject(repaired) : null;
     }
-    await mutateStoryBible(
-      project.id,
-      {
-        entityType: "character",
-        id: character.id,
-        payload: {
-          dossier: {
-            ...character.dossier,
-            freeTextCore: developedDossier,
-          },
-        },
-      },
-      "PATCH",
-    );
-    const refreshedProject = (await getProjectWorkspace(input.projectId)) ?? project;
-    const refreshedCharacter =
-      refreshedProject.characters.find((entry) => entry.id === character.id) ?? character;
-    const quickProfilePrompt = buildPromptEnvelope(
-      "Extract quick character profile",
-      refreshedProject,
-      context,
-      [
-        `Character: ${character.name}.`,
-        "Return strict JSON only.",
-        '{"age":"","profession":"","placeOfLiving":"","accent":"","speechPattern":""}',
-        "Fill the fields from the dossier and project context. Leave a field blank only if the canon truly does not support a reasonable answer.",
-        `Dossier prose:\n${developedDossier}`,
-      ].join("\n\n"),
-      "Return only JSON for the quick profile.",
-    );
-    const quickProfileRaw = await generateTextWithProvider(quickProfilePrompt, { maxOutputTokens: 220 });
-    const quickProfileParsed = quickProfileRaw ? parseJsonObject(quickProfileRaw) : null;
-    const currentStatePrompt = buildPromptEnvelope(
-      "Extract current character state",
-      refreshedProject,
-      context,
-      [
-        `Character: ${character.name}.`,
-        "Return strict JSON only.",
-        '{"currentKnowledge":"","unknowns":"","emotionalState":"","physicalCondition":"","loyalties":"","recentChanges":"","continuityRisks":"","lastMeaningfulAppearance":""}',
-        "Infer the current state from the dossier and current project canon. Keep it concise and specific.",
-        `Dossier prose:\n${developedDossier}`,
-      ].join("\n\n"),
-      "Return only JSON for the current state.",
-    );
-    const currentStateRaw = await generateTextWithProvider(currentStatePrompt, { maxOutputTokens: 320 });
-    const currentStateParsed = currentStateRaw ? parseJsonObject(currentStateRaw) : null;
-    const suggestions = await interpretCharacterProfile(project.id, character.id);
-    const autofillPayload = buildCharacterAutofillPayload(suggestions, refreshedCharacter);
-    const payload: Record<string, unknown> = {
-      dossier: {
-        ...refreshedCharacter.dossier,
-        freeTextCore: developedDossier,
-      },
-    };
-    if (quickProfileParsed) {
-      payload.quickProfile = quickProfileParsed;
-    }
-    if (currentStateParsed) {
-      payload.currentState = currentStateParsed;
-    }
-    if (String(refreshedCharacter.summary ?? "").trim().length < 40) {
-      payload.summary = cleanFieldText("summary", developedDossier.split(/\n+/)[0] ?? developedDossier, refreshedCharacter.summary);
-    }
+    const fallbackDossier = cleanGeneratedText(raw ?? "").trim();
     const mergedPayload: Record<string, unknown> = {
-      ...autofillPayload,
-      ...payload,
-      quickProfile: {
-        ...((autofillPayload.quickProfile as Record<string, unknown> | undefined) ?? {}),
-        ...((payload.quickProfile as Record<string, unknown> | undefined) ?? {}),
-      },
-      dossier: {
-        ...((autofillPayload.dossier as Record<string, unknown> | undefined) ?? {}),
-        ...((payload.dossier as Record<string, unknown> | undefined) ?? {}),
-      },
-      currentState: {
-        ...((autofillPayload.currentState as Record<string, unknown> | undefined) ?? {}),
-        ...((payload.currentState as Record<string, unknown> | undefined) ?? {}),
-      },
+      ...draftCharacterPayload,
     };
+    if (parsed) {
+      for (const fieldKey of ["summary", "role", "goal", "fear", "secret", "wound", "notes"] as const) {
+        if (typeof parsed[fieldKey] === "string" && String(parsed[fieldKey]).trim()) {
+          mergedPayload[fieldKey] = cleanFieldText(fieldKey, String(parsed[fieldKey]), String((workingCharacter as unknown as Record<string, unknown>)[fieldKey] ?? ""));
+        }
+      }
+      if (parsed.quickProfile && typeof parsed.quickProfile === "object") {
+        mergedPayload.quickProfile = {
+          ...workingCharacter.quickProfile,
+          ...(parsed.quickProfile as Record<string, unknown>),
+        };
+      }
+      if (parsed.dossier && typeof parsed.dossier === "object") {
+        const nextDossier = parsed.dossier as Record<string, unknown>;
+        const cleanedFreeTextCore = typeof nextDossier.freeTextCore === "string"
+          ? cleanGeneratedText(String(nextDossier.freeTextCore)).trim()
+          : "";
+        mergedPayload.dossier = {
+          ...workingCharacter.dossier,
+          ...nextDossier,
+          ...(cleanedFreeTextCore && !looksLikeMetaOutput(cleanedFreeTextCore)
+            ? { freeTextCore: cleanedFreeTextCore }
+            : {}),
+        };
+      }
+      if (parsed.currentState && typeof parsed.currentState === "object") {
+        mergedPayload.currentState = {
+          ...workingCharacter.currentState,
+          ...(parsed.currentState as Record<string, unknown>),
+        };
+      }
+    } else if (fallbackDossier && !looksLikeMetaOutput(fallbackDossier)) {
+      mergedPayload.dossier = {
+        ...workingCharacter.dossier,
+        freeTextCore: fallbackDossier,
+      };
+      if (String(workingCharacter.summary ?? "").trim().length < 40) {
+        mergedPayload.summary = cleanFieldText(
+          "summary",
+          fallbackDossier.split(/\n+/)[0] ?? fallbackDossier,
+          workingCharacter.summary,
+        );
+      }
+    }
     if (Object.keys(mergedPayload).length === 0) {
       throw new Error("AI did not return usable character dossier content.");
     }

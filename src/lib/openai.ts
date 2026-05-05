@@ -6,7 +6,6 @@ import { buildBellCraftReference } from "@/lib/bell-craft-reference";
 import { APP_NAME } from "@/lib/brand";
 import {
   assessManuscriptEnding,
-  cleanGeneratedText,
   cleanInlineSuggestionAgainstContext,
   cleanInlineSuggestionText,
   cleanStructuredText,
@@ -2136,7 +2135,7 @@ export async function interpretCharacterProfile(projectId: string, characterId: 
     "Read the full character snapshot and suggest strong structured dossier upgrades.",
     "Return strict JSON only as an array.",
     'Each item must look like {"key":"quickProfile.speechPattern","label":"Speech pattern","value":"indirect / evasive","reason":"..."}',
-    "Return 12 to 20 useful suggestions when the material supports them, not just two or three tiny edits.",
+    "Return 8 to 12 useful suggestions when the material supports them, not just two or three tiny edits.",
     "Only suggest fields that are meaningfully supported by the character material.",
     "Prefer the fields that are currently empty, thin, generic, or obviously underdeveloped.",
     "Make the suggestions specific enough to materially improve future dialogue, planning, and drafting.",
@@ -2253,7 +2252,7 @@ export async function interpretCharacterProfile(projectId: string, characterId: 
     ),
   ].join("\n\n");
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 3200 });
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 1800 });
   if (!raw) {
     return mockCharacterInterpretation(character);
   }

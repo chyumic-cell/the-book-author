@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { EditableListSection } from "@/components/storyforge/editable-list-section";
 import { BOOK_RULE_TAG, ensureBookRuleTags, isBookRuleNote } from "@/lib/book-rules";
-import type { ProjectWorkspace } from "@/types/storyforge";
+import type { CharacterRecord, ProjectWorkspace } from "@/types/storyforge";
 import type { EditableAiAction } from "@/components/storyforge/editable-list-section";
 
 export function StoryBibleTab({
@@ -32,8 +32,14 @@ export function StoryBibleTab({
     fieldKey: string;
     fieldLabel: string;
     action: EditableAiAction;
+    currentValue: string;
+    draftItem: Record<string, unknown>;
   }) => Promise<void>;
-  onCharacterAiAction: (options: { characterId: string; action: "develop-dossier" | "expand-summary" | "tighten-summary" }) => Promise<void>;
+  onCharacterAiAction: (options: {
+    characterId: string;
+    action: "develop-dossier" | "expand-summary" | "tighten-summary";
+    draftCharacter: CharacterRecord;
+  }) => Promise<void>;
 }) {
   const baseRelationshipDrafts = useMemo(
     () =>

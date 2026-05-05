@@ -210,7 +210,11 @@ export function CharacterMasterView({
     id?: string,
     method?: "POST" | "PATCH" | "DELETE",
   ) => Promise<void>;
-  onAiAction: (options: { characterId: string; action: "develop-dossier" | "expand-summary" | "tighten-summary" }) => Promise<void>;
+  onAiAction: (options: {
+    characterId: string;
+    action: "develop-dossier" | "expand-summary" | "tighten-summary";
+    draftCharacter: CharacterRecord;
+  }) => Promise<void>;
 }) {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(characters[0]?.id ?? null);
   const [drafts, setDrafts] = useState<Record<string, CharacterRecord>>({});
@@ -322,6 +326,23 @@ export function CharacterMasterView({
     await mutateStoryBible("character", { name: "New Character", summary: "Capture the character here." }, undefined, "POST");
   }
 
+  async function handleCharacterAi(action: "develop-dossier" | "expand-summary" | "tighten-summary") {
+    if (!character) {
+      return;
+    }
+
+    await onAiAction({
+      characterId: character.id,
+      action,
+      draftCharacter: draft ?? character,
+    });
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[character.id];
+      return next;
+    });
+  }
+
   return (
     <Card className="grid gap-4" data-testid="character-master">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -340,13 +361,22 @@ export function CharacterMasterView({
           </Button>
           {character ? (
             <>
-              <Button onClick={() => void onAiAction({ characterId: character.id, action: "develop-dossier" })} variant="ghost">
+              <Button
+                onClick={() => void handleCharacterAi("develop-dossier")}
+                variant="ghost"
+              >
                 AI build dossier
               </Button>
-              <Button onClick={() => void onAiAction({ characterId: character.id, action: "expand-summary" })} variant="ghost">
+              <Button
+                onClick={() => void handleCharacterAi("expand-summary")}
+                variant="ghost"
+              >
                 Expand summary
               </Button>
-              <Button onClick={() => void onAiAction({ characterId: character.id, action: "tighten-summary" })} variant="ghost">
+              <Button
+                onClick={() => void handleCharacterAi("tighten-summary")}
+                variant="ghost"
+              >
                 Tighten summary
               </Button>
             </>

@@ -51,6 +51,7 @@ import type {
   AssistActionType,
   BestsellerGuideRecommendation,
   BestsellerGuideReport,
+  CharacterRecord,
   ContextPackage,
   ProjectWorkspace as ProjectWorkspaceData,
 } from "@/types/storyforge";
@@ -974,6 +975,8 @@ export function ProjectWorkspace({
     fieldKey: string;
     fieldLabel: string;
     action: PlanningAiAction;
+    currentValue: string;
+    draftItem: Record<string, unknown>;
   }) {
     const busyKey = `planning-ai:${options.scope}:${options.itemId}:${options.fieldKey}:${options.action}`;
       setBusyAction(busyKey);
@@ -991,6 +994,8 @@ export function ProjectWorkspace({
             fieldKey: options.fieldKey,
             fieldLabel: options.fieldLabel,
             action: options.action,
+            currentValue: options.currentValue,
+            draftItem: options.draftItem,
           }),
         });
 
@@ -1007,6 +1012,7 @@ export function ProjectWorkspace({
   async function handleCharacterAiAction(options: {
     characterId: string;
     action: "develop-dossier" | "expand-summary" | "tighten-summary";
+    draftCharacter: CharacterRecord;
   }) {
     const targetCharacter = project.characters.find((entry) => entry.id === options.characterId);
     if (!targetCharacter) {
@@ -1026,6 +1032,7 @@ export function ProjectWorkspace({
             mode: "character",
             characterId: options.characterId,
             action: options.action,
+            draftCharacter: options.draftCharacter,
           }),
         });
 

@@ -187,11 +187,14 @@ export const targetedFieldAiSchema = z.object({
   fieldKey: z.string().min(1),
   fieldLabel: z.string().optional().default(""),
   action: z.enum(["develop", "expand", "tighten"]),
+  currentValue: z.string().optional().default(""),
+  draftItem: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const targetedCharacterAiSchema = z.object({
   characterId: z.string().min(1),
   action: z.enum(["develop-dossier", "expand-summary", "tighten-summary"]),
+  draftCharacter: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const autopilotRequestSchema = z.object({

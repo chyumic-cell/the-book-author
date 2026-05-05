@@ -924,6 +924,28 @@ function shouldAutofillCharacterRecord(
   );
 }
 
+function characterRecordNeedsHeavyAutofill(character: ProjectWorkspace["characters"][number] | null) {
+  if (!character) {
+    return true;
+  }
+
+  const summaryLength = character.summary.trim().length;
+  const goalLength = character.goal.trim().length;
+  const roleLength = character.role.trim().length;
+  const quickProfileKeys = Object.keys(character.quickProfile ?? {}).length;
+  const dossierKeys = Object.keys(character.dossier ?? {}).length;
+  const currentStateKeys = Object.keys(character.currentState ?? {}).length;
+
+  return (
+    summaryLength < 80 ||
+    goalLength < 30 ||
+    roleLength < 6 ||
+    quickProfileKeys < 3 ||
+    dossierKeys < 5 ||
+    currentStateKeys < 4
+  );
+}
+
 function shouldAutofillPlotThreadRecord(payload: Record<string, unknown>, existingEntity: unknown) {
   const title = String(payload.title ?? (existingEntity && typeof existingEntity === "object" && "title" in existingEntity ? (existingEntity as { title?: unknown }).title ?? "" : "")).trim();
   if (!title) {
@@ -1924,6 +1946,46 @@ function planClearlyNeedsWritableActions(input: {
   return /\b(add|apply|build|change|create|draft|expand|fill|generate|give|improve|outline|plan|rewrite|set|update|write)\b/i.test(
     input.message,
   );
+}
+
+function shouldSkipLivePlan(input: {
+  message: string;
+  scope: ProjectChatScope;
+  applyChanges: boolean;
+  intent: AssistantIntent;
+}) {
+  if (!input.applyChanges) {
+    return false;
+  }
+
+  const lower = input.message.toLowerCase();
+  const isStructuredScope =
+    input.scope === "SKELETON" ||
+    input.scope === "STORY_BIBLE" ||
+    input.scope === "PROJECT";
+  const isObviousStructuredRequest =
+    input.intent.wantsFieldAutofill ||
+    (input.scope === "STORY_BIBLE" &&
+      (lower.includes("character") ||
+        lower.includes("plot thread") ||
+        lower.includes("mystery") ||
+        lower.includes("location") ||
+        lower.includes("faction") ||
+        lower.includes("timeline") ||
+        lower.includes("book rule") ||
+        lower.includes("world rule"))) ||
+    (input.scope === "SKELETON" &&
+      (input.intent.wantsOutline ||
+        input.intent.wantsTitles ||
+        input.intent.wantsPurpose ||
+        input.intent.wantsCurrentBeat ||
+        input.intent.wantsKeyBeats ||
+        input.intent.wantsSceneList ||
+        input.intent.wantsRequiredInclusions ||
+        input.intent.wantsForbiddenElements ||
+        input.intent.wantsDesiredMood));
+
+  return isStructuredScope && isObviousStructuredRequest;
 }
 
 function planHasChapterFieldAction(plan: AssistantPlan, fieldKey: AssistFieldKey) {
@@ -2975,7 +3037,7 @@ async function buildLivePlan(input: {
     input.message,
   ].join("\n\n");
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 2200 });
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 1200 });
   if (!raw) {
     return null;
   }
@@ -3668,6 +3730,20 @@ async function materializeStoryBibleEntityAction(input: {
     existingEntity && typeof existingEntity === "object"
       ? existingEntity
       : {};
+  const characterFastFieldGuide = [
+    "- name: exact character name",
+    "- role: short story function or social role",
+    "- summary: 2 to 4 sentences only",
+    "- goal / fear / secret / wound: one sharp sentence each",
+    "- notes: a short practical writer note block",
+    "- quickProfile: profession, placeOfLiving, accent, speechPattern",
+    "- dossier.basicIdentity: only the most useful identity/worldview fields",
+    "- dossier.lifePosition: profession, socialClass, educationLevel, reputation",
+    "- dossier.personalityBehavior: coreTraits, virtues, flaws, emotionalTendencies, conflictStyle, projectedImage, trueNature, hiddenSelf",
+    "- dossier.motivationStory: shortTermGoal, longTermGoal, internalConflict, externalConflict, relationshipToMainConflict",
+    "- dossier.speechLanguage: formalityLevel, directness, rhythm, descriptors, angrySpeech, scaredSpeech, lyingSpeech, superiorSpeech, inferiorSpeech, lovedOnesSpeech",
+    "- currentState: currentKnowledge, unknowns, emotionalState, physicalCondition, loyalties, recentChanges, continuityRisks",
+  ];
   const prompt = buildPromptEnvelope(
     `Update ${spec.label}`,
     input.project,
@@ -3682,11 +3758,13 @@ async function materializeStoryBibleEntityAction(input: {
       "If the request is to deepen or improve an existing entity, enrich it substantially rather than making tiny cosmetic additions.",
       "Treat existing story-bible entries, chapter history, memory, continuity, and series canon as source-of-truth context. Do not drift away from those facts.",
       entityType === "character"
-        ? "For character work, aim for a genuinely usable record: include top-level summary and role when possible, plus meaningful quickProfile, dossier, and currentState content rather than leaving them skeletal."
+        ? "For character work, aim for a genuinely usable record: include top-level summary and role when possible, plus meaningful quickProfile, dossier, and currentState content rather than leaving them skeletal. Keep it compact and high-value. Do not try to fill every possible microscopic subfield. Prefer a fast, usable dossier over an encyclopedic one."
         : "",
       seedLabel ? `Use this exact entity name/label where relevant: ${seedLabel}.` : "",
       "Field guide:",
-      ...spec.fields.map((field) => `- ${field.key}: ${field.description} Example: ${field.example}`),
+      ...(entityType === "character"
+        ? characterFastFieldGuide
+        : spec.fields.map((field) => `- ${field.key}: ${field.description} Example: ${field.example}`)),
       "Current entity snapshot:",
       JSON.stringify(currentSnapshot, null, 2),
       "User instruction:",
@@ -3694,7 +3772,7 @@ async function materializeStoryBibleEntityAction(input: {
     ].join("\n\n"),
     `Current AI role: ${input.role}.`,
   );
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: entityType === "character" ? 1800 : 1100 });
+  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: entityType === "character" ? 800 : 900 });
   const parsed = raw ? parseJsonObject(raw) : null;
   let nextPayload = cleanStoryBiblePayload(
     parsed && typeof parsed.payload === "object" && parsed.payload ? (parsed.payload as Record<string, unknown>) : parsed ?? {},
@@ -3729,7 +3807,7 @@ async function materializeStoryBibleEntityAction(input: {
       `Current AI role: ${input.role}.`,
     );
     const emergencyRaw = await generateTextWithProvider(emergencyPrompt, {
-      maxOutputTokens: entityType === "character" ? 1600 : 1000,
+      maxOutputTokens: entityType === "character" ? 700 : 800,
     });
     const emergencyParsed = emergencyRaw ? parseJsonObject(emergencyRaw) : null;
     nextPayload = cleanStoryBiblePayload(emergencyParsed ?? {}, entityType);
@@ -3781,9 +3859,11 @@ async function materializeStoryBibleEntityAction(input: {
   }
 
   const wantsComprehensiveStoryBibleFill =
-    requestSignalsFieldAutofill(lowerMessage) ||
     (entityType === "character" && shouldAutofillCharacterRecord(nextPayload, existingEntity)) ||
-    (entityType === "plotThread" && shouldAutofillPlotThreadRecord(nextPayload, existingEntity));
+    (entityType === "plotThread" && shouldAutofillPlotThreadRecord(nextPayload, existingEntity)) ||
+    (requestSignalsFieldAutofill(lowerMessage) &&
+      entityType !== "character" &&
+      entityType !== "plotThread");
 
   if (wantsComprehensiveStoryBibleFill) {
     const preferredFieldOrder =
@@ -4614,18 +4694,20 @@ async function applyActions(
         if (characterId) {
           await refreshWorkingProject();
           const updatedCharacter = workingProject.characters.find((entry) => entry.id === characterId) ?? null;
-          const suggestions = await interpretCharacterProfile(workingProject.id, characterId);
-          const autofillPayload = buildCharacterAutofillPayload(suggestions, updatedCharacter);
-          if (Object.keys(autofillPayload).length > 0) {
-            await mutateStoryBible(
-              workingProject.id,
-              {
-                entityType: "character",
-                id: characterId,
-                payload: autofillPayload,
-              },
-              "PATCH",
-            );
+          if (characterRecordNeedsHeavyAutofill(updatedCharacter)) {
+            const suggestions = await interpretCharacterProfile(workingProject.id, characterId);
+            const autofillPayload = buildCharacterAutofillPayload(suggestions, updatedCharacter);
+            if (Object.keys(autofillPayload).length > 0) {
+              await mutateStoryBible(
+                workingProject.id,
+                {
+                  entityType: "character",
+                  id: characterId,
+                  payload: autofillPayload,
+                },
+                "PATCH",
+              );
+            }
           }
         }
       }
@@ -4759,7 +4841,14 @@ export async function runProjectAssistant(input: {
 
   const intent = inferAssistantIntent(input.message, input.scope);
   const fallbackPlan = buildFallbackPlan({ ...input, project });
-  const livePlan = await buildLivePlan({ ...input, project });
+  const livePlan = shouldSkipLivePlan({
+    message: input.message,
+    scope: input.scope,
+    applyChanges: input.applyChanges,
+    intent,
+  })
+    ? null
+    : await buildLivePlan({ ...input, project });
   const rawPlan = livePlanNeedsFallback({
     message: input.message,
     scope: input.scope,

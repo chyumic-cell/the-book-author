@@ -23,6 +23,7 @@ export async function POST(
         projectId,
         characterId: input.characterId,
         action: input.action,
+        draftCharacter: input.draftCharacter,
       });
       return ok(result);
     }
@@ -37,6 +38,8 @@ export async function POST(
             fieldKey: input.fieldKey as never,
             fieldLabel: input.fieldLabel,
             action: input.action,
+            currentValue: input.currentValue,
+            draftItem: input.draftItem,
           })
         : await runTargetedStoryBibleFieldAi({
             projectId,
@@ -45,6 +48,8 @@ export async function POST(
             fieldKey: input.fieldKey,
             fieldLabel: input.fieldLabel,
             action: input.action,
+            currentValue: input.currentValue,
+            draftItem: input.draftItem,
           });
 
     return ok(result);

@@ -51,6 +51,8 @@ export function EditableListSection({
     fieldKey: string;
     fieldLabel: string;
     action: EditableAiAction;
+    currentValue: string;
+    draftItem: Record<string, unknown>;
   }) => Promise<void>;
   onSave: (itemId: string, payload: Record<string, unknown>) => Promise<void>;
   onAdd: () => Promise<void>;
@@ -95,6 +97,25 @@ export function EditableListSection({
   function toggleExpanded(itemId: string) {
     setExpandedIds((current) =>
       current.includes(itemId) ? current.filter((entry) => entry !== itemId) : [...current, itemId],
+    );
+  }
+
+  function materializeDraftItem(itemId: string) {
+    const draft = drafts[itemId] ?? {};
+    return Object.fromEntries(
+      fields.map((field) => {
+        const raw = draft[field.key];
+        if (field.type === "tags") {
+          return [field.key, splitLines(String(raw ?? ""))];
+        }
+        if (field.type === "number") {
+          return [field.key, Number(raw ?? 0)];
+        }
+        if (field.type === "boolean") {
+          return [field.key, Boolean(raw)];
+        }
+        return [field.key, String(raw ?? "")];
+      }),
     );
   }
 
@@ -188,6 +209,8 @@ export function EditableListSection({
                               fieldKey: field.key,
                               fieldLabel: field.label,
                               action: "develop",
+                              currentValue: String(draft[field.key] ?? ""),
+                              draftItem: materializeDraftItem(itemId),
                             }).then(() =>
                               setDraftOverrides((current) => {
                                 const next = { ...current };
@@ -210,6 +233,8 @@ export function EditableListSection({
                               fieldKey: field.key,
                               fieldLabel: field.label,
                               action: "expand",
+                              currentValue: String(draft[field.key] ?? ""),
+                              draftItem: materializeDraftItem(itemId),
                             }).then(() =>
                               setDraftOverrides((current) => {
                                 const next = { ...current };
@@ -232,6 +257,8 @@ export function EditableListSection({
                               fieldKey: field.key,
                               fieldLabel: field.label,
                               action: "tighten",
+                              currentValue: String(draft[field.key] ?? ""),
+                              draftItem: materializeDraftItem(itemId),
                             }).then(() =>
                               setDraftOverrides((current) => {
                                 const next = { ...current };

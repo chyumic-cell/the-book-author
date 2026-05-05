@@ -150,6 +150,8 @@ export function StorySkeletonTab({
     fieldKey: string;
     fieldLabel: string;
     action: "develop" | "expand" | "tighten";
+    currentValue: string;
+    draftItem: Record<string, unknown>;
   }) => Promise<void>;
   onSaveChapterPlan: (
     chapterId: string,
