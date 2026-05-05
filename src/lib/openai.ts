@@ -913,9 +913,14 @@ async function callProvider(
   prompt: string,
   options: ProviderCallOptions = {},
 ) {
+  const preferredModel =
+    provider.label === "OpenRouter" && provider.model === "openrouter/free"
+      ? OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS[0]
+      : provider.model;
+
   if (provider.label === "OpenRouter") {
     try {
-      const directChat = await callChatCompletion(provider, prompt, options, provider.model);
+      const directChat = await callChatCompletion(provider, prompt, options, preferredModel);
       if (directChat) {
         return directChat;
       }
