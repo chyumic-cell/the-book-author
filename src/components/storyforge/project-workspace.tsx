@@ -1123,13 +1123,17 @@ export function ProjectWorkspace({
 
     setBusyAction("draft");
     try {
+      if (activeTab === "chapters") {
+        await persistChapter(false);
+      }
       const data = await requestJson<{
         run: AiAssistRunRecord;
         contextPackage: ContextPackage;
       }>(`/api/chapters/${selectedChapter.id}/generate/draft`, { method: "POST" });
-      setPendingSuggestion({ run: data.run, contextPackage: data.contextPackage });
+      setPendingSuggestion(null);
+      applyEditorPatch({ draft: data.run.suggestion });
       setContextPackage(data.contextPackage);
-      toast.success("Draft preview ready.");
+      toast.success("Generated chapter inserted into the manuscript.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not generate draft.");
     } finally {
