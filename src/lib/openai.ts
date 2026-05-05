@@ -913,6 +913,25 @@ async function callProvider(
   prompt: string,
   options: ProviderCallOptions = {},
 ) {
+  if (provider.label === "OpenRouter") {
+    try {
+      const directChat = await callChatCompletion(provider, prompt, options, provider.model);
+      if (directChat) {
+        return directChat;
+      }
+    } catch (error) {
+      if (isRateLimitedProviderError(error)) {
+        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options);
+        if (fallbackText) {
+          return fallbackText;
+        }
+      }
+      if (!isRetryableProviderError(error)) {
+        throw error;
+      }
+    }
+  }
+
   const retryDelaysMs = [0, 1800, 4200, 8500];
   let lastError: unknown = null;
 

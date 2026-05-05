@@ -617,34 +617,32 @@ function buildCharacterFieldRequest(character: CharacterRecord) {
   const text = (value: unknown) => String(value ?? "").trim();
   const isThin = (value: unknown, minimum: number) => text(value).length < minimum;
 
-  if (isThin(character.summary, 90)) {
+  if (isThin(character.summary, 80)) {
     request.summary = "";
   }
   if (isThin(character.role, 4)) {
     request.role = "";
   }
-  if (isThin(character.goal, 40)) {
+  if (isThin(character.goal, 28)) {
     request.goal = "";
   }
-  if (isThin(character.fear, 30)) {
+  if (isThin(character.fear, 18)) {
     request.fear = "";
   }
-  if (isThin(character.secret, 30)) {
+  if (isThin(character.secret, 18)) {
     request.secret = "";
   }
-  if (isThin(character.wound, 30)) {
+  if (isThin(character.wound, 18)) {
     request.wound = "";
   }
-  if (isThin(character.notes, 70)) {
+  if (isThin(character.notes, 50)) {
     request.notes = "";
   }
 
   const quickProfile: Record<string, string> = {};
-  if (isThin(character.quickProfile?.age, 2)) quickProfile.age = "";
   if (isThin(character.quickProfile?.profession, 4)) quickProfile.profession = "";
-  if (isThin(character.quickProfile?.placeOfLiving, 4)) quickProfile.placeOfLiving = "";
   if (isThin(character.quickProfile?.accent, 3)) quickProfile.accent = "";
-  if (isThin(character.quickProfile?.speechPattern, 18)) quickProfile.speechPattern = "";
+  if (isThin(character.quickProfile?.speechPattern, 14)) quickProfile.speechPattern = "";
   if (Object.keys(quickProfile).length > 0) {
     request.quickProfile = quickProfile;
   }
@@ -658,23 +656,16 @@ function buildCharacterFieldRequest(character: CharacterRecord) {
   }
 
   const currentState: Record<string, string> = {};
-  if (isThin(character.currentState?.currentKnowledge, 18)) currentState.currentKnowledge = "";
-  if (isThin(character.currentState?.unknowns, 18)) currentState.unknowns = "";
   if (isThin(character.currentState?.emotionalState, 12)) currentState.emotionalState = "";
-  if (isThin(character.currentState?.physicalCondition, 12)) currentState.physicalCondition = "";
   if (isThin(character.currentState?.loyalties, 12)) currentState.loyalties = "";
-  if (isThin(character.currentState?.recentChanges, 18)) currentState.recentChanges = "";
   if (isThin(character.currentState?.continuityRisks, 18)) currentState.continuityRisks = "";
-  if (isThin(character.currentState?.lastMeaningfulAppearance, 18)) currentState.lastMeaningfulAppearance = "";
   if (Object.keys(currentState).length > 0) {
     request.currentState = currentState;
   }
 
   if (Object.keys(request).length === 0) {
     request.dossier = { freeTextCore: "" };
-    request.fear = "";
-    request.secret = "";
-    request.wound = "";
+    request.summary = "";
   }
 
   return request;
@@ -1182,6 +1173,7 @@ export async function runTargetedCharacterAi(input: {
       "Respect what is already written in the character textboxes. Treat those entries as the primary source of truth.",
       "Fill every missing or thin field requested below with concrete, human, non-generic content. Do not rewrite strong existing fields.",
       "Make the character feel specific, lived-in, and story-useful rather than broad or placeholder-like.",
+      "Keep the answer compact and efficient. Short field values are better than long rambling ones.",
       "Do not output commentary.",
       "Return strict JSON only for the requested fields.",
       `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
@@ -1206,7 +1198,7 @@ export async function runTargetedCharacterAi(input: {
         2,
       )}`,
     ].join("\n\n");
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 420 });
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 220 });
     let parsed = raw ? parseJsonObject(raw) : null;
     if (characterJsonNeedsRepair(parsed)) {
       const repairPrompt = [
@@ -1218,7 +1210,7 @@ export async function runTargetedCharacterAi(input: {
         "Respect the existing textbox content as primary canon. Preserve strong existing entries. Fill blanks only when supported.",
         `Rejected answer:\n${raw ?? ""}`,
       ].join("\n\n");
-      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 360 });
+      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 220 });
       parsed = repaired ? parseJsonObject(repaired) : null;
     }
     const fallbackDossier = cleanGeneratedText(raw ?? "").trim();
