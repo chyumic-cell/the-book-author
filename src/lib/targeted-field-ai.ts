@@ -5,6 +5,7 @@ import { generateTextWithProvider } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { mutateStoryBible, updateChapter } from "@/lib/story-service";
+import { compactText } from "@/lib/utils";
 import type {
   AssistFieldKey,
   CharacterRecord,
@@ -391,10 +392,78 @@ function mergeCharacterDraft(
     return character;
   }
 
+  const patch = buildCharacterDraftPayload(draftCharacter);
   return {
     ...character,
-    ...buildCharacterDraftPayload(draftCharacter),
+    ...patch,
+    quickProfile:
+      patch.quickProfile && typeof patch.quickProfile === "object"
+        ? {
+            ...character.quickProfile,
+            ...(patch.quickProfile as Record<string, unknown>),
+          }
+        : character.quickProfile,
+    dossier:
+      patch.dossier && typeof patch.dossier === "object"
+        ? {
+            ...character.dossier,
+            ...(patch.dossier as Record<string, unknown>),
+          }
+        : character.dossier,
+    currentState:
+      patch.currentState && typeof patch.currentState === "object"
+        ? {
+            ...character.currentState,
+            ...(patch.currentState as Record<string, unknown>),
+          }
+        : character.currentState,
   } as CharacterRecord;
+}
+
+function applyCharacterPatch(
+  character: CharacterRecord,
+  patch: Record<string, unknown>,
+): CharacterRecord {
+  const nextQuickProfile =
+    patch.quickProfile && typeof patch.quickProfile === "object"
+      ? {
+          ...character.quickProfile,
+          ...(patch.quickProfile as Record<string, unknown>),
+        }
+      : character.quickProfile;
+  const nextDossier =
+    patch.dossier && typeof patch.dossier === "object"
+      ? {
+          ...character.dossier,
+          ...(patch.dossier as Record<string, unknown>),
+        }
+      : character.dossier;
+  const nextCurrentState =
+    patch.currentState && typeof patch.currentState === "object"
+      ? {
+          ...character.currentState,
+          ...(patch.currentState as Record<string, unknown>),
+        }
+      : character.currentState;
+
+  return {
+    ...character,
+    ...patch,
+    quickProfile: nextQuickProfile,
+    dossier: nextDossier,
+    currentState: nextCurrentState,
+  } as CharacterRecord;
+}
+
+function mergeCharacterIntoProject(
+  project: ProjectWorkspace,
+  characterId: string,
+  nextCharacter: CharacterRecord,
+): ProjectWorkspace {
+  return {
+    ...project,
+    characters: project.characters.map((entry) => (entry.id === characterId ? nextCharacter : entry)),
+  };
 }
 
 function characterJsonNeedsRepair(parsed: Record<string, unknown> | null) {
@@ -411,6 +480,160 @@ function characterJsonNeedsRepair(parsed: Record<string, unknown> | null) {
   }
 
   return false;
+}
+
+function compactCharacterCanon(
+  project: ProjectWorkspace,
+  chapterId: string,
+  character: CharacterRecord,
+) {
+  const chapter = project.chapters.find((entry) => entry.id === chapterId) ?? null;
+  return [
+    `Premise: ${project.premise}`,
+    project.oneLineHook ? `Hook: ${project.oneLineHook}` : "",
+    project.bookSettings.storyBrief ? `Story brief: ${project.bookSettings.storyBrief}` : "",
+    project.bookSettings.plotDirection ? `Plot direction: ${project.bookSettings.plotDirection}` : "",
+    chapter
+      ? `Current chapter context: Chapter ${chapter.number} - ${chapter.title}. Purpose: ${compactText(chapter.purpose, 220)}`
+      : "",
+    character.name ? `Character: ${character.name}` : "",
+    character.role ? `Role: ${character.role}` : "",
+    character.summary ? `Current summary: ${compactText(character.summary, 220)}` : "",
+    character.goal ? `Current goal: ${compactText(character.goal, 180)}` : "",
+    character.notes ? `Current notes: ${compactText(character.notes, 180)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildCharacterFieldRequest(character: CharacterRecord) {
+  const request: Record<string, unknown> = {};
+  const text = (value: unknown) => String(value ?? "").trim();
+
+  if (!text(character.summary)) {
+    request.summary = "";
+  }
+  if (!text(character.role)) {
+    request.role = "";
+  }
+  if (!text(character.goal)) {
+    request.goal = "";
+  }
+  if (!text(character.fear)) {
+    request.fear = "";
+  }
+  if (!text(character.secret)) {
+    request.secret = "";
+  }
+  if (!text(character.wound)) {
+    request.wound = "";
+  }
+  if (!text(character.notes)) {
+    request.notes = "";
+  }
+
+  const quickProfile: Record<string, string> = {};
+  if (!text(character.quickProfile?.age)) quickProfile.age = "";
+  if (!text(character.quickProfile?.profession)) quickProfile.profession = "";
+  if (!text(character.quickProfile?.placeOfLiving)) quickProfile.placeOfLiving = "";
+  if (!text(character.quickProfile?.accent)) quickProfile.accent = "";
+  if (!text(character.quickProfile?.speechPattern)) quickProfile.speechPattern = "";
+  if (Object.keys(quickProfile).length > 0) {
+    request.quickProfile = quickProfile;
+  }
+
+  const dossier: Record<string, string> = {};
+  if (!text(character.dossier?.freeTextCore)) {
+    dossier.freeTextCore = "";
+  }
+  if (Object.keys(dossier).length > 0) {
+    request.dossier = dossier;
+  }
+
+  const currentState: Record<string, string> = {};
+  if (!text(character.currentState?.currentKnowledge)) currentState.currentKnowledge = "";
+  if (!text(character.currentState?.unknowns)) currentState.unknowns = "";
+  if (!text(character.currentState?.emotionalState)) currentState.emotionalState = "";
+  if (!text(character.currentState?.physicalCondition)) currentState.physicalCondition = "";
+  if (!text(character.currentState?.loyalties)) currentState.loyalties = "";
+  if (!text(character.currentState?.recentChanges)) currentState.recentChanges = "";
+  if (!text(character.currentState?.continuityRisks)) currentState.continuityRisks = "";
+  if (!text(character.currentState?.lastMeaningfulAppearance)) currentState.lastMeaningfulAppearance = "";
+  if (Object.keys(currentState).length > 0) {
+    request.currentState = currentState;
+  }
+
+  if (Object.keys(request).length === 0) {
+    request.dossier = { freeTextCore: "" };
+    request.fear = "";
+    request.secret = "";
+    request.wound = "";
+  }
+
+  return request;
+}
+
+function mergeCharacterAiPayload(
+  baseCharacter: CharacterRecord,
+  draftPayload: Record<string, unknown>,
+  parsed: Record<string, unknown> | null,
+  fallbackDossier: string,
+) {
+  const mergedPayload: Record<string, unknown> = {
+    ...draftPayload,
+  };
+
+  if (parsed) {
+    for (const fieldKey of ["summary", "role", "goal", "fear", "secret", "wound", "notes"] as const) {
+      if (typeof parsed[fieldKey] === "string" && String(parsed[fieldKey]).trim()) {
+        mergedPayload[fieldKey] = cleanFieldText(
+          fieldKey,
+          String(parsed[fieldKey]),
+          String((baseCharacter as unknown as Record<string, unknown>)[fieldKey] ?? ""),
+        );
+      }
+    }
+    if (parsed.quickProfile && typeof parsed.quickProfile === "object") {
+      mergedPayload.quickProfile = {
+        ...baseCharacter.quickProfile,
+        ...(parsed.quickProfile as Record<string, unknown>),
+      };
+    }
+    if (parsed.dossier && typeof parsed.dossier === "object") {
+      const nextDossier = parsed.dossier as Record<string, unknown>;
+      const cleanedFreeTextCore =
+        typeof nextDossier.freeTextCore === "string"
+          ? cleanGeneratedText(String(nextDossier.freeTextCore)).trim()
+          : "";
+      mergedPayload.dossier = {
+        ...baseCharacter.dossier,
+        ...nextDossier,
+        ...(cleanedFreeTextCore && !looksLikeMetaOutput(cleanedFreeTextCore)
+          ? { freeTextCore: cleanedFreeTextCore }
+          : {}),
+      };
+    }
+    if (parsed.currentState && typeof parsed.currentState === "object") {
+      mergedPayload.currentState = {
+        ...baseCharacter.currentState,
+        ...(parsed.currentState as Record<string, unknown>),
+      };
+    }
+  } else if (fallbackDossier && !looksLikeMetaOutput(fallbackDossier)) {
+    mergedPayload.dossier = {
+      ...baseCharacter.dossier,
+      freeTextCore: fallbackDossier,
+    };
+    if (String(baseCharacter.summary ?? "").trim().length < 40) {
+      mergedPayload.summary = cleanFieldText(
+        "summary",
+        fallbackDossier.split(/\n+/)[0] ?? fallbackDossier,
+        baseCharacter.summary,
+      );
+    }
+  }
+
+  return mergedPayload;
 }
 
 async function generateSinglePlanningFieldValue(options: {
@@ -649,7 +872,7 @@ export async function runTargetedPlanningFieldAi(input: {
   const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
   return {
     project: nextProject,
-    contextPackage: buildContextPackage(nextProject, chapter.id),
+    contextPackage: null,
   };
 }
 
@@ -713,7 +936,7 @@ export async function runTargetedStoryBibleFieldAi(input: {
   const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
   return {
     project: nextProject,
-    contextPackage: buildContextPackage(nextProject, contextChapterId),
+    contextPackage: null,
   };
 }
 
@@ -740,33 +963,26 @@ export async function runTargetedCharacterAi(input: {
 
   const workingCharacter = mergeCharacterDraft(character, input.draftCharacter);
   const draftCharacterPayload = buildCharacterDraftPayload(input.draftCharacter);
-  const context = buildContextPackage(
-    project,
-    contextChapterId,
-    workingCharacter.summary || workingCharacter.dossier.freeTextCore || workingCharacter.notes,
-  );
+  const compactCanon = compactCharacterCanon(project, contextChapterId, workingCharacter);
+  let nextCharacter = workingCharacter;
 
   if (input.action !== "develop-dossier") {
-    const prompt = buildPromptEnvelope(
-      "Update character summary",
-      project,
-      context,
-      [
-        `Target area: Story Bible -> Character Master -> ${workingCharacter.name} -> Summary.`,
-        "Update only the character summary.",
-        "Use all existing manuscript, planning, series, and story-bible context as binding canon.",
-        input.action === "expand-summary"
-          ? "Expand the summary into a fuller, more specific, more human portrait."
-          : "Tighten the summary into a cleaner, shorter, sharper version without losing essential canon.",
-        workingCharacter.summary
-          ? "Base the result on the exact summary already written in this textbox. Preserve its core idea while improving it."
-          : "The summary textbox is blank, so you may draft it freely as long as it stays canon-safe.",
-        `Current summary:\n${workingCharacter.summary || "(blank)"}`,
-        "Return only the final summary text.",
-      ].join("\n\n"),
-      "You are a sharp character editor. Return only the revised summary.",
-    );
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 700 });
+    const prompt = [
+      "You are a sharp character editor.",
+      compactCanon,
+      `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> Summary.`,
+      input.action === "expand-summary"
+        ? "Expand the summary into a fuller, more specific, more human portrait."
+        : "Tighten the summary into a cleaner, shorter, sharper version without losing essential canon.",
+      workingCharacter.summary
+        ? "Base the result on the exact summary already written in this textbox. Preserve its core idea while improving it."
+        : "The summary textbox is blank, so you may draft it freely as long as it stays canon-safe.",
+      `Current summary:\n${workingCharacter.summary || "(blank)"}`,
+      "Return only the final summary text. No labels. No commentary.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 260 });
     const summary = raw?.trim();
     if (!summary) {
       throw new Error("AI did not return any visible character summary.");
@@ -783,129 +999,63 @@ export async function runTargetedCharacterAi(input: {
       },
       "PATCH",
     );
+    nextCharacter = applyCharacterPatch(workingCharacter, {
+      ...draftCharacterPayload,
+      summary: cleanFieldText("summary", summary, workingCharacter.summary),
+    });
   } else {
-    const prompt = buildPromptEnvelope(
-      "Develop character dossier",
-      project,
-      context,
-      [
-        `Target area: Story Bible -> Character Master -> ${workingCharacter.name}.`,
-        "Deepen the character into a fuller, more human, more specific canon-safe dossier.",
-        "Use the manuscript, chapter plans, story bible, memory, continuity, and series context as binding source of truth.",
-        "Respect what is already written in the character textboxes. Treat those existing entries as the primary source of truth for this character.",
-        "If a field already has useful content, preserve its core idea and sharpen it only when needed. Fill blanks and thin areas instead of overwriting solid existing material.",
-        "Do not rewrite other characters. Do not return commentary about what you are doing.",
-        "Return strict JSON only with this shape:",
-        '{"summary":"","role":"","goal":"","fear":"","secret":"","wound":"","notes":"","quickProfile":{"age":"","profession":"","placeOfLiving":"","accent":"","speechPattern":""},"dossier":{"freeTextCore":""},"currentState":{"currentKnowledge":"","unknowns":"","emotionalState":"","physicalCondition":"","loyalties":"","recentChanges":"","continuityRisks":"","lastMeaningfulAppearance":""}}',
-        "Only fill fields you can support from the current textboxes plus project canon. Leave a field as its current value if it is already good.",
-        "Current character snapshot:",
-        JSON.stringify(
-          {
-            name: workingCharacter.name,
-            role: workingCharacter.role,
-            archetype: workingCharacter.archetype,
-            summary: workingCharacter.summary,
-            goal: workingCharacter.goal,
-            fear: workingCharacter.fear,
-            secret: workingCharacter.secret,
-            wound: workingCharacter.wound,
-            notes: workingCharacter.notes,
-            quickProfile: workingCharacter.quickProfile,
-            dossier: workingCharacter.dossier,
-            currentState: workingCharacter.currentState,
+    const requestedFields = buildCharacterFieldRequest(workingCharacter);
+    const prompt = [
+      "You are a fast character architect.",
+      compactCanon,
+      `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"}.`,
+      "Respect what is already written in the character textboxes. Treat those entries as the primary source of truth.",
+      "Fill only the missing or thin fields requested below. Do not rewrite strong existing fields. Do not output commentary.",
+      "Return strict JSON only for the requested fields.",
+      `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
+      `Current character snapshot:\n${JSON.stringify(
+        {
+          name: workingCharacter.name,
+          role: workingCharacter.role,
+          archetype: workingCharacter.archetype,
+          summary: workingCharacter.summary,
+          goal: workingCharacter.goal,
+          fear: workingCharacter.fear,
+          secret: workingCharacter.secret,
+          wound: workingCharacter.wound,
+          notes: workingCharacter.notes,
+          quickProfile: workingCharacter.quickProfile,
+          dossier: {
+            freeTextCore: workingCharacter.dossier.freeTextCore,
           },
-          null,
-          2,
-        ),
-        ].join("\n\n"),
-      "You are a character architect. Return only strict JSON for the exact target character.",
-    );
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 950 });
+          currentState: workingCharacter.currentState,
+        },
+        null,
+        2,
+      )}`,
+    ].join("\n\n");
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 420 });
     let parsed = raw ? parseJsonObject(raw) : null;
     if (characterJsonNeedsRepair(parsed)) {
-      const repairPrompt = buildPromptEnvelope(
-        "Repair character dossier JSON",
-        project,
-        context,
-        [
-          `Target area: Story Bible -> Character Master -> ${workingCharacter.name}.`,
-          "Your previous answer was not valid strict JSON for this character dossier update.",
-          "Return strict JSON only with this exact shape:",
-          '{"summary":"","role":"","goal":"","fear":"","secret":"","wound":"","notes":"","quickProfile":{"age":"","profession":"","placeOfLiving":"","accent":"","speechPattern":""},"dossier":{"freeTextCore":""},"currentState":{"currentKnowledge":"","unknowns":"","emotionalState":"","physicalCondition":"","loyalties":"","recentChanges":"","continuityRisks":"","lastMeaningfulAppearance":""}}',
-          "Respect the existing textbox content as primary canon. Preserve strong existing entries. Fill blank or thin entries only when project canon supports them.",
-          "Do not explain. Do not preface. Do not include markdown fences.",
-          `Rejected answer:\n${raw ?? ""}`,
-          `Current character snapshot:\n${JSON.stringify(
-            {
-              name: workingCharacter.name,
-              role: workingCharacter.role,
-              summary: workingCharacter.summary,
-              goal: workingCharacter.goal,
-              fear: workingCharacter.fear,
-              secret: workingCharacter.secret,
-              wound: workingCharacter.wound,
-              notes: workingCharacter.notes,
-              quickProfile: workingCharacter.quickProfile,
-              dossier: workingCharacter.dossier,
-              currentState: workingCharacter.currentState,
-            },
-            null,
-            2,
-          )}`,
-        ].join("\n\n"),
-        "Return only strict JSON for the exact target character.",
-      );
-      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 850 });
+      const repairPrompt = [
+        "Repair the character JSON.",
+        compactCanon,
+        `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"}.`,
+        "Return strict JSON only for the requested fields below.",
+        `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
+        "Respect the existing textbox content as primary canon. Preserve strong existing entries. Fill blanks only when supported.",
+        `Rejected answer:\n${raw ?? ""}`,
+      ].join("\n\n");
+      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 360 });
       parsed = repaired ? parseJsonObject(repaired) : null;
     }
     const fallbackDossier = cleanGeneratedText(raw ?? "").trim();
-    const mergedPayload: Record<string, unknown> = {
-      ...draftCharacterPayload,
-    };
-    if (parsed) {
-      for (const fieldKey of ["summary", "role", "goal", "fear", "secret", "wound", "notes"] as const) {
-        if (typeof parsed[fieldKey] === "string" && String(parsed[fieldKey]).trim()) {
-          mergedPayload[fieldKey] = cleanFieldText(fieldKey, String(parsed[fieldKey]), String((workingCharacter as unknown as Record<string, unknown>)[fieldKey] ?? ""));
-        }
-      }
-      if (parsed.quickProfile && typeof parsed.quickProfile === "object") {
-        mergedPayload.quickProfile = {
-          ...workingCharacter.quickProfile,
-          ...(parsed.quickProfile as Record<string, unknown>),
-        };
-      }
-      if (parsed.dossier && typeof parsed.dossier === "object") {
-        const nextDossier = parsed.dossier as Record<string, unknown>;
-        const cleanedFreeTextCore = typeof nextDossier.freeTextCore === "string"
-          ? cleanGeneratedText(String(nextDossier.freeTextCore)).trim()
-          : "";
-        mergedPayload.dossier = {
-          ...workingCharacter.dossier,
-          ...nextDossier,
-          ...(cleanedFreeTextCore && !looksLikeMetaOutput(cleanedFreeTextCore)
-            ? { freeTextCore: cleanedFreeTextCore }
-            : {}),
-        };
-      }
-      if (parsed.currentState && typeof parsed.currentState === "object") {
-        mergedPayload.currentState = {
-          ...workingCharacter.currentState,
-          ...(parsed.currentState as Record<string, unknown>),
-        };
-      }
-    } else if (fallbackDossier && !looksLikeMetaOutput(fallbackDossier)) {
-      mergedPayload.dossier = {
-        ...workingCharacter.dossier,
-        freeTextCore: fallbackDossier,
-      };
-      if (String(workingCharacter.summary ?? "").trim().length < 40) {
-        mergedPayload.summary = cleanFieldText(
-          "summary",
-          fallbackDossier.split(/\n+/)[0] ?? fallbackDossier,
-          workingCharacter.summary,
-        );
-      }
-    }
+    const mergedPayload = mergeCharacterAiPayload(
+      workingCharacter,
+      draftCharacterPayload,
+      parsed,
+      fallbackDossier,
+    );
     if (Object.keys(mergedPayload).length === 0) {
       throw new Error("AI did not return usable character dossier content.");
     }
@@ -918,11 +1068,17 @@ export async function runTargetedCharacterAi(input: {
       },
       "PATCH",
     );
+    nextCharacter = applyCharacterPatch(workingCharacter, mergedPayload);
   }
 
-  const nextProject = (await getProjectWorkspace(input.projectId)) ?? project;
+  let nextProject: ProjectWorkspace;
+  try {
+    nextProject = (await getProjectWorkspace(input.projectId)) ?? mergeCharacterIntoProject(project, character.id, nextCharacter);
+  } catch {
+    nextProject = mergeCharacterIntoProject(project, character.id, nextCharacter);
+  }
   return {
     project: nextProject,
-    contextPackage: buildContextPackage(nextProject, contextChapterId),
+    contextPackage: null,
   };
 }
