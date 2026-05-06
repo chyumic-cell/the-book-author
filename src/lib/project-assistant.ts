@@ -912,6 +912,33 @@ function shouldAutofillCharacterRecord(
   const quickProfile = payload.quickProfile;
   const dossier = payload.dossier;
   const currentState = payload.currentState;
+  const summary = String(payload.summary ?? "").trim();
+  const goal = String(payload.goal ?? "").trim();
+  const role = String(payload.role ?? "").trim();
+  const quickProfileKeys =
+    quickProfile && typeof quickProfile === "object" && !Array.isArray(quickProfile)
+      ? Object.keys(quickProfile as Record<string, unknown>).length
+      : 0;
+  const dossierKeys =
+    dossier && typeof dossier === "object" && !Array.isArray(dossier)
+      ? Object.keys(dossier as Record<string, unknown>).length
+      : 0;
+  const currentStateKeys =
+    currentState && typeof currentState === "object" && !Array.isArray(currentState)
+      ? Object.keys(currentState as Record<string, unknown>).length
+      : 0;
+
+  const alreadyUsableCharacterRecord =
+    summary.length >= 60 &&
+    goal.length >= 18 &&
+    role.length >= 4 &&
+    quickProfileKeys >= 2 &&
+    dossierKeys >= 2 &&
+    currentStateKeys >= 2;
+
+  if (alreadyUsableCharacterRecord) {
+    return false;
+  }
 
   return (
     !quickProfile ||
