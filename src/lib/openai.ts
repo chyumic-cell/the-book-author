@@ -928,13 +928,15 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
     case "COACH":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.85, 140), 260), 220, 760);
     case "SHARPEN_VOICE":
-      return wordBudgetToTokens(baselineWords * 1.3, 220, 2400);
+      return wordBudgetToTokens(baselineWords * 1.45, 260, 2600);
     case "IMPROVE_PROSE":
+      return wordBudgetToTokens(baselineWords * 1.35, 260, 2600);
     case "ADD_TENSION":
       return wordBudgetToTokens(baselineWords * 1.18, 220, 2200);
     case "REPHRASE":
-    case "CUSTOM_EDIT":
       return wordBudgetToTokens(baselineWords * 1.08, 200, 2200);
+    case "CUSTOM_EDIT":
+      return wordBudgetToTokens(baselineWords * 1.28, 240, 2600);
     default:
       return wordBudgetToTokens(baselineWords, 220, 1800);
   }
@@ -1412,6 +1414,91 @@ async function enforceTensionIfNeeded(options: {
   return repaired.trim() && overlapScore(options.selectionText, repaired) < similarity ? repaired : options.content;
 }
 
+async function enforceInlineTransformationIfNeeded(options: {
+  project: ProjectWorkspace;
+  context: ContextPackage;
+  actionType: AssistActionType;
+  selectionText: string;
+  instruction: string;
+  content: string;
+}) {
+  const selectedWords = roughWordCount(options.selectionText);
+  const currentWords = roughWordCount(options.content);
+  if (!selectedWords || !currentWords) {
+    return options.content;
+  }
+
+  const similarity = overlapScore(options.selectionText, options.content);
+  const requiresDialogue = options.actionType === "ADD_DIALOGUE" || options.actionType === "DESCRIPTION_TO_DIALOGUE";
+  const hasDialogue = /"[^"\n]+"/.test(options.content);
+  const needsRepair =
+    (options.actionType === "IMPROVE_PROSE" && similarity >= 0.93) ||
+    (options.actionType === "CUSTOM_EDIT" && similarity >= 0.94) ||
+    (options.actionType === "SHARPEN_VOICE" && similarity >= 0.92) ||
+    (requiresDialogue && (!hasDialogue || similarity >= 0.9));
+
+  if (!needsRepair) {
+    return options.content;
+  }
+
+  const repairLines =
+    options.actionType === "IMPROVE_PROSE"
+      ? [
+          "The previous result stayed too close to the original text.",
+          "Rewrite the selected text again with materially stronger prose, sharper rhythm, clearer sensory detail, stronger subtext, and a more distinct novelist's touch.",
+          "Keep the same facts and continuity, but change enough of the wording and sentence movement that the improvement is obvious.",
+        ]
+      : options.actionType === "CUSTOM_EDIT"
+        ? [
+            "The previous result did not visibly follow the custom instruction strongly enough.",
+            `Custom instruction to honor exactly: ${options.instruction || "Rewrite the selected text."}`,
+            "Rewrite the selected text so the custom instruction is obvious on the page while preserving the same scene facts and continuity.",
+          ]
+        : options.actionType === "SHARPEN_VOICE"
+          ? [
+              "The previous result did not materially sharpen the voice.",
+              "Rewrite the selected text again so diction, rhythm, directness, and emotional leakage clearly feel more specific and character-driven.",
+            ]
+          : [
+              "The previous result did not add enough real dialogue or remained too close to the original.",
+              "Rewrite the selected text again so dialogue carries the dramatic movement, with properly quoted speech and distinct human voices.",
+            ];
+
+  const repairPrompt = buildPromptEnvelope(
+    `Repair ${options.actionType.toLowerCase()} transformation`,
+    options.project,
+    options.context,
+    [
+      "Rewrite only the selected text.",
+      ...repairLines,
+      requiresDialogue ? "Return at least one properly quoted spoken line." : "",
+      "Return only the replacement prose.",
+      "Selected text:",
+      options.selectionText,
+      "Rejected previous result:",
+      options.content,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+
+  const repairedRaw = await generateTextWithProvider(repairPrompt, {
+    maxOutputTokens: assistOutputTokenBudget(options.actionType, options.selectionText),
+  });
+  const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+  if (!repaired.trim()) {
+    return options.content;
+  }
+
+  const repairedSimilarity = overlapScore(options.selectionText, repaired);
+  const repairedHasDialogue = /"[^"\n]+"/.test(repaired);
+  if (requiresDialogue && !repairedHasDialogue) {
+    return options.content;
+  }
+
+  return repairedSimilarity < similarity ? repaired : options.content;
+}
+
 function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: ContextPackage) {
   return [
     `1. Hook the chapter with ${chapterTitle} starting inside active pressure.`,
@@ -1472,6 +1559,7 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
         "Rewrite only the selected text with materially stronger prose, not a light polish.",
         "Increase specificity, sensory clarity, rhythm, subtext, and emotional precision.",
         "Prefer sharp concrete choices over generic phrasing, and make the passage feel written by a human novelist rather than a neutral assistant.",
+        "Change enough of the wording and sentence movement that the improvement is plainly visible while preserving the same core facts.",
       ].join(" ");
     case "SHARPEN_VOICE":
       return [
@@ -1511,7 +1599,7 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
         "Do not make everyone sound equally articulate, equally calm, or equally explanatory.",
       ].join(" ");
     case "CUSTOM_EDIT":
-      return "Follow the writer's instruction exactly on the selected text while preserving continuity, scene logic, and character-specific human voice.";
+      return "Follow the writer's instruction exactly on the selected text while preserving continuity, scene logic, and character-specific human voice. Make a decisive rewrite that visibly reflects the instruction rather than returning a near-copy of the original.";
     case "REPHRASE":
       return "Rephrase only the selected text without changing its meaning.";
     default:
@@ -1767,9 +1855,17 @@ export async function assistSelection(input: {
           content: enforcedContent,
         })
       : enforcedContent;
+  const transformedContent = await enforceInlineTransformationIfNeeded({
+    project,
+    context,
+    actionType: input.actionType,
+    selectionText: input.selectionText,
+    instruction: input.instruction,
+    content: tensionSafeContent,
+  });
   return {
     ...result,
-    content: tensionSafeContent,
+    content: transformedContent,
   };
 }
 
