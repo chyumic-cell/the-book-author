@@ -76,8 +76,12 @@ function overlapScore(left: string, right: string) {
   return shared / Math.max(leftWords.size, rightWords.size);
 }
 
-function stripLeadingWrapper(value: string) {
-  let text = value.replace(/\r/g, "").replace(/```(?:json)?/gi, "").trim();
+function asText(value: unknown) {
+  return typeof value === "string" ? value : String(value ?? "");
+}
+
+function stripLeadingWrapper(value: unknown) {
+  let text = asText(value).replace(/\r/g, "").replace(/```(?:json)?/gi, "").trim();
 
   text = text.replace(
     /^(?:here(?:'s| is)|below is|i(?:'ll| will))(?:.|\n)*?(?:\n\s*\n|\n---+\s*\n|\n#{1,6}\s+)/i,
@@ -96,7 +100,7 @@ function stripLeadingWrapper(value: string) {
   return text.trim();
 }
 
-export function cleanStructuredText(value: string) {
+export function cleanStructuredText(value: unknown) {
   return stripLeadingWrapper(value)
     .replace(/\r/g, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -291,7 +295,7 @@ export function assessManuscriptEnding(value: string): ManuscriptEndingAssessmen
   };
 }
 
-export function cleanInlineSuggestionText(value: string) {
+export function cleanInlineSuggestionText(value: unknown) {
   const issues: string[] = [];
   const paragraphs = splitParagraphs(stripLeadingWrapper(value));
   const cleanedParagraphs = paragraphs
@@ -397,7 +401,7 @@ function getOpeningParagraphs(previousChapterDrafts: string[]) {
 }
 
 export function sanitizeManuscriptText(
-  value: string,
+  value: unknown,
   options: ManuscriptSanitizationOptions = {},
 ): ManuscriptSanitizationResult {
   const issues: string[] = [];
@@ -510,16 +514,16 @@ export function sanitizeManuscriptText(
   };
 }
 
-export function cleanGeneratedText(value: string) {
+export function cleanGeneratedText(value: unknown) {
   return sanitizeManuscriptText(value).text;
 }
 
-export function cleanSummaryText(value: string) {
+export function cleanSummaryText(value: unknown) {
   return sanitizeManuscriptText(value).text.replace(/\s+/g, " ").trim();
 }
 
-export function cleanCharacterNotes(value: string) {
-  return value
+export function cleanCharacterNotes(value: unknown) {
+  return asText(value)
     .split(/\r?\n/)
     .filter((line) => {
       const trimmed = line.trim();
