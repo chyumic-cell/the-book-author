@@ -60,6 +60,9 @@ async function syncSceneCardSnapshot(
   chapter: ProjectWorkspace["chapters"][number],
   extraction: MemoryExtractionResult,
 ) {
+  const chapterTitle = chapter.title?.trim() || `Chapter ${chapter.number}`;
+  const chapterPurpose = chapter.purpose ?? "";
+  const chapterBeat = chapter.currentBeat ?? "";
   const existingCard = await prisma.sceneCard.findFirst({
     where: {
       projectId,
@@ -83,10 +86,10 @@ async function syncSceneCardSnapshot(
     await prisma.sceneCard.update({
       where: { id: existingCard.id },
       data: {
-        title: chapter.title,
+        title: chapterTitle,
         summary: extraction.summary,
-        goal: chapter.purpose,
-        conflict: chapter.currentBeat,
+        goal: chapterPurpose,
+        conflict: chapterBeat,
         outcome,
         outcomeType: unresolved ? "COMPLICATION" : "REVELATION",
         povCharacterId: chapter.povCharacterId ?? undefined,
@@ -107,10 +110,10 @@ async function syncSceneCardSnapshot(
       projectId,
       chapterId: chapter.id,
       povCharacterId: chapter.povCharacterId ?? undefined,
-      title: chapter.title,
+      title: chapterTitle,
       summary: extraction.summary,
-      goal: chapter.purpose,
-      conflict: chapter.currentBeat,
+      goal: chapterPurpose,
+      conflict: chapterBeat,
       outcome,
       outcomeType: unresolved ? "COMPLICATION" : "REVELATION",
       locationHint: "",
