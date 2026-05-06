@@ -9,10 +9,15 @@ import {
 import { APP_NAME } from "@/lib/brand";
 import { buildContextPackage } from "@/lib/memory";
 import { cleanGeneratedText, cleanSummaryText, sanitizeManuscriptText } from "@/lib/ai-output";
-import { generateTextWithProvider, interpretCharacterProfile } from "@/lib/openai";
+import { generateTextWithProvider } from "@/lib/openai";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { getChapterById, getProjectWorkspace } from "@/lib/project-data";
 import { syncChapterToStoryState } from "@/lib/story-sync";
+import {
+  runTargetedCharacterAi,
+  runTargetedSkeletonFieldAi,
+  runTargetedStoryBibleFieldAi,
+} from "@/lib/targeted-field-ai";
 import { mutateIdeaLab, mutateSkeleton, mutateStoryBible, updateChapter, updateProject } from "@/lib/story-service";
 import type {
   AiRole,
@@ -63,11 +68,6 @@ type AssistantPlan = {
   reply: string;
   actions: AssistantPlanAction[];
   nextTab: StoryForgeTab | null;
-};
-
-type CharacterInterpretationSuggestionLike = {
-  key: string;
-  value: string;
 };
 
 type PlotThreadAutofillPayload = {
@@ -795,106 +795,6 @@ function cleanStringList(value: unknown) {
   }
 
   return [];
-}
-
-const CHARACTER_ARRAY_PATHS = new Set([
-  "dossier.basicIdentity.nicknames",
-  "dossier.personalityBehavior.coreTraits",
-  "dossier.personalityBehavior.virtues",
-  "dossier.personalityBehavior.flaws",
-  "dossier.motivationStory.secrets",
-  "dossier.speechLanguage.otherLanguages",
-  "dossier.speechLanguage.descriptors",
-  "dossier.speechLanguage.repeatedPhrases",
-  "dossier.speechLanguage.favoriteExpressions",
-  "dossier.bodyPresence.distinguishingFeatures",
-  "dossier.bodyPresence.habitsTics",
-  "dossier.relationshipDynamics.friends",
-  "dossier.relationshipDynamics.enemies",
-  "dossier.relationshipDynamics.rivals",
-  "dossier.relationshipDynamics.loversExes",
-  "dossier.relationshipDynamics.family",
-  "dossier.relationshipDynamics.mentors",
-  "dossier.relationshipDynamics.subordinatesSuperiors",
-]);
-
-function setNestedValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const segments = path.split(".");
-  let current: Record<string, unknown> = target;
-
-  segments.forEach((segment, index) => {
-    if (index === segments.length - 1) {
-      current[segment] = value;
-      return;
-    }
-
-    const next = current[segment];
-    if (!next || typeof next !== "object" || Array.isArray(next)) {
-      current[segment] = {};
-    }
-    current = current[segment] as Record<string, unknown>;
-  });
-}
-
-function buildCharacterAutofillPayload(
-  suggestions: CharacterInterpretationSuggestionLike[],
-  currentCharacter?: ProjectWorkspace["characters"][number] | null,
-) {
-  const payload: Record<string, unknown> = {};
-
-  for (const suggestion of suggestions) {
-    const key = suggestion.key.trim();
-    const value = suggestion.value.trim();
-    if (!key || !value) {
-      continue;
-    }
-
-    setNestedValue(
-      payload,
-      key,
-      CHARACTER_ARRAY_PATHS.has(key) ? cleanStringList(value) : value,
-    );
-  }
-
-  const quickProfile = (payload.quickProfile as Record<string, unknown> | undefined) ?? null;
-  const dossier = (payload.dossier as Record<string, unknown> | undefined) ?? null;
-  const motivationStory =
-    dossier && typeof dossier === "object"
-      ? ((dossier.motivationStory as Record<string, unknown> | undefined) ?? null)
-      : null;
-
-  const inferredProfession =
-    (quickProfile && typeof quickProfile.profession === "string" ? String(quickProfile.profession).trim() : "") ||
-    currentCharacter?.quickProfile.profession.trim() ||
-    currentCharacter?.dossier.lifePosition.profession.trim() ||
-    currentCharacter?.role.trim() ||
-    "";
-
-  if (!String(payload.role ?? "").trim() && inferredProfession) {
-    payload.role = inferredProfession;
-  }
-
-  if (!String(payload.goal ?? "").trim() && motivationStory && typeof motivationStory.shortTermGoal === "string") {
-    payload.goal = String(motivationStory.shortTermGoal).trim();
-  }
-
-  if (inferredProfession) {
-    if (!quickProfile || typeof quickProfile !== "object") {
-      payload.quickProfile = { profession: inferredProfession };
-    } else if (!String(quickProfile.profession ?? "").trim()) {
-      quickProfile.profession = inferredProfession;
-    }
-
-    const nextDossier = ((payload.dossier as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
-    const nextLifePosition = ((nextDossier.lifePosition as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
-    if (!String(nextLifePosition.profession ?? "").trim()) {
-      nextLifePosition.profession = inferredProfession;
-    }
-    nextDossier.lifePosition = nextLifePosition;
-    payload.dossier = nextDossier;
-  }
-
-  return payload;
 }
 
 function shouldAutofillCharacterRecord(
@@ -2954,7 +2854,7 @@ function buildFallbackPlan(input: {
         });
       }
 
-      if (lower.includes("relationship")) {
+      if (lower.includes("relationship") && !intent.wantsCharacterWork) {
         storyBibleActions.push({
           kind: "UPSERT_STORY_BIBLE_ENTITY",
           entityType: "relationship",
@@ -3924,6 +3824,49 @@ async function materializeStoryBibleEntityAction(input: {
     existingEntity && typeof existingEntity === "object"
       ? existingEntity
       : {};
+  if (entityType === "character" && seedLabel) {
+    const shellPrompt = buildPromptEnvelope(
+      "Draft character shell",
+      input.project,
+      context,
+      [
+        "Return strict JSON only.",
+        "Create only a compact top-level character shell. Do not try to write the full dossier here.",
+        'Use this shape: {"name":"...","role":"...","archetype":"...","summary":"...","goal":"...","fear":"...","secret":"...","wound":"...","notes":"..."}',
+        `Use this exact character name: ${seedLabel}.`,
+        "Base the shell on the user's request and the existing canon. Keep each value brief and story-useful.",
+        "If a strong value already exists in the current snapshot, preserve it instead of replacing it.",
+        "Current entity snapshot:",
+        JSON.stringify(currentSnapshot, null, 2),
+        "User instruction:",
+        input.message,
+      ].join("\n\n"),
+      `Current AI role: ${input.role}.`,
+    );
+    const shellRaw = await generateTextWithProvider(shellPrompt, { maxOutputTokens: 220 });
+    const shellParsed = shellRaw ? parseJsonObject(shellRaw) : null;
+    const shellPayload = ensureStoryBibleIdentityValue(
+      entityType,
+      cleanStoryBiblePayload(shellParsed ?? {}, entityType),
+      seedLabel,
+      existingEntity && typeof existingEntity === "object"
+        ? (existingEntity as unknown as Record<string, unknown>)
+        : null,
+    );
+    if (!payloadLooksEmpty(shellPayload)) {
+      return {
+        ...input.action,
+        entityType,
+        entityMatch: seedLabel || input.action.entityMatch,
+        entityId:
+          input.action.entityId ??
+          (existingEntity && typeof existingEntity === "object" && "id" in existingEntity
+            ? String((existingEntity as { id?: unknown }).id ?? "")
+            : undefined),
+        payload: shellPayload,
+      };
+    }
+  }
   const characterFastFieldGuide = [
     "- name: exact character name",
     "- role: short story function or social role",
@@ -4889,19 +4832,13 @@ async function applyActions(
           await refreshWorkingProject();
           const updatedCharacter = workingProject.characters.find((entry) => entry.id === characterId) ?? null;
           if (characterRecordNeedsHeavyAutofill(updatedCharacter)) {
-            const suggestions = await interpretCharacterProfile(workingProject.id, characterId);
-            const autofillPayload = buildCharacterAutofillPayload(suggestions, updatedCharacter);
-            if (Object.keys(autofillPayload).length > 0) {
-              await mutateStoryBible(
-                workingProject.id,
-                {
-                  entityType: "character",
-                  id: characterId,
-                  payload: autofillPayload,
-                },
-                "PATCH",
-              );
-            }
+            await runTargetedCharacterAi({
+              projectId: workingProject.id,
+              characterId,
+              action: "develop-dossier",
+              instruction: [action.summary, action.content, action.entityMatch].filter(Boolean).join("\n"),
+            });
+            await refreshWorkingProject();
           }
         }
       }
@@ -5020,6 +4957,224 @@ function defaultNextTab(scope: ProjectChatScope) {
   return DEFAULT_SCOPE_TABS[scope] ?? null;
 }
 
+async function tryDirectStructuredAssistantAction(input: {
+  project: ProjectWorkspace;
+  projectId: string;
+  message: string;
+  role: AiRole;
+  scope: ProjectChatScope;
+  chapterId: string | null;
+  applyChanges: boolean;
+}) {
+  if (!input.applyChanges) {
+    return null;
+  }
+
+  const lower = input.message.toLowerCase();
+  const allowBibleDirect =
+    input.scope === "STORY_BIBLE" ||
+    input.scope === "AUTO" ||
+    input.scope === "PROJECT";
+  const allowSkeletonDirect =
+    input.scope === "SKELETON" ||
+    input.scope === "AUTO" ||
+    input.scope === "PROJECT";
+  const characterLabel = extractEntityLabelFromMessage(input.message, "character") || extractNamedEntityLabel(input.message);
+  if (
+    allowBibleDirect &&
+    characterLabel &&
+    /\b(create|build|make|add)\b/.test(lower) &&
+    lower.includes("character")
+  ) {
+    const created = await mutateStoryBible(
+      input.project.id,
+      {
+        entityType: "character",
+        payload: {
+          name: characterLabel,
+          role: "",
+          summary: "",
+          goal: "",
+          fear: "",
+          secret: "",
+          wound: "",
+          notes: "",
+        },
+      },
+      "POST",
+    );
+    const characterId = String((created as { id?: unknown } | null)?.id ?? "");
+    if (characterId) {
+      await runTargetedCharacterAi({
+        projectId: input.projectId,
+        characterId,
+        action: "develop-dossier",
+        draftCharacter: {
+          name: characterLabel,
+          role: "",
+          summary: "",
+          goal: "",
+          fear: "",
+          secret: "",
+          wound: "",
+          notes: "",
+        },
+        instruction: input.message,
+      });
+      const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+      const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+      return {
+        reply: `I created ${characterLabel} in the Story Bible and filled the character dossier from your instruction.`,
+        actions: [
+          {
+            id: "direct-character",
+            kind: "UPSERT_STORY_BIBLE_ENTITY",
+            targetLabel: characterLabel,
+            summary: "Created and developed a character dossier.",
+            status: "APPLIED" as const,
+          },
+        ],
+        project: nextProject,
+        contextPackage,
+        scope: input.scope,
+        nextTab: "bible" as StoryForgeTab,
+      };
+    }
+  }
+
+  const ruleLabel = extractEntityLabelFromMessage(input.message, "workingNote") || extractNamedEntityLabel(input.message);
+  if (
+    allowBibleDirect &&
+    ruleLabel &&
+    /\b(create|build|make|add)\b/.test(lower) &&
+    (lower.includes("book rule") || lower.includes("world rule") || lower.includes("magic system") || lower.includes("organization rule"))
+  ) {
+    const created = await mutateStoryBible(
+      input.project.id,
+      {
+        entityType: "workingNote",
+        payload: {
+          title: ruleLabel,
+          content: "",
+          tags: ["book-rule"],
+          status: "ACTIVE",
+        },
+      },
+      "POST",
+    );
+    const noteId = String((created as { id?: unknown } | null)?.id ?? "");
+    if (noteId) {
+      await runTargetedStoryBibleFieldAi({
+        projectId: input.projectId,
+        itemId: noteId,
+        itemTitle: ruleLabel,
+        fieldKey: "content",
+        fieldLabel: "Rule / internal logic",
+        action: "develop",
+        currentValue: "",
+        draftItem: {
+          id: noteId,
+          title: ruleLabel,
+          content: "",
+          tags: ["book-rule"],
+          status: "ACTIVE",
+        },
+      });
+      const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+      const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+      return {
+        reply: `I created the book rule ${ruleLabel} and filled its canon logic from your instruction.`,
+        actions: [
+          {
+            id: "direct-book-rule",
+            kind: "UPSERT_STORY_BIBLE_ENTITY",
+            targetLabel: ruleLabel,
+            summary: "Created and developed a book rule.",
+            status: "APPLIED" as const,
+          },
+        ],
+        project: nextProject,
+        contextPackage,
+        scope: input.scope,
+        nextTab: "bible" as StoryForgeTab,
+      };
+    }
+  }
+
+  if (
+    allowSkeletonDirect &&
+    /\b(create|build|make|add)\b/.test(lower) &&
+    (lower.includes("structure beat") ||
+      lower.includes("opening disturbance") ||
+      lower.includes("first doorway") ||
+      lower.includes("midpoint") ||
+      lower.includes("second doorway") ||
+      lower.includes("climax") ||
+      lower.includes("resolution"))
+  ) {
+    const beatType = inferStructureType(input.message);
+    const created = await mutateSkeleton(
+      input.project.id,
+      {
+        entityType: "structureBeat",
+        payload: {
+          chapterId: input.chapterId,
+          type: beatType,
+          label: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+          description: "",
+          notes: "",
+          status: "PLANNED",
+          orderIndex: input.project.structureBeats.length + 1,
+        },
+      },
+      "POST",
+    );
+    const beatId = String((created as { id?: unknown } | null)?.id ?? "");
+    if (beatId) {
+      await runTargetedSkeletonFieldAi({
+        projectId: input.projectId,
+        targetEntityType: "structureBeat",
+        itemId: beatId,
+        itemTitle: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+        fieldKey: "description",
+        fieldLabel: "Description",
+        action: "develop",
+        currentValue: "",
+        draftItem: {
+          id: beatId,
+          type: beatType,
+          label: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+          description: "",
+          notes: "",
+          status: "PLANNED",
+          chapterId: input.chapterId,
+          orderIndex: input.project.structureBeats.length + 1,
+        },
+      });
+      const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+      const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+      return {
+        reply: "I created a structure beat and filled its description from your instruction.",
+        actions: [
+          {
+            id: "direct-structure-beat",
+            kind: "CREATE_STRUCTURE_BEAT",
+            targetLabel: beatType,
+            summary: "Created and developed a structure beat.",
+            status: "APPLIED" as const,
+          },
+        ],
+        project: nextProject,
+        contextPackage,
+        scope: input.scope,
+        nextTab: "skeleton" as StoryForgeTab,
+      };
+    }
+  }
+
+  return null;
+}
+
 export async function runProjectAssistant(input: {
   projectId: string;
   message: string;
@@ -5031,6 +5186,11 @@ export async function runProjectAssistant(input: {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
     throw new Error("Project not found.");
+  }
+
+  const directResult = await tryDirectStructuredAssistantAction({ ...input, project });
+  if (directResult) {
+    return directResult;
   }
 
   const intent = inferAssistantIntent(input.message, input.scope);

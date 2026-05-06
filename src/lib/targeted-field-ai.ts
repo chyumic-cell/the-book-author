@@ -1,5 +1,10 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
 import { cleanGeneratedText, cleanSummaryText } from "@/lib/ai-output";
+import {
+  normalizeCharacterDossier,
+  normalizeCharacterQuickProfile,
+  normalizeCharacterState,
+} from "@/lib/character-dossier";
 import { buildContextPackage } from "@/lib/memory";
 import { generateTextWithProvider } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
@@ -32,7 +37,7 @@ const chapterListFields = new Set<AssistFieldKey>([
 
 function splitLines(value: string) {
   return value
-    .split(/\r?\n|,/)
+    .split(/\r?\n|,|\|/)
     .map((entry) => entry.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
     .filter(Boolean);
 }
@@ -211,29 +216,6 @@ function normalizeChapterFieldUpdate(fieldKey: AssistFieldKey, currentValue: str
   }
 
   return { [fieldKey]: cleanFieldText(fieldKey, generated, currentValue) } as Parameters<typeof updateChapter>[1];
-}
-
-function parseJsonObject(raw: string) {
-  const trimmed = raw.replace(/```json|```/gi, "").trim();
-  const candidates = [trimmed];
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    candidates.push(trimmed.slice(start, end + 1));
-  }
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
 }
 
 function getEntityValue(entity: Record<string, unknown>, fieldKey: string) {
@@ -572,22 +554,6 @@ function mergeCharacterIntoProject(
   };
 }
 
-function characterJsonNeedsRepair(parsed: Record<string, unknown> | null) {
-  if (!parsed) {
-    return true;
-  }
-
-  const dossier = parsed.dossier;
-  if (dossier && typeof dossier === "object") {
-    const freeTextCore = String((dossier as Record<string, unknown>).freeTextCore ?? "").trim();
-    if (freeTextCore && looksLikeMetaOutput(freeTextCore)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function compactCharacterCanon(
   project: ProjectWorkspace,
   chapterId: string,
@@ -612,63 +578,388 @@ function compactCharacterCanon(
     .join("\n");
 }
 
-function buildCharacterFieldRequest(character: CharacterRecord) {
-  const request: Record<string, unknown> = {};
-  const text = (value: unknown) => String(value ?? "").trim();
-  const isThin = (value: unknown, minimum: number) => text(value).length < minimum;
+type CharacterSectionPrompt = {
+  label: string;
+  shape: Record<string, unknown>;
+  maxOutputTokens: number;
+  guidance: string;
+};
 
-  if (isThin(character.summary, 80)) {
-    request.summary = "";
-  }
-  if (isThin(character.role, 4)) {
-    request.role = "";
-  }
-  if (isThin(character.goal, 28)) {
-    request.goal = "";
-  }
-  if (isThin(character.fear, 18)) {
-    request.fear = "";
-  }
-  if (isThin(character.secret, 18)) {
-    request.secret = "";
-  }
-  if (isThin(character.wound, 18)) {
-    request.wound = "";
-  }
-  if (isThin(character.notes, 50)) {
-    request.notes = "";
-  }
+const CHARACTER_LIST_FIELD_PATHS = new Set([
+  "dossier.basicIdentity.nicknames",
+  "dossier.personalityBehavior.coreTraits",
+  "dossier.personalityBehavior.virtues",
+  "dossier.personalityBehavior.flaws",
+  "dossier.motivationStory.secrets",
+  "dossier.speechLanguage.otherLanguages",
+  "dossier.speechLanguage.descriptors",
+  "dossier.speechLanguage.repeatedPhrases",
+  "dossier.speechLanguage.favoriteExpressions",
+  "dossier.bodyPresence.distinguishingFeatures",
+  "dossier.bodyPresence.habitsTics",
+  "dossier.relationshipDynamics.friends",
+  "dossier.relationshipDynamics.enemies",
+  "dossier.relationshipDynamics.rivals",
+  "dossier.relationshipDynamics.loversExes",
+  "dossier.relationshipDynamics.family",
+  "dossier.relationshipDynamics.mentors",
+  "dossier.relationshipDynamics.subordinatesSuperiors",
+]);
 
+function isThinTextValue(value: unknown, minimum: number) {
+  return String(value ?? "").trim().length < minimum;
+}
+
+function isThinListValue(value: unknown, minimumItems: number) {
+  return !Array.isArray(value) || value.map((entry) => String(entry).trim()).filter(Boolean).length < minimumItems;
+}
+
+function buildCharacterSectionPrompts(character: CharacterRecord) {
+  const sections: CharacterSectionPrompt[] = [];
+  const includeAllFields = true;
+
+  const coreShape: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.summary, 80)) coreShape.summary = "";
+  if (includeAllFields || isThinTextValue(character.role, 4)) coreShape.role = "";
+  if (includeAllFields || isThinTextValue(character.archetype, 8)) coreShape.archetype = "";
+  if (includeAllFields || isThinTextValue(character.goal, 28)) coreShape.goal = "";
+  if (includeAllFields || isThinTextValue(character.fear, 18)) coreShape.fear = "";
+  if (includeAllFields || isThinTextValue(character.secret, 18)) coreShape.secret = "";
+  if (includeAllFields || isThinTextValue(character.wound, 18)) coreShape.wound = "";
+  if (includeAllFields || isThinTextValue(character.notes, 50)) coreShape.notes = "";
   const quickProfile: Record<string, string> = {};
-  if (isThin(character.quickProfile?.profession, 4)) quickProfile.profession = "";
-  if (isThin(character.quickProfile?.accent, 3)) quickProfile.accent = "";
-  if (isThin(character.quickProfile?.speechPattern, 14)) quickProfile.speechPattern = "";
+  if (includeAllFields || isThinTextValue(character.quickProfile.age, 2)) quickProfile.age = "";
+  if (includeAllFields || isThinTextValue(character.quickProfile.profession, 4)) quickProfile.profession = "";
+  if (includeAllFields || isThinTextValue(character.quickProfile.placeOfLiving, 4)) quickProfile.placeOfLiving = "";
+  if (includeAllFields || isThinTextValue(character.quickProfile.accent, 3)) quickProfile.accent = "";
+  if (includeAllFields || isThinTextValue(character.quickProfile.speechPattern, 14)) quickProfile.speechPattern = "";
   if (Object.keys(quickProfile).length > 0) {
-    request.quickProfile = quickProfile;
+    coreShape.quickProfile = quickProfile;
+  }
+  const basicIdentity: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.fullName, 3)) basicIdentity.fullName = "";
+  if (includeAllFields || isThinListValue(character.dossier.basicIdentity.nicknames, 1)) basicIdentity.nicknames = [];
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.dateOfBirth, 3)) basicIdentity.dateOfBirth = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.gender, 3)) basicIdentity.gender = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.culturalBackground, 6)) basicIdentity.culturalBackground = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.nationality, 4)) basicIdentity.nationality = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.currentResidence, 4)) basicIdentity.currentResidence = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.placeOfOrigin, 4)) basicIdentity.placeOfOrigin = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.beliefSystem, 6)) basicIdentity.beliefSystem = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.maritalStatus, 4)) basicIdentity.maritalStatus = "";
+  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.familyStatus, 4)) basicIdentity.familyStatus = "";
+  const lifePosition: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.profession, 4)) lifePosition.profession = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.workplace, 4)) lifePosition.workplace = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.roleTitle, 4)) lifePosition.roleTitle = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.socialClass, 4)) lifePosition.socialClass = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.educationLevel, 4)) lifePosition.educationLevel = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.trainingBackground, 6)) lifePosition.trainingBackground = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.militaryBackground, 6)) lifePosition.militaryBackground = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.criminalRecord, 6)) lifePosition.criminalRecord = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.politicalOrientation, 6)) lifePosition.politicalOrientation = "";
+  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.reputation, 6)) lifePosition.reputation = "";
+  if (Object.keys(coreShape).length > 0 || Object.keys(basicIdentity).length > 0 || Object.keys(lifePosition).length > 0) {
+    sections.push({
+      label: "identity and life position",
+      maxOutputTokens: 320,
+      guidance:
+        "Fill the requested top-level fields plus identity and social-position facts. Keep each value compact, vivid, and app-ready.",
+      shape: {
+        ...coreShape,
+        dossier: {
+          ...(Object.keys(basicIdentity).length > 0 ? { basicIdentity } : {}),
+          ...(Object.keys(lifePosition).length > 0 ? { lifePosition } : {}),
+        },
+      },
+    });
   }
 
-  const dossier: Record<string, string> = {};
-  if (isThin(character.dossier?.freeTextCore, 180)) {
-    dossier.freeTextCore = "";
-  }
-  if (Object.keys(dossier).length > 0) {
-    request.dossier = dossier;
+  const personalityBehavior: Record<string, unknown> = {};
+  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.coreTraits, 3)) personalityBehavior.coreTraits = [];
+  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.virtues, 2)) personalityBehavior.virtues = [];
+  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.flaws, 2)) personalityBehavior.flaws = [];
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.emotionalTendencies, 12)) personalityBehavior.emotionalTendencies = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.socialConfidence, 8)) personalityBehavior.socialConfidence = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.introExtroStyle, 8)) personalityBehavior.introExtroStyle = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.conflictStyle, 12)) personalityBehavior.conflictStyle = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.decisionMaking, 12)) personalityBehavior.decisionMaking = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.projectedImage, 12)) personalityBehavior.projectedImage = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.trueNature, 12)) personalityBehavior.trueNature = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.hiddenSelf, 12)) personalityBehavior.hiddenSelf = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.embarrassmentTriggers, 10)) personalityBehavior.embarrassmentTriggers = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.angerTriggers, 10)) personalityBehavior.angerTriggers = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.comfortSources, 10)) personalityBehavior.comfortSources = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.fearTriggers, 10)) personalityBehavior.fearTriggers = "";
+  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.coreValues, 12)) personalityBehavior.coreValues = "";
+  const motivationStory: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.shortTermGoal, 16)) motivationStory.shortTermGoal = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.longTermGoal, 16)) motivationStory.longTermGoal = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.needVsWant, 12)) motivationStory.needVsWant = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.internalConflict, 16)) motivationStory.internalConflict = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.externalConflict, 16)) motivationStory.externalConflict = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.wound, 12)) motivationStory.wound = "";
+  if (includeAllFields || isThinListValue(character.dossier.motivationStory.secrets, 1)) motivationStory.secrets = [];
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.stakesIfFail, 16)) motivationStory.stakesIfFail = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.arcDirection, 12)) motivationStory.arcDirection = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.storyRole, 10)) motivationStory.storyRole = "";
+  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.relationshipToMainConflict, 16)) motivationStory.relationshipToMainConflict = "";
+  const currentState: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.currentState.currentKnowledge, 16)) currentState.currentKnowledge = "";
+  if (includeAllFields || isThinTextValue(character.currentState.unknowns, 12)) currentState.unknowns = "";
+  if (includeAllFields || isThinTextValue(character.currentState.emotionalState, 12)) currentState.emotionalState = "";
+  if (includeAllFields || isThinTextValue(character.currentState.physicalCondition, 10)) currentState.physicalCondition = "";
+  if (includeAllFields || isThinTextValue(character.currentState.loyalties, 12)) currentState.loyalties = "";
+  if (includeAllFields || isThinTextValue(character.currentState.recentChanges, 12)) currentState.recentChanges = "";
+  if (includeAllFields || isThinTextValue(character.currentState.continuityRisks, 16)) currentState.continuityRisks = "";
+  if (Object.keys(personalityBehavior).length > 0 || Object.keys(motivationStory).length > 0 || Object.keys(currentState).length > 0) {
+    sections.push({
+      label: "personality, motivation, and emotional state",
+      maxOutputTokens: 360,
+      guidance:
+        "Fill the requested psychological, motivational, and state fields with concise but specific values that match the existing canon and emotional pressure.",
+      shape: {
+        dossier: {
+          ...(Object.keys(personalityBehavior).length > 0 ? { personalityBehavior } : {}),
+          ...(Object.keys(motivationStory).length > 0 ? { motivationStory } : {}),
+        },
+        ...(Object.keys(currentState).length > 0 ? { currentState } : {}),
+      },
+    });
   }
 
-  const currentState: Record<string, string> = {};
-  if (isThin(character.currentState?.emotionalState, 12)) currentState.emotionalState = "";
-  if (isThin(character.currentState?.loyalties, 12)) currentState.loyalties = "";
-  if (isThin(character.currentState?.continuityRisks, 18)) currentState.continuityRisks = "";
-  if (Object.keys(currentState).length > 0) {
-    request.currentState = currentState;
+  const speechLanguage: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.accent, 3)) speechLanguage.accent = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.dialect, 3)) speechLanguage.dialect = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.nativeLanguage, 3)) speechLanguage.nativeLanguage = "";
+  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.otherLanguages, 1)) speechLanguage.otherLanguages = [];
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.fluencyLevels, 10)) speechLanguage.fluencyLevels = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.formalityLevel, 8)) speechLanguage.formalityLevel = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.vocabularyLevel, 8)) speechLanguage.vocabularyLevel = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.educationInSpeech, 8)) speechLanguage.educationInSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.sentenceLength, 8)) speechLanguage.sentenceLength = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.directness, 8)) speechLanguage.directness = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.pointStyle, 8)) speechLanguage.pointStyle = "";
+  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.descriptors, 2)) speechLanguage.descriptors = [];
+  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.repeatedPhrases, 1)) speechLanguage.repeatedPhrases = [];
+  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.favoriteExpressions, 1)) speechLanguage.favoriteExpressions = [];
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.swearingLevel, 8)) speechLanguage.swearingLevel = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.rhythm, 8)) speechLanguage.rhythm = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.emotionalShifts, 10)) speechLanguage.emotionalShifts = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.angrySpeech, 12)) speechLanguage.angrySpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.scaredSpeech, 12)) speechLanguage.scaredSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.lyingSpeech, 12)) speechLanguage.lyingSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.persuasiveSpeech, 12)) speechLanguage.persuasiveSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.superiorSpeech, 12)) speechLanguage.superiorSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.inferiorSpeech, 12)) speechLanguage.inferiorSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.lovedOnesSpeech, 12)) speechLanguage.lovedOnesSpeech = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.avoidedTopics, 10)) speechLanguage.avoidedTopics = "";
+  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.commonMisunderstandings, 10)) speechLanguage.commonMisunderstandings = "";
+  const bodyPresence: Record<string, unknown> = {};
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.physicalDescription, 12)) bodyPresence.physicalDescription = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.build, 6)) bodyPresence.build = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.clothingStyle, 8)) bodyPresence.clothingStyle = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.grooming, 8)) bodyPresence.grooming = "";
+  if (includeAllFields || isThinListValue(character.dossier.bodyPresence.distinguishingFeatures, 1)) bodyPresence.distinguishingFeatures = [];
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.posture, 8)) bodyPresence.posture = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.movementStyle, 8)) bodyPresence.movementStyle = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.eyeContact, 8)) bodyPresence.eyeContact = "";
+  if (includeAllFields || isThinListValue(character.dossier.bodyPresence.habitsTics, 1)) bodyPresence.habitsTics = [];
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.roomEntry, 10)) bodyPresence.roomEntry = "";
+  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.presenceFeel, 10)) bodyPresence.presenceFeel = "";
+  const relationshipDynamics: Record<string, unknown> = {};
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.friends, 1)) relationshipDynamics.friends = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.enemies, 1)) relationshipDynamics.enemies = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.rivals, 1)) relationshipDynamics.rivals = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.loversExes, 1)) relationshipDynamics.loversExes = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.family, 1)) relationshipDynamics.family = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.mentors, 1)) relationshipDynamics.mentors = [];
+  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.subordinatesSuperiors, 1)) relationshipDynamics.subordinatesSuperiors = [];
+  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.trustLevels, 10)) relationshipDynamics.trustLevels = "";
+  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.hiddenLoyalties, 10)) relationshipDynamics.hiddenLoyalties = "";
+  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.unspokenTensions, 10)) relationshipDynamics.unspokenTensions = "";
+  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.powerDynamics, 10)) relationshipDynamics.powerDynamics = "";
+  const needsFreeTextCore = !includeAllFields && isThinTextValue(character.dossier.freeTextCore, 180);
+  if (
+    Object.keys(speechLanguage).length > 0 ||
+    Object.keys(bodyPresence).length > 0 ||
+    Object.keys(relationshipDynamics).length > 0 ||
+    needsFreeTextCore
+  ) {
+    sections.push({
+      label: "voice, body, and relationships",
+      maxOutputTokens: 420,
+      guidance:
+        "Fill the requested voice, dialect, body-language, and relationship fields. Distinguish the character's speech and emotional behavior clearly, and keep the values brief and concrete.",
+      shape: {
+        dossier: {
+          ...(Object.keys(speechLanguage).length > 0 ? { speechLanguage } : {}),
+          ...(Object.keys(bodyPresence).length > 0 ? { bodyPresence } : {}),
+          ...(Object.keys(relationshipDynamics).length > 0 ? { relationshipDynamics } : {}),
+          ...(needsFreeTextCore ? { freeTextCore: "" } : {}),
+        },
+      },
+    });
   }
 
-  if (Object.keys(request).length === 0) {
-    request.dossier = { freeTextCore: "" };
-    request.summary = "";
+  if (sections.length === 0) {
+    sections.push({
+      label: "dossier refresh",
+      maxOutputTokens: 280,
+      guidance: "Refresh the most useful parts of the dossier while preserving the strong existing canon.",
+      shape: {
+        summary: "",
+        dossier: { freeTextCore: "" },
+        currentState: { emotionalState: "" },
+      },
+    });
   }
 
-  return request;
+  return sections;
+}
+
+function mergeCharacterDossierSections(baseDossier: CharacterRecord["dossier"], patch: Record<string, unknown>) {
+  const patchDossier = patch.dossier && typeof patch.dossier === "object" ? (patch.dossier as Record<string, unknown>) : {};
+  return normalizeCharacterDossier(
+    {
+      ...baseDossier,
+      ...patchDossier,
+      basicIdentity: {
+        ...baseDossier.basicIdentity,
+        ...((patchDossier.basicIdentity as Record<string, unknown> | undefined) ?? {}),
+      },
+      lifePosition: {
+        ...baseDossier.lifePosition,
+        ...((patchDossier.lifePosition as Record<string, unknown> | undefined) ?? {}),
+      },
+      personalityBehavior: {
+        ...baseDossier.personalityBehavior,
+        ...((patchDossier.personalityBehavior as Record<string, unknown> | undefined) ?? {}),
+      },
+      motivationStory: {
+        ...baseDossier.motivationStory,
+        ...((patchDossier.motivationStory as Record<string, unknown> | undefined) ?? {}),
+      },
+      speechLanguage: {
+        ...baseDossier.speechLanguage,
+        ...((patchDossier.speechLanguage as Record<string, unknown> | undefined) ?? {}),
+      },
+      bodyPresence: {
+        ...baseDossier.bodyPresence,
+        ...((patchDossier.bodyPresence as Record<string, unknown> | undefined) ?? {}),
+      },
+      relationshipDynamics: {
+        ...baseDossier.relationshipDynamics,
+        ...((patchDossier.relationshipDynamics as Record<string, unknown> | undefined) ?? {}),
+      },
+    },
+    String((patchDossier.basicIdentity as Record<string, unknown> | undefined)?.fullName ?? baseDossier.basicIdentity.fullName ?? ""),
+  );
+}
+
+function collectCharacterFieldPaths(shape: Record<string, unknown>, prefix = ""): string[] {
+  return Object.entries(shape).flatMap(([key, value]) => {
+    const nextPath = prefix ? `${prefix}.${key}` : key;
+    if (Array.isArray(value)) {
+      return [nextPath];
+    }
+    if (value && typeof value === "object") {
+      return collectCharacterFieldPaths(value as Record<string, unknown>, nextPath);
+    }
+    return [nextPath];
+  });
+}
+
+function extractCharacterShapeValues(source: unknown, shape: Record<string, unknown>): Record<string, unknown> {
+  const sourceObject = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(shape)) {
+    const currentValue = sourceObject[key];
+    if (Array.isArray(value)) {
+      result[key] = Array.isArray(currentValue) ? currentValue : [];
+      continue;
+    }
+    if (value && typeof value === "object") {
+      result[key] = extractCharacterShapeValues(currentValue, value as Record<string, unknown>);
+      continue;
+    }
+    result[key] = currentValue ?? "";
+  }
+
+  return result;
+}
+
+function collectEmptyCharacterFieldPaths(source: unknown, shape: Record<string, unknown>, prefix = ""): string[] {
+  const sourceObject = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
+  return Object.entries(shape).flatMap(([key, value]) => {
+    const nextPath = prefix ? `${prefix}.${key}` : key;
+    const currentValue = sourceObject[key];
+    if (Array.isArray(value)) {
+      return splitLines(String(Array.isArray(currentValue) ? currentValue.join("|") : currentValue ?? "")).length > 0
+        ? []
+        : [nextPath];
+    }
+    if (value && typeof value === "object") {
+      return collectEmptyCharacterFieldPaths(currentValue, value as Record<string, unknown>, nextPath);
+    }
+    return String(currentValue ?? "").trim() ? [] : [nextPath];
+  });
+}
+
+function setCharacterFieldPath(target: Record<string, unknown>, path: string, value: unknown) {
+  const segments = path.split(".");
+  let current: Record<string, unknown> = target;
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      current[segment] = value;
+      return;
+    }
+    if (!current[segment] || typeof current[segment] !== "object" || Array.isArray(current[segment])) {
+      current[segment] = {};
+    }
+    current = current[segment] as Record<string, unknown>;
+  });
+}
+
+function parseCharacterFieldLines(raw: string, allowedPaths: string[]) {
+  const payload: Record<string, unknown> = {};
+  const cleanedRaw = raw
+    .replace(/```[a-z]*|```/gi, " ")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s*\.\s*/g, ".")
+    .replace(/\s+/g, " ");
+  const markers = allowedPaths
+    .map((path) => {
+      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = cleanedRaw.match(new RegExp(`${escaped}\\s*(?:::|=>|=)`, "i"));
+      if (!match || match.index == null) {
+        return null;
+      }
+      return {
+        path,
+        index: match.index,
+        markerLength: match[0].length,
+      };
+    })
+    .filter((entry): entry is { path: string; index: number; markerLength: number } => Boolean(entry))
+    .sort((left, right) => left.index - right.index);
+
+  for (const [index, marker] of markers.entries()) {
+    const valueStart = marker.index + marker.markerLength;
+    const valueEnd = markers[index + 1]?.index ?? cleanedRaw.length;
+    const value = cleanedRaw.slice(valueStart, valueEnd).trim();
+    if (!value) {
+      continue;
+    }
+    setCharacterFieldPath(
+      payload,
+      marker.path,
+      CHARACTER_LIST_FIELD_PATHS.has(marker.path) ? splitLines(value.replace(/\s+\w+\.$/, "")) : value,
+    );
+  }
+
+  return payload;
 }
 
 function mergeCharacterAiPayload(
@@ -680,6 +971,14 @@ function mergeCharacterAiPayload(
   const mergedPayload: Record<string, unknown> = {
     ...draftPayload,
   };
+  const baseName = String(draftPayload.name ?? baseCharacter.name ?? "").trim();
+  if (baseName) {
+    mergedPayload.name = baseName;
+  }
+  const baseRole = String(draftPayload.role ?? baseCharacter.role ?? "").trim();
+  if (baseRole) {
+    mergedPayload.role = baseRole;
+  }
 
   if (parsed) {
     for (const fieldKey of ["summary", "role", "goal", "fear", "secret", "wound", "notes"] as const) {
@@ -692,10 +991,10 @@ function mergeCharacterAiPayload(
       }
     }
     if (parsed.quickProfile && typeof parsed.quickProfile === "object") {
-      mergedPayload.quickProfile = {
+      mergedPayload.quickProfile = normalizeCharacterQuickProfile({
         ...baseCharacter.quickProfile,
         ...(parsed.quickProfile as Record<string, unknown>),
-      };
+      });
     }
     if (parsed.dossier && typeof parsed.dossier === "object") {
       const nextDossier = parsed.dossier as Record<string, unknown>;
@@ -703,31 +1002,52 @@ function mergeCharacterAiPayload(
         typeof nextDossier.freeTextCore === "string"
           ? cleanGeneratedText(String(nextDossier.freeTextCore)).trim()
           : "";
-      mergedPayload.dossier = {
-        ...baseCharacter.dossier,
-        ...nextDossier,
-        ...(cleanedFreeTextCore && !looksLikeMetaOutput(cleanedFreeTextCore)
-          ? { freeTextCore: cleanedFreeTextCore }
-          : {}),
-      };
+      mergedPayload.dossier = mergeCharacterDossierSections(baseCharacter.dossier, {
+        dossier: {
+          ...nextDossier,
+          ...(cleanedFreeTextCore && !looksLikeMetaOutput(cleanedFreeTextCore)
+            ? { freeTextCore: cleanedFreeTextCore }
+            : {}),
+        },
+      });
     }
     if (parsed.currentState && typeof parsed.currentState === "object") {
-      mergedPayload.currentState = {
+      mergedPayload.currentState = normalizeCharacterState({
         ...baseCharacter.currentState,
         ...(parsed.currentState as Record<string, unknown>),
-      };
+      });
     }
   } else if (fallbackDossier && !looksLikeMetaOutput(fallbackDossier)) {
-    mergedPayload.dossier = {
-      ...baseCharacter.dossier,
-      freeTextCore: fallbackDossier,
-    };
-    if (String(baseCharacter.summary ?? "").trim().length < 40) {
+    const existingDossier =
+      mergedPayload.dossier && typeof mergedPayload.dossier === "object"
+        ? mergeCharacterDossierSections(baseCharacter.dossier, {
+            dossier: mergedPayload.dossier as Record<string, unknown>,
+          })
+        : baseCharacter.dossier;
+    mergedPayload.dossier = mergeCharacterDossierSections(existingDossier, {
+      dossier: {
+        freeTextCore: fallbackDossier,
+      },
+    });
+    if (String(mergedPayload.summary ?? baseCharacter.summary ?? "").trim().length < 40) {
       mergedPayload.summary = cleanFieldText(
         "summary",
         fallbackDossier.split(/\n+/)[0] ?? fallbackDossier,
-        baseCharacter.summary,
+        String(mergedPayload.summary ?? baseCharacter.summary ?? ""),
       );
+    }
+  }
+
+  if (!String(mergedPayload.role ?? "").trim()) {
+    const inferredRole = [
+      (mergedPayload.quickProfile as Record<string, unknown> | undefined)?.profession,
+      ((mergedPayload.dossier as Record<string, unknown> | undefined)?.lifePosition as Record<string, unknown> | undefined)?.roleTitle,
+      ((mergedPayload.dossier as Record<string, unknown> | undefined)?.lifePosition as Record<string, unknown> | undefined)?.profession,
+    ]
+      .map((entry) => String(entry ?? "").trim())
+      .find(Boolean);
+    if (inferredRole) {
+      mergedPayload.role = inferredRole;
     }
   }
 
@@ -1106,6 +1426,7 @@ export async function runTargetedCharacterAi(input: {
   characterId: string;
   action: "develop-dossier" | "expand-summary" | "tighten-summary";
   draftCharacter?: Record<string, unknown>;
+  instruction?: string;
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
@@ -1138,6 +1459,7 @@ export async function runTargetedCharacterAi(input: {
       workingCharacter.summary
         ? "Base the result on the exact summary already written in this textbox. Preserve its core idea while improving it."
         : "The summary textbox is blank, so you may draft it freely as long as it stays canon-safe.",
+      input.instruction ? `Additional request context:\n${input.instruction}` : "",
       `Current summary:\n${workingCharacter.summary || "(blank)"}`,
       "Return only the final summary text. No labels. No commentary.",
     ]
@@ -1165,61 +1487,139 @@ export async function runTargetedCharacterAi(input: {
       summary: cleanFieldText("summary", summary, workingCharacter.summary),
     });
   } else {
-    const requestedFields = buildCharacterFieldRequest(workingCharacter);
-    const prompt = [
-      "You are a fast character architect.",
-      compactCanon,
-      `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"}.`,
-      "Respect what is already written in the character textboxes. Treat those entries as the primary source of truth.",
-      "Fill every missing or thin field requested below with concrete, human, non-generic content. Do not rewrite strong existing fields.",
-      "Make the character feel specific, lived-in, and story-useful rather than broad or placeholder-like.",
-      "Keep the answer compact and efficient. Short field values are better than long rambling ones.",
-      "Do not output commentary.",
-      "Return strict JSON only for the requested fields.",
-      `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
-      `Current character snapshot:\n${JSON.stringify(
-        {
-          name: workingCharacter.name,
-          role: workingCharacter.role,
-          archetype: workingCharacter.archetype,
-          summary: workingCharacter.summary,
-          goal: workingCharacter.goal,
-          fear: workingCharacter.fear,
-          secret: workingCharacter.secret,
-          wound: workingCharacter.wound,
-          notes: workingCharacter.notes,
-          quickProfile: workingCharacter.quickProfile,
-          dossier: {
-            freeTextCore: workingCharacter.dossier.freeTextCore,
-          },
-          currentState: workingCharacter.currentState,
-        },
-        null,
-        2,
-      )}`,
-    ].join("\n\n");
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 220 });
-    let parsed = raw ? parseJsonObject(raw) : null;
-    if (characterJsonNeedsRepair(parsed)) {
-      const repairPrompt = [
-        "Repair the character JSON.",
-        compactCanon,
-        `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"}.`,
-        "Return strict JSON only for the requested fields below.",
-        `Requested JSON shape:\n${JSON.stringify(requestedFields, null, 2)}`,
-        "Respect the existing textbox content as primary canon. Preserve strong existing entries. Fill blanks only when supported.",
-        `Rejected answer:\n${raw ?? ""}`,
-      ].join("\n\n");
-      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 220 });
-      parsed = repaired ? parseJsonObject(repaired) : null;
+    const sectionPrompts = buildCharacterSectionPrompts(workingCharacter);
+    let aggregatePayload: Record<string, unknown> = { ...draftCharacterPayload };
+    let fallbackDossier = "";
+    const sectionResults = await Promise.all(
+      sectionPrompts.map(async (section) => {
+        const fieldPaths = collectCharacterFieldPaths(section.shape);
+        const sectionCharacter = applyCharacterPatch(workingCharacter, aggregatePayload);
+        const sectionSnapshot = {
+          name: sectionCharacter.name,
+          ...extractCharacterShapeValues(sectionCharacter, section.shape),
+        };
+        const prompt = [
+          "You are a fast character architect.",
+          compactCanon,
+          `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> ${section.label}.`,
+          "Respect what is already written in the visible character textboxes. Treat those entries as primary canon.",
+          "Fill every requested field for this section. When a field already has useful text, preserve its core idea and sharpen it instead of changing it arbitrarily.",
+          "Keep values compact, concrete, and immediately usable inside the app.",
+          "Use short lists for array fields and short, vivid phrases for string fields.",
+          "Do not output commentary.",
+          "Every requested field path must appear exactly once in your answer, even if the value is short.",
+          "Do not collapse multiple requested fields into one paragraph. Emit one path line per field.",
+          "Return exactly one line per requested field using this format: path :: value",
+          "For list fields, separate items with | on the same line.",
+          input.instruction ? `Additional request context:\n${input.instruction}` : "",
+          section.guidance,
+          `Requested field paths:\n- ${fieldPaths.join("\n- ")}`,
+          `Current values for these fields:\n${JSON.stringify(sectionSnapshot, null, 2)}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        const raw = await generateTextWithProvider(prompt, { maxOutputTokens: section.maxOutputTokens });
+        let parsed = raw ? parseCharacterFieldLines(raw, fieldPaths) : null;
+        if (!parsed || Object.keys(parsed).length === 0) {
+          const repairPrompt = [
+            "Repair the character field lines.",
+            compactCanon,
+            `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> ${section.label}.`,
+            "Return exactly one line per requested field using the format path :: value.",
+            "For list fields, separate items with |.",
+            `Requested field paths:\n- ${fieldPaths.join("\n- ")}`,
+            input.instruction ? `Additional request context:\n${input.instruction}` : "",
+            `Rejected answer:\n${raw ?? ""}`,
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+          const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: section.maxOutputTokens });
+          parsed = repaired ? parseCharacterFieldLines(repaired, fieldPaths) : null;
+          return { parsed, raw: repaired ?? raw ?? "" };
+        }
+        return { parsed, raw: raw ?? "" };
+      }),
+    );
+
+    for (const result of sectionResults) {
+      const resultRaw = cleanGeneratedText(result.raw ?? "").trim();
+      if (resultRaw.length > fallbackDossier.length) {
+        fallbackDossier = resultRaw;
+      }
+      aggregatePayload = mergeCharacterAiPayload(
+        applyCharacterPatch(workingCharacter, aggregatePayload),
+        aggregatePayload,
+        result.parsed,
+        "",
+      );
     }
-    const fallbackDossier = cleanGeneratedText(raw ?? "").trim();
+
     const mergedPayload = mergeCharacterAiPayload(
       workingCharacter,
-      draftCharacterPayload,
-      parsed,
+      aggregatePayload,
+      null,
       fallbackDossier,
     );
+    const previewCharacter = applyCharacterPatch(workingCharacter, mergedPayload);
+    const missingPaths = sectionPrompts.flatMap((section) =>
+      collectEmptyCharacterFieldPaths(
+        {
+          summary: previewCharacter.summary,
+          role: previewCharacter.role,
+          archetype: previewCharacter.archetype,
+          goal: previewCharacter.goal,
+          fear: previewCharacter.fear,
+          secret: previewCharacter.secret,
+          wound: previewCharacter.wound,
+          notes: previewCharacter.notes,
+          quickProfile: previewCharacter.quickProfile,
+          dossier: previewCharacter.dossier,
+          currentState: previewCharacter.currentState,
+        },
+        section.shape,
+      ),
+    );
+    if (missingPaths.length > 0) {
+      const repairPrompt = [
+        "You are repairing a character dossier.",
+        compactCanon,
+        `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> missing fields.`,
+        "Return exactly one line per requested field using this format: path :: value",
+        "For list fields, separate items with | on the same line.",
+        "Do not output commentary.",
+        "Fill only the missing fields listed below. Keep everything consistent with the current saved character values.",
+        input.instruction ? `Additional request context:\n${input.instruction}` : "",
+        `Missing field paths:\n- ${missingPaths.join("\n- ")}`,
+        `Current character values:\n${JSON.stringify(
+          {
+            name: previewCharacter.name,
+            summary: previewCharacter.summary,
+            role: previewCharacter.role,
+            archetype: previewCharacter.archetype,
+            goal: previewCharacter.goal,
+            fear: previewCharacter.fear,
+            secret: previewCharacter.secret,
+            wound: previewCharacter.wound,
+            notes: previewCharacter.notes,
+            quickProfile: previewCharacter.quickProfile,
+            dossier: previewCharacter.dossier,
+            currentState: previewCharacter.currentState,
+          },
+          null,
+          2,
+        )}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const repairRaw = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 280 });
+      const repairParsed = repairRaw ? parseCharacterFieldLines(repairRaw, missingPaths) : null;
+      if (repairParsed && Object.keys(repairParsed).length > 0) {
+        Object.assign(
+          mergedPayload,
+          mergeCharacterAiPayload(previewCharacter, mergedPayload, repairParsed, ""),
+        );
+      }
+    }
     if (Object.keys(mergedPayload).length === 0) {
       throw new Error("AI did not return usable character dossier content.");
     }
