@@ -25,10 +25,11 @@ export function safeArray<T>(value: T[] | null | undefined) {
   return Array.isArray(value) ? value : [];
 }
 
-export function compactText(value: string, maxLength = 280) {
-  if (value.length <= maxLength) {
-    return value;
+export function compactText(value: unknown, maxLength = 280) {
+  const text = typeof value === "string" ? value : String(value ?? "");
+  if (text.length <= maxLength) {
+    return text;
   }
 
-  return `${value.slice(0, maxLength - 3).trimEnd()}...`;
+  return `${text.slice(0, maxLength - 3).trimEnd()}...`;
 }

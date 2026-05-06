@@ -55,15 +55,18 @@ function getChapterIndex(project: ProjectWorkspace, chapterId: string) {
 }
 
 function buildChapterSignal(chapter: ProjectWorkspace["chapters"][number], draft: string) {
+  const keyBeats = Array.isArray(chapter.keyBeats) ? chapter.keyBeats : [];
+  const requiredInclusions = Array.isArray(chapter.requiredInclusions) ? chapter.requiredInclusions : [];
+  const sceneList = Array.isArray(chapter.sceneList) ? chapter.sceneList : [];
   return [
     chapter.title,
     chapter.purpose,
     chapter.currentBeat,
     chapter.outline,
     chapter.notes,
-    ...chapter.keyBeats,
-    ...chapter.requiredInclusions,
-    ...chapter.sceneList,
+    ...keyBeats,
+    ...requiredInclusions,
+    ...sceneList,
     draft,
   ]
     .filter(Boolean)
@@ -83,9 +86,11 @@ function hasIntentionalShiftSignal(chapter: ProjectWorkspace["chapters"][number]
 }
 
 function buildPlanningSeeds(chapter: ProjectWorkspace["chapters"][number]) {
+  const requiredInclusions = Array.isArray(chapter.requiredInclusions) ? chapter.requiredInclusions : [];
+  const keyBeats = Array.isArray(chapter.keyBeats) ? chapter.keyBeats : [];
   return [
-    ...chapter.requiredInclusions.map((value) => ({ text: value, severity: "MEDIUM" as const, kind: "Required inclusion" })),
-    ...chapter.keyBeats.map((value) => ({ text: value, severity: "LOW" as const, kind: "Key beat" })),
+    ...requiredInclusions.map((value) => ({ text: value, severity: "MEDIUM" as const, kind: "Required inclusion" })),
+    ...keyBeats.map((value) => ({ text: value, severity: "LOW" as const, kind: "Key beat" })),
   ]
     .filter((entry) => entry.text.trim().length > 0)
     .slice(0, 5);
