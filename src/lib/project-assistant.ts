@@ -1938,6 +1938,21 @@ function buildStoryBibleActionSupplements(input: {
   return supplements;
 }
 
+function looksLikeGarbageEntityMatch(value: string | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes("actual content") ||
+    normalized.includes("not stubs") ||
+    normalized.includes("real book rule") ||
+    normalized.includes("real dossier") ||
+    normalized.includes("compact but real")
+  );
+}
+
 function getStoryBibleIdentityField(entityType: AssistantStoryBibleEntityType) {
   switch (entityType) {
     case "character":
@@ -2337,6 +2352,10 @@ function sanitizePlanActions(input: {
       };
     })
     .filter((action) => {
+      if (action.kind === "UPSERT_STORY_BIBLE_ENTITY" && looksLikeGarbageEntityMatch(action.entityMatch)) {
+        return false;
+      }
+
       if (
         input.scope === "STORY_BIBLE" &&
         !intent.wantsDraft &&
