@@ -1723,7 +1723,7 @@ function cleanExtractedEntityLabel(value: string) {
   return value
     .replace(/^["“'`]+|["”'`]+$/g, "")
     .replace(/[.,;:!?]+$/, "")
-    .split(/\s+(?:and|with|who|that|which|where|plus|as)\b/i)[0]
+    .split(/\s+(?:and|with|who|that|which|where|plus|as|build|make|give|using|keep)\b/i)[0]
     .trim();
 }
 
@@ -1833,7 +1833,19 @@ function extractMultipleEntityLabels(message: string, entityType: AssistantStory
     .replace(/\s+and\s+/gi, ", ")
     .split(",")
     .map((part) => cleanExtractedEntityLabel(part))
-    .filter(Boolean);
+    .filter((part) => {
+      if (!part) {
+        return false;
+      }
+      const lowerPart = part.toLowerCase();
+      return !(
+        lowerPart.includes("actual content") ||
+        lowerPart.includes("not stubs") ||
+        lowerPart.includes("real book rule") ||
+        lowerPart.includes("real dossier") ||
+        lowerPart.includes("compact but real")
+      );
+    });
 
   return Array.from(new Set(normalizedList));
 }
