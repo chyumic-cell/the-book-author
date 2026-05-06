@@ -1797,6 +1797,135 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
   return extractNamedEntityLabel(message);
 }
 
+function extractMultipleEntityLabels(message: string, entityType: AssistantStoryBibleEntityType) {
+  const lower = message.toLowerCase();
+  const anchorByType: Record<AssistantStoryBibleEntityType, string[]> = {
+    character: ["characters named", "characters called", "character names", "character named", "character called"],
+    relationship: ["relationships named", "relationship named", "relationship called"],
+    plotThread: ["plot threads named", "plot threads called", "arcs named", "mysteries named", "plot thread named", "arc named", "mystery named"],
+    location: ["locations named", "places named", "location named", "place named"],
+    faction: ["factions named", "faction named", "faction called"],
+    timelineEvent: ["events named", "timeline events named", "event named", "timeline event named"],
+    workingNote: ["book rules named", "rules named", "book rule named", "rule named"],
+  };
+
+  const anchor = anchorByType[entityType].find((value) => lower.includes(value));
+  if (!anchor) {
+    return [];
+  }
+
+  const startIndex = lower.indexOf(anchor);
+  if (startIndex < 0) {
+    return [];
+  }
+
+  const afterAnchor = message.slice(startIndex + anchor.length);
+  const stopMatch = afterAnchor.search(/\b(?:with|that|who|which|keep|make|build|give|and build|and make|using|so that)\b/i);
+  const rawList = (stopMatch >= 0 ? afterAnchor.slice(0, stopMatch) : afterAnchor)
+    .replace(/^[\s:,-]+/, "")
+    .trim();
+
+  if (!rawList) {
+    return [];
+  }
+
+  const normalizedList = rawList
+    .replace(/\s+and\s+/gi, ", ")
+    .split(",")
+    .map((part) => cleanExtractedEntityLabel(part))
+    .filter(Boolean);
+
+  return Array.from(new Set(normalizedList));
+}
+
+function inferRequestedEntityCount(message: string) {
+  const lower = message.toLowerCase();
+  const wordCounts: Array<[RegExp, number]> = [
+    [/\bfive\b/, 5],
+    [/\bfour\b/, 4],
+    [/\bthree\b/, 3],
+    [/\btwo\b/, 2],
+    [/\bone\b/, 1],
+  ];
+  for (const [pattern, count] of wordCounts) {
+    if (pattern.test(lower)) {
+      return count;
+    }
+  }
+  const numeric = lower.match(/\b(\d+)\b/);
+  return numeric ? Number.parseInt(numeric[1] ?? "0", 10) || 0 : 0;
+}
+
+function buildStoryBibleActionSupplements(input: {
+  actions: AssistantPlanAction[];
+  message: string;
+  project: ProjectWorkspace;
+}) {
+  const lower = input.message.toLowerCase();
+  const supplements: AssistantPlanAction[] = [];
+  const requestedCount = inferRequestedEntityCount(input.message);
+
+  const entityConfigs: Array<{
+    entityType: AssistantStoryBibleEntityType;
+    trigger: boolean;
+  }> = [
+    { entityType: "character", trigger: lower.includes("character") },
+    { entityType: "workingNote", trigger: lower.includes("book rule") || lower.includes("world rule") || lower.includes("rule") },
+    { entityType: "plotThread", trigger: lower.includes("plot thread") || lower.includes("mystery") || lower.includes("arc") },
+    { entityType: "location", trigger: lower.includes("location") || lower.includes("place") },
+    { entityType: "faction", trigger: lower.includes("faction") },
+    { entityType: "timelineEvent", trigger: lower.includes("timeline") || lower.includes("event") },
+  ];
+
+  for (const config of entityConfigs) {
+    if (!config.trigger) {
+      continue;
+    }
+
+    const explicitLabels = extractMultipleEntityLabels(input.message, config.entityType);
+    const existingCount = input.actions.filter(
+      (action) => action.kind === "UPSERT_STORY_BIBLE_ENTITY" && action.entityType === config.entityType,
+    ).length;
+    const targetCount = Math.max(explicitLabels.length, requestedCount);
+
+    explicitLabels.forEach((label) => {
+      const alreadyPresent = input.actions.some(
+        (action) =>
+          action.kind === "UPSERT_STORY_BIBLE_ENTITY" &&
+          action.entityType === config.entityType &&
+          (String(action.entityMatch ?? "").trim().toLowerCase() === label.toLowerCase() ||
+            String((action.payload ?? {}).name ?? (action.payload ?? {}).title ?? (action.payload ?? {}).label ?? "")
+              .trim()
+              .toLowerCase() === label.toLowerCase()),
+      );
+      if (!alreadyPresent) {
+        supplements.push({
+          kind: "UPSERT_STORY_BIBLE_ENTITY",
+          entityType: config.entityType,
+          entityMatch: label,
+          payload: {},
+          summary: `Create or fill the ${config.entityType} entry for ${label}.`,
+        });
+      }
+    });
+
+    if (targetCount > 0 && existingCount + supplements.filter((entry) => entry.entityType === config.entityType).length < targetCount) {
+      const needed = targetCount - (existingCount + supplements.filter((entry) => entry.entityType === config.entityType).length);
+      for (let index = 0; index < needed; index += 1) {
+        supplements.push({
+          kind: "UPSERT_STORY_BIBLE_ENTITY",
+          entityType: config.entityType,
+          entityMatch: "",
+          payload: {},
+          summary: `Create another ${config.entityType} entry that fits the user's request and the existing canon.`,
+        });
+      }
+    }
+  }
+
+  return supplements;
+}
+
 function getStoryBibleIdentityField(entityType: AssistantStoryBibleEntityType) {
   switch (entityType) {
     case "character":
@@ -2285,15 +2414,22 @@ function sanitizePlanActions(input: {
     })
     .slice(0, 48);
 
+  const supplementedStoryBibleActions = buildStoryBibleActionSupplements({
+    actions: cleaned,
+    message: input.message,
+    project: input.project,
+  });
+  const cleanedWithStoryBibleSupplements = [...cleaned, ...supplementedStoryBibleActions].slice(0, 56);
+
   if (!intent.wantsAllChapters) {
-    return cleaned;
+    return cleanedWithStoryBibleSupplements;
   }
 
   const supplemental: AssistantPlanAction[] = [];
   for (const chapter of input.project.chapters) {
     if (
       intent.wantsTitles &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "title" &&
@@ -2312,7 +2448,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsPurpose &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "purpose" &&
@@ -2331,7 +2467,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsOutline &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "outline" &&
@@ -2350,7 +2486,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsCurrentBeat &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "currentBeat" &&
@@ -2369,7 +2505,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsSceneList &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "sceneList" &&
@@ -2388,7 +2524,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsKeyBeats &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "keyBeats" &&
@@ -2407,7 +2543,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsRequiredInclusions &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "requiredInclusions" &&
@@ -2426,7 +2562,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsForbiddenElements &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "forbiddenElements" &&
@@ -2445,7 +2581,7 @@ function sanitizePlanActions(input: {
 
     if (
       intent.wantsDesiredMood &&
-      !cleaned.some(
+        !cleanedWithStoryBibleSupplements.some(
         (action) =>
           action.kind === "UPDATE_CHAPTER_FIELD" &&
           action.fieldKey === "desiredMood" &&
@@ -2463,7 +2599,7 @@ function sanitizePlanActions(input: {
     }
   }
 
-  return [...cleaned, ...supplemental].slice(0, 64);
+  return [...cleanedWithStoryBibleSupplements, ...supplemental].slice(0, 64);
 }
 
 function buildFallbackPlan(input: {

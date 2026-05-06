@@ -24,6 +24,25 @@ function uniqueNonEmpty(values: Array<string | null | undefined>) {
   );
 }
 
+function normalizeChapterPlanningArrays<T extends {
+  keyBeats?: unknown;
+  requiredInclusions?: unknown;
+  forbiddenElements?: unknown;
+  sceneList?: unknown;
+}>(chapter: T) {
+  return {
+    ...chapter,
+    keyBeats: Array.isArray(chapter.keyBeats) ? chapter.keyBeats.map((item) => String(item ?? "").trim()).filter(Boolean) : [],
+    requiredInclusions: Array.isArray(chapter.requiredInclusions)
+      ? chapter.requiredInclusions.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : [],
+    forbiddenElements: Array.isArray(chapter.forbiddenElements)
+      ? chapter.forbiddenElements.map((item) => String(item ?? "").trim()).filter(Boolean)
+      : [],
+    sceneList: Array.isArray(chapter.sceneList) ? chapter.sceneList.map((item) => String(item ?? "").trim()).filter(Boolean) : [],
+  };
+}
+
 function scoreNameMention(name: string, text: string) {
   if (!name || !text) {
     return 0;
@@ -92,17 +111,18 @@ function scorePlotThreadMention(thread: ProjectWorkspace["plotThreads"][number],
 }
 
 function buildChapterSignal(project: ProjectWorkspace, chapter: ProjectWorkspace["chapters"][number], localExcerpt?: string) {
+  const normalizedChapter = normalizeChapterPlanningArrays(chapter);
   return [
-    chapter.title,
-    chapter.purpose,
-    chapter.currentBeat,
-    chapter.desiredMood,
-    chapter.outline,
-    chapter.notes,
-    chapter.draft,
-    ...chapter.keyBeats,
-    ...chapter.requiredInclusions,
-    ...chapter.sceneList,
+    normalizedChapter.title,
+    normalizedChapter.purpose,
+    normalizedChapter.currentBeat,
+    normalizedChapter.desiredMood,
+    normalizedChapter.outline,
+    normalizedChapter.notes,
+    normalizedChapter.draft,
+    ...normalizedChapter.keyBeats,
+    ...normalizedChapter.requiredInclusions,
+    ...normalizedChapter.sceneList,
     project.bookSettings.storyBrief,
     project.bookSettings.plotDirection,
     ...project.bookSettings.themes,
@@ -116,17 +136,18 @@ function buildChapterSignal(project: ProjectWorkspace, chapter: ProjectWorkspace
 }
 
 function buildChapterBlueprint(chapter: ProjectWorkspace["chapters"][number]) {
+  const normalizedChapter = normalizeChapterPlanningArrays(chapter);
   return [
-    `Chapter ${chapter.number}: ${chapter.title}`,
-    chapter.purpose ? `Purpose: ${chapter.purpose}` : "",
-    chapter.currentBeat ? `Current beat: ${chapter.currentBeat}` : "",
-    chapter.desiredMood ? `Desired mood: ${chapter.desiredMood}` : "",
-    chapter.keyBeats.length ? `Key beats: ${chapter.keyBeats.join(" | ")}` : "",
-    chapter.requiredInclusions.length ? `Required inclusions: ${chapter.requiredInclusions.join(" | ")}` : "",
-    chapter.forbiddenElements.length ? `Forbidden elements: ${chapter.forbiddenElements.join(" | ")}` : "",
-    chapter.sceneList.length ? `Scene list: ${chapter.sceneList.join(" | ")}` : "",
-    chapter.outline ? `Outline: ${compactText(chapter.outline, 420)}` : "",
-    chapter.notes ? `Notes: ${compactText(chapter.notes, 320)}` : "",
+    `Chapter ${normalizedChapter.number}: ${normalizedChapter.title}`,
+    normalizedChapter.purpose ? `Purpose: ${normalizedChapter.purpose}` : "",
+    normalizedChapter.currentBeat ? `Current beat: ${normalizedChapter.currentBeat}` : "",
+    normalizedChapter.desiredMood ? `Desired mood: ${normalizedChapter.desiredMood}` : "",
+    normalizedChapter.keyBeats.length ? `Key beats: ${normalizedChapter.keyBeats.join(" | ")}` : "",
+    normalizedChapter.requiredInclusions.length ? `Required inclusions: ${normalizedChapter.requiredInclusions.join(" | ")}` : "",
+    normalizedChapter.forbiddenElements.length ? `Forbidden elements: ${normalizedChapter.forbiddenElements.join(" | ")}` : "",
+    normalizedChapter.sceneList.length ? `Scene list: ${normalizedChapter.sceneList.join(" | ")}` : "",
+    normalizedChapter.outline ? `Outline: ${compactText(normalizedChapter.outline, 420)}` : "",
+    normalizedChapter.notes ? `Notes: ${compactText(normalizedChapter.notes, 320)}` : "",
   ].filter(Boolean);
 }
 
@@ -509,11 +530,12 @@ export function extractMemoryFromDraft(
   if (!chapter) {
     throw new Error("Chapter not found.");
   }
+  const normalizedChapter = normalizeChapterPlanningArrays(chapter);
   const workingChapter = {
-    ...chapter,
+    ...normalizedChapter,
     ...overrides,
   };
-  const cleanedDraft = sanitizeManuscriptText(chapter.draft, {
+  const cleanedDraft = sanitizeManuscriptText(workingChapter.draft, {
     chapterTitle: workingChapter.title,
     chapterNumber: workingChapter.number,
     previousChapterDrafts: project.chapters
@@ -692,19 +714,20 @@ export async function persistMemoryExtraction(
   if (!chapter) {
     throw new Error("Chapter not found.");
   }
+  const normalizedChapter = normalizeChapterPlanningArrays(chapter);
   const extraction = extractMemoryFromDraft(project, chapterId, overrides);
-  const cleanedDraft = sanitizeManuscriptText(chapter.draft, {
-    chapterTitle: overrides?.title ?? chapter.title,
-    chapterNumber: chapter.number,
+  const liveChapter = {
+    ...normalizedChapter,
+    ...overrides,
+  };
+  const cleanedDraft = sanitizeManuscriptText(liveChapter.draft, {
+    chapterTitle: overrides?.title ?? normalizedChapter.title,
+    chapterNumber: normalizedChapter.number,
     previousChapterDrafts: project.chapters
-      .filter((entry) => entry.number < chapter.number)
+      .filter((entry) => entry.number < normalizedChapter.number)
       .map((entry) => entry.draft)
       .filter(Boolean),
   }).text;
-  const liveChapter = {
-    ...chapter,
-    ...overrides,
-  };
   const draftLower = cleanedDraft.toLowerCase();
 
   await prisma.chapterSummary.deleteMany({
@@ -741,7 +764,7 @@ export async function persistMemoryExtraction(
       unresolvedQuestions: extraction.candidates
         .filter((candidate) => candidate.classification === "unresolved thread")
         .map((candidate) => candidate.title),
-      bridgeText: `Carry forward ${liveChapter.requiredInclusions.slice(0, 2).join(", ") || liveChapter.title}.`,
+      bridgeText: `Carry forward ${normalizeChapterPlanningArrays(liveChapter).requiredInclusions.slice(0, 2).join(", ") || liveChapter.title}.`,
     },
   });
 
