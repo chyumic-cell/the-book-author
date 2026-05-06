@@ -24,6 +24,23 @@ function uniqueNonEmpty(values: Array<string | null | undefined>) {
   );
 }
 
+function filterDefinedChapterOverrides<
+  T extends Partial<
+    Pick<
+      ProjectWorkspace["chapters"][number],
+      "title" | "purpose" | "currentBeat" | "desiredMood" | "outline" | "notes" | "draft"
+    >
+  >,
+>(overrides?: T) {
+  if (!overrides) {
+    return {} as T;
+  }
+
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
 function normalizeChapterPlanningArrays<T extends {
   keyBeats?: unknown;
   requiredInclusions?: unknown;
@@ -531,9 +548,10 @@ export function extractMemoryFromDraft(
     throw new Error("Chapter not found.");
   }
   const normalizedChapter = normalizeChapterPlanningArrays(chapter);
+  const safeOverrides = filterDefinedChapterOverrides(overrides);
   const workingChapter = {
     ...normalizedChapter,
-    ...overrides,
+    ...safeOverrides,
   };
   const cleanedDraft = sanitizeManuscriptText(workingChapter.draft, {
     chapterTitle: workingChapter.title,
@@ -715,13 +733,14 @@ export async function persistMemoryExtraction(
     throw new Error("Chapter not found.");
   }
   const normalizedChapter = normalizeChapterPlanningArrays(chapter);
-  const extraction = extractMemoryFromDraft(project, chapterId, overrides);
+  const safeOverrides = filterDefinedChapterOverrides(overrides);
+  const extraction = extractMemoryFromDraft(project, chapterId, safeOverrides);
   const liveChapter = {
     ...normalizedChapter,
-    ...overrides,
+    ...safeOverrides,
   };
   const cleanedDraft = sanitizeManuscriptText(liveChapter.draft, {
-    chapterTitle: overrides?.title ?? normalizedChapter.title,
+    chapterTitle: safeOverrides.title ?? normalizedChapter.title,
     chapterNumber: normalizedChapter.number,
     previousChapterDrafts: project.chapters
       .filter((entry) => entry.number < normalizedChapter.number)

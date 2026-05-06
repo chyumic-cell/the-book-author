@@ -15,6 +15,7 @@ import {
 import { buildContextPackage } from "@/lib/memory";
 import { buildPromptEnvelope, buildSystemGuidance } from "@/lib/prompt-templates";
 import { getProviderSetupStatus, resolveProviderRuntime } from "@/lib/provider-config";
+import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import { getChapterById, getLatestChapterSummary, getProjectWorkspace } from "@/lib/project-data";
 import { compactText } from "@/lib/utils";
 import type {
@@ -92,7 +93,14 @@ function isRetryableProviderError(error: unknown) {
   }
 
   const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return message.includes("timeout") || message.includes("temporarily unavailable") || message.includes("rate limit");
+  return (
+    message.includes("timeout") ||
+    message.includes("temporarily unavailable") ||
+    message.includes("rate limit") ||
+    message.includes("unexpected end of json input") ||
+    message.includes("terminated") ||
+    message.includes("aborted")
+  );
 }
 
 function isRateLimitedProviderError(error: unknown) {
@@ -177,6 +185,30 @@ function getChapterWordRange(chapter: ChapterRecord) {
 function buildChapterWordRangeInstruction(chapter: ChapterRecord) {
   const range = getChapterWordRange(chapter);
   return `Length constraint: aim for about ${range.target} words and keep the finished chapter between ${range.min} and ${range.max} words.`;
+}
+
+function isHostedFastDraftMode() {
+  return process.env.VERCEL === "1" || isHostedBetaEnabled();
+}
+
+function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
+  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 2400) * 0.55), 1200), 2200);
+  return wordBudgetToTokens(targetWords + 120, 1200, 3200);
+}
+
+function hostedOutlineOutputTokenBudget() {
+  return 850;
+}
+
+function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstruction = "") {
+  const base = formatChapterInstruction(chapter, "draft");
+  const fastPass = [
+    "Hosted fast-draft mode: deliver a strong first-pass chapter section that is complete, scene-rich, and commercially readable without trying to hit the entire final chapter length in one response.",
+    "Aim for roughly 1200 to 2200 words in this first pass.",
+    "Prioritize sharp scene progression, lots of dialogue, clear emotional turns, and a complete ending beat for this pass.",
+    "Do not pad. Do not summarize. Write real prose that can be continued naturally in later passes.",
+  ].join("\n");
+  return withAdditionalInstruction([base, fastPass].join("\n\n"), additionalInstruction);
 }
 
 function buildFullChapterRevisionInstruction(chapter: ChapterRecord, instruction: string) {
@@ -1582,12 +1614,13 @@ export async function generateChapterOutline(projectId: string, chapterId: strin
   }
 
   const context = buildContextPackage(project, chapterId);
+  const hostedFastMode = isHostedFastDraftMode();
   return runPromptTask({
     task: "Generate chapter outline",
     project,
     context,
     instruction: withAdditionalInstruction(formatChapterInstruction(chapter, "outline"), additionalInstruction),
-    maxOutputTokens: 1100,
+    maxOutputTokens: hostedFastMode ? hostedOutlineOutputTokenBudget() : 1100,
     mockContent: mockOutline(project, chapter.title, context),
     clean: cleanStructuredText,
     chapter,
@@ -1607,16 +1640,19 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
   }
 
   const context = buildContextPackage(project, chapterId);
+  const hostedFastMode = isHostedFastDraftMode();
   return runPromptTask({
     task: "Generate chapter draft",
     project,
     context,
-    instruction: withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
-    maxOutputTokens: chapterOutputTokenBudget(chapter),
+    instruction: hostedFastMode
+      ? buildHostedFastDraftInstruction(chapter, additionalInstruction)
+      : withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
+    maxOutputTokens: hostedFastMode ? hostedDraftOutputTokenBudget(chapter) : chapterOutputTokenBudget(chapter),
     mockContent: mockDraft(project, context, chapter.title),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
-    enforceChapterLength: true,
+    enforceChapterLength: !hostedFastMode,
     repairChapterEnding: true,
   });
 }

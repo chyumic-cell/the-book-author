@@ -141,10 +141,17 @@ export async function syncChapterToStoryState(
   report: ContinuityReport;
   project: ProjectWorkspace;
 }> {
-  const chapterOverride = {
-    ...(options?.chapterOverride ?? {}),
-    ...(options?.draftOverride ? { draft: options.draftOverride } : {}),
-  };
+  const chapterOverride = Object.fromEntries(
+    Object.entries({
+      ...(options?.chapterOverride ?? {}),
+      ...(options?.draftOverride ? { draft: options.draftOverride } : {}),
+    }).filter(([, value]) => value !== undefined),
+  ) as Partial<
+    Pick<
+      ProjectWorkspace["chapters"][number],
+      "title" | "purpose" | "currentBeat" | "desiredMood" | "outline" | "notes" | "draft"
+    >
+  >;
   const extraction = await persistMemoryExtraction(projectId, chapterId, chapterOverride);
   let project = await getProjectWorkspace(projectId);
   if (!project) {

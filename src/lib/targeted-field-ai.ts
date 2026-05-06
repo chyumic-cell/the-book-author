@@ -922,6 +922,45 @@ function setCharacterFieldPath(target: Record<string, unknown>, path: string, va
   });
 }
 
+function inferCharacterEmotionalStateFromRecord(character: CharacterRecord) {
+  const explicit = String(character.currentState.emotionalState ?? "").trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  const tendency = String(character.dossier.personalityBehavior.emotionalTendencies ?? "").trim();
+  if (tendency) {
+    return tendency;
+  }
+
+  const shifts = String(character.dossier.speechLanguage.emotionalShifts ?? "").trim();
+  if (shifts) {
+    return shifts;
+  }
+
+  const conflict = String(character.dossier.motivationStory.internalConflict ?? "").trim();
+  const fear = String(character.fear ?? character.dossier.personalityBehavior.fearTriggers ?? "").trim();
+  const goal = String(character.goal ?? character.dossier.motivationStory.shortTermGoal ?? "").trim();
+
+  if (conflict && fear) {
+    return `${conflict}; privately strained by ${fear.toLowerCase()}`;
+  }
+  if (conflict) {
+    return conflict;
+  }
+  if (fear && goal) {
+    return `Driven toward ${goal.toLowerCase()} but anxious about ${fear.toLowerCase()}`;
+  }
+  if (fear) {
+    return `Guarded and pressured by ${fear.toLowerCase()}`;
+  }
+  if (goal) {
+    return `Focused on ${goal.toLowerCase()}`;
+  }
+
+  return "";
+}
+
 function parseCharacterFieldLines(raw: string, allowedPaths: string[]) {
   const payload: Record<string, unknown> = {};
   const cleanedRaw = raw
@@ -1049,6 +1088,43 @@ function mergeCharacterAiPayload(
     if (inferredRole) {
       mergedPayload.role = inferredRole;
     }
+  }
+
+  const previewCharacter = applyCharacterPatch(baseCharacter, mergedPayload);
+  const inferredEmotion = inferCharacterEmotionalStateFromRecord(previewCharacter);
+  if (inferredEmotion) {
+    mergedPayload.currentState = normalizeCharacterState({
+      ...previewCharacter.currentState,
+      emotionalState: inferredEmotion,
+    });
+  }
+
+  const nextQuickProfile =
+    mergedPayload.quickProfile && typeof mergedPayload.quickProfile === "object"
+      ? { ...(mergedPayload.quickProfile as Record<string, unknown>) }
+      : {};
+  const nextDossier =
+    mergedPayload.dossier && typeof mergedPayload.dossier === "object"
+      ? mergeCharacterDossierSections(baseCharacter.dossier, { dossier: mergedPayload.dossier as Record<string, unknown> })
+      : baseCharacter.dossier;
+
+  if (!String(nextQuickProfile.accent ?? "").trim() && nextDossier.speechLanguage.accent) {
+    nextQuickProfile.accent = nextDossier.speechLanguage.accent;
+  }
+  if (!String(nextQuickProfile.speechPattern ?? "").trim()) {
+    const speechPattern =
+      nextDossier.speechLanguage.descriptors.join(", ") ||
+      nextDossier.speechLanguage.directness ||
+      nextDossier.speechLanguage.rhythm;
+    if (speechPattern) {
+      nextQuickProfile.speechPattern = speechPattern;
+    }
+  }
+  if (Object.keys(nextQuickProfile).length > 0) {
+    mergedPayload.quickProfile = normalizeCharacterQuickProfile({
+      ...baseCharacter.quickProfile,
+      ...nextQuickProfile,
+    });
   }
 
   return mergedPayload;

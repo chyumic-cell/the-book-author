@@ -15,6 +15,7 @@ import { getChapterById, getProjectWorkspace } from "@/lib/project-data";
 import { syncChapterToStoryState } from "@/lib/story-sync";
 import {
   runTargetedCharacterAi,
+  runTargetedPlanningFieldAi,
   runTargetedSkeletonFieldAi,
   runTargetedStoryBibleFieldAi,
 } from "@/lib/targeted-field-ai";
@@ -1644,6 +1645,15 @@ function extractNamedEntityLabel(message: string) {
   }
 
   return "";
+}
+
+function extractChapterNumberFromMessage(message: string) {
+  const match = message.match(/\bchapter\s+(\d+)\b/i);
+  if (!match?.[1]) {
+    return null;
+  }
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function cleanExtractedEntityLabel(value: string) {
@@ -5161,6 +5171,60 @@ async function tryDirectStructuredAssistantAction(input: {
             kind: "CREATE_STRUCTURE_BEAT",
             targetLabel: beatType,
             summary: "Created and developed a structure beat.",
+            status: "APPLIED" as const,
+          },
+        ],
+        project: nextProject,
+        contextPackage,
+        scope: input.scope,
+        nextTab: "skeleton" as StoryForgeTab,
+      };
+    }
+  }
+
+  const outlineChapterNumber = extractChapterNumberFromMessage(input.message);
+  if (
+    allowSkeletonDirect &&
+    outlineChapterNumber &&
+    lower.includes("outline") &&
+    (lower.includes("tighten") || lower.includes("expand") || lower.includes("develop") || lower.includes("sharpen"))
+  ) {
+    const chapter = input.project.chapters.find((entry) => entry.number === outlineChapterNumber) ?? null;
+    if (chapter) {
+      const action: "develop" | "expand" | "tighten" =
+        lower.includes("expand") ? "expand" : lower.includes("tighten") || lower.includes("sharpen") ? "tighten" : "develop";
+      await runTargetedPlanningFieldAi({
+        projectId: input.projectId,
+        itemId: chapter.id,
+        itemTitle: chapter.title || `Chapter ${chapter.number}`,
+        fieldKey: "outline",
+        fieldLabel: "Outline",
+        action,
+        currentValue: chapter.outline ?? "",
+        draftItem: {
+          id: chapter.id,
+          title: chapter.title,
+          purpose: chapter.purpose,
+          currentBeat: chapter.currentBeat,
+          targetWordCount: chapter.targetWordCount,
+          desiredMood: chapter.desiredMood,
+          outline: chapter.outline,
+          keyBeats: chapter.keyBeats,
+          requiredInclusions: chapter.requiredInclusions,
+          forbiddenElements: chapter.forbiddenElements,
+          sceneList: chapter.sceneList,
+        },
+      });
+      const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+      const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+      return {
+        reply: `I ${action === "tighten" ? "tightened" : action === "expand" ? "expanded" : "developed"} the outline for Chapter ${chapter.number}.`,
+        actions: [
+          {
+            id: "direct-outline-edit",
+            kind: "UPDATE_CHAPTER_FIELD",
+            targetLabel: `Chapter ${chapter.number} outline`,
+            summary: `Updated the outline for Chapter ${chapter.number}.`,
             status: "APPLIED" as const,
           },
         ],
