@@ -40,6 +40,7 @@ export async function POST(
             fieldLabel: input.fieldLabel,
             action: input.action,
             currentValue: input.currentValue,
+            instruction: input.instruction,
             draftItem: input.draftItem,
           })
         : input.scope === "SKELETON"
@@ -52,6 +53,7 @@ export async function POST(
               fieldLabel: input.fieldLabel,
               action: input.action,
               currentValue: input.currentValue,
+              instruction: input.instruction,
               draftItem: input.draftItem,
             })
         : await runTargetedStoryBibleFieldAi({
@@ -62,6 +64,7 @@ export async function POST(
             fieldLabel: input.fieldLabel,
             action: input.action,
             currentValue: input.currentValue,
+            instruction: input.instruction,
             draftItem: input.draftItem,
           });
 

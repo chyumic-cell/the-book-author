@@ -2085,6 +2085,15 @@ export function ProjectWorkspace({
         onContextPackage={setContextPackage}
         onExpandedChange={setCopilotExpanded}
         onOpenProviders={openProviders}
+        phoneQuickActions={[
+          { id: "generate-outline", label: "Generate Outline", onClick: handleRibbonGenerateOutline },
+          { id: "generate-chapter", label: "Generate Chapter", onClick: handleRibbonGenerateDraft },
+          { id: "rewrite-pacing", label: "Rewrite Pacing", onClick: handleRibbonReviseForPacing },
+          { id: "improve-prose", label: "Improve Prose", onClick: handleRibbonReviseForProse },
+          { id: "sharpen-voice", label: "Sharpen Voice", onClick: handleRibbonReviseForVoice },
+          { id: "chapter-guide", label: "Chapter Guide", onClick: handleRibbonChapterGuideCheck },
+          { id: "whole-book-guide", label: "Whole Book Guide", onClick: handleRibbonBookGuideCheck },
+        ]}
         onProjectUpdate={refreshProject}
         onRoleChange={setActiveAiRole}
         onTabChange={setActiveTab}

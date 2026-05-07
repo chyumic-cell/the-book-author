@@ -412,6 +412,7 @@ export function sanitizeManuscriptText(
 
   const paragraphs = splitParagraphs(stripLeadingWrapper(value));
   const cleanedParagraphs: string[] = [];
+  const openingParagraphSignatures: string[] = [];
 
   for (const [index, originalParagraph] of paragraphs.entries()) {
     const trimmed = originalParagraph.trim();
@@ -499,6 +500,20 @@ export function sanitizeManuscriptText(
       sentenceSanitized.length >= 80 && seenParagraphs.some((paragraph) => overlapScore(paragraph, sentenceSanitized) >= 0.96);
     if (duplicateParagraph) {
       issues.push("Removed a duplicated paragraph from generated prose.");
+      continue;
+    }
+
+    const normalizedParagraph = normalizeComparableText(sentenceSanitized);
+    if (index < 2 && normalizedParagraph.length >= 70) {
+      openingParagraphSignatures.push(normalizedParagraph);
+    }
+
+    const repeatedInternalRestart =
+      index >= 3 &&
+      normalizedParagraph.length >= 70 &&
+      openingParagraphSignatures.some((opening) => overlapScore(opening, normalizedParagraph) >= 0.84);
+    if (repeatedInternalRestart) {
+      issues.push("Removed a mid-chapter paragraph that restarted the opening movement.");
       continue;
     }
 

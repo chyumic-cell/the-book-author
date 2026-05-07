@@ -189,6 +189,7 @@ export const targetedFieldAiSchema = z.object({
   fieldLabel: z.string().optional().default(""),
   action: z.enum(["develop", "expand", "tighten"]),
   currentValue: z.string().optional().default(""),
+  instruction: z.string().optional().default(""),
   draftItem: z.record(z.string(), z.unknown()).optional(),
 });
 

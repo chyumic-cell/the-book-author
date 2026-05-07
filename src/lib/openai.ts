@@ -206,7 +206,11 @@ function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstr
     "Hosted fast-draft mode: deliver a strong first-pass chapter section that is complete, scene-rich, and commercially readable without trying to hit the entire final chapter length in one response.",
     "Aim for roughly 1200 to 2200 words in this first pass.",
     "Prioritize sharp scene progression, lots of dialogue, clear emotional turns, and a complete ending beat for this pass.",
+    "Put quoted spoken dialogue on the page early and often. Let dialogue do most of the dramatic work unless a brief silence is itself the dramatic move.",
+    "If the chapter is meant to be dialogue-heavy, every major scene beat should contain spoken exchange, interruption, persuasion, threat, confession, bargaining, or argument.",
     "Do not pad. Do not summarize. Write real prose that can be continued naturally in later passes.",
+    "Do not restart the chapter midway through the response.",
+    "Do not loop back to the opening setup once the chapter is already in motion.",
   ].join("\n");
   return withAdditionalInstruction([base, fastPass].join("\n\n"), additionalInstruction);
 }
@@ -241,8 +245,11 @@ function formatChapterInstruction(chapter: ChapterRecord, task: "outline" | "dra
     chapter.keyBeats.length ? `Key beats:\n- ${chapter.keyBeats.join("\n- ")}` : "",
     chapter.requiredInclusions.length ? `Required inclusions:\n- ${chapter.requiredInclusions.join("\n- ")}` : "",
     chapter.forbiddenElements.length ? `Forbidden elements:\n- ${chapter.forbiddenElements.join("\n- ")}` : "",
-    chapter.sceneList.length ? `Scene list / lane suggestions:\n- ${chapter.sceneList.join("\n- ")}` : "",
-    "Honor the project's style dials and written style guidance in every beat and line choice, especially the dialogue-versus-description balance.",
+      chapter.sceneList.length ? `Scene list / lane suggestions:\n- ${chapter.sceneList.join("\n- ")}` : "",
+      "Honor the project's style dials and written style guidance in every beat and line choice, especially the dialogue-versus-description balance.",
+      "If this chapter is dialogue-heavy by design, put real quoted speech on the page early and repeatedly. Let dialogue carry conflict, reversals, leverage, and emotional movement rather than summarizing those things from a distance.",
+      "Earlier chapters are canon. Later chapter plans are only downstream targets, not events that have already happened here.",
+    "If you revise or write an earlier part of the book, do not act as if later reveals, outcomes, or decisions are already known in-scene unless this chapter is intentionally foreshadowing them.",
     "Format spoken dialogue in standard prose with double quotation marks, never as `Name: line` play-script formatting.",
     "Render internal thoughts as internal thought in italics rather than spoken dialogue, unless the writer explicitly asks for another style.",
     "Do not leave dialogue with missing closing quotation marks.",

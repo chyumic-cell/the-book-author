@@ -30,6 +30,17 @@ type AssistantPayload = {
   nextTab: StoryForgeTab | null;
 };
 
+type PhoneQuickAction = {
+  id: string;
+  label: string;
+  onClick: () => void;
+};
+
+type TargetedFieldPayload = {
+  project: ProjectWorkspace;
+  contextPackage: ContextPackage | null;
+};
+
 function scopeFromTab(tab: StoryForgeTab): ProjectChatScope {
   if (tab === "ideaLab") {
     return "IDEA_LAB";
@@ -61,6 +72,87 @@ function buildGreeting(projectId: string, projectTitle: string): ProjectChatTurn
   };
 }
 
+function normalizeInstruction(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function looksLikeAllChapterOutlineRequest(message: string, scope: ProjectChatScope, activeTab: StoryForgeTab) {
+  const lower = normalizeInstruction(message);
+  const mentionsAllChapters =
+    lower.includes("all chapters") ||
+    lower.includes("each chapter") ||
+    lower.includes("every chapter") ||
+    lower.includes("all chapter") ||
+    lower.includes("each outline") ||
+    lower.includes("all outlines");
+  const mentionsOutlineWork =
+    lower.includes("outline") ||
+    lower.includes("outlines") ||
+    lower.includes("chapter runway") ||
+    lower.includes("story skeleton") ||
+    (lower.includes("titles") && lower.includes("chapters")) ||
+    (lower.includes("chapter names") && !lower.includes("name a character"));
+  return (
+    mentionsAllChapters &&
+    mentionsOutlineWork &&
+    (scope === "SKELETON" ||
+      activeTab === "skeleton" ||
+      lower.includes("story skeleton") ||
+      lower.includes("chapter runway"))
+  );
+}
+
+function inferPlanningAction(message: string): "develop" | "expand" | "tighten" {
+  const lower = normalizeInstruction(message);
+  if (lower.includes("tighten") || lower.includes("shorter") || lower.includes("trim")) {
+    return "tighten";
+  }
+  if (lower.includes("expand") || lower.includes("fuller") || lower.includes("more detail")) {
+    return "expand";
+  }
+  return "develop";
+}
+
+function chapterDraftItem(chapter: ProjectWorkspace["chapters"][number]) {
+  return {
+    title: chapter.title,
+    purpose: chapter.purpose,
+    currentBeat: chapter.currentBeat,
+    targetWordCount: chapter.targetWordCount,
+    desiredMood: chapter.desiredMood,
+    outline: chapter.outline,
+    draft: chapter.draft,
+    notes: chapter.notes,
+    keyBeats: chapter.keyBeats,
+    requiredInclusions: chapter.requiredInclusions,
+    forbiddenElements: chapter.forbiddenElements,
+    sceneList: chapter.sceneList,
+  };
+}
+
+function needsForcedChapterTitle(title: string, chapterNumber: number) {
+  const normalized = title.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === `chapter ${chapterNumber}` ||
+    normalized === `chapter ${chapterNumber}:` ||
+    normalized.startsWith(`chapter ${chapterNumber} `)
+  );
+}
+
+function looksLikeAllChapterDraftRequest(message: string) {
+  const lower = normalizeInstruction(message);
+  const mentionsWriting =
+    lower.includes("write the whole book") ||
+    lower.includes("write all chapters") ||
+    lower.includes("write all three chapters") ||
+    lower.includes("write the three chapters") ||
+    lower.includes("draft all chapters") ||
+    (lower.includes("write") && lower.includes("three chapters")) ||
+    (lower.includes("write") && lower.includes("whole book"));
+  return mentionsWriting;
+}
+
 export function ProjectCopilotBar({
   activeTab,
   activeAiRole,
@@ -69,6 +161,7 @@ export function ProjectCopilotBar({
   phoneShell,
   onBeforeSubmit,
   onOpenProviders,
+  phoneQuickActions = [],
   project,
   selectedChapterId,
   onContextPackage,
@@ -88,6 +181,7 @@ export function ProjectCopilotBar({
     scope: ProjectChatScope;
   }) => Promise<void>;
   onOpenProviders: () => void;
+  phoneQuickActions?: PhoneQuickAction[];
   project: ProjectWorkspace;
   selectedChapterId: string | null;
   onContextPackage: (contextPackage: ContextPackage | null) => void;
@@ -122,6 +216,257 @@ export function ProjectCopilotBar({
     node.scrollTop = node.scrollHeight;
   }, [expanded, turns]);
 
+  async function runAllChapterOutlineWorkflow(nextMessage: string): Promise<AssistantPayload> {
+    let workingProject = project;
+    let latestContext: ContextPackage | null = null;
+    const lower = normalizeInstruction(nextMessage);
+    const action = inferPlanningAction(nextMessage);
+    const wantsTitles =
+      lower.includes("title") ||
+      lower.includes("titles") ||
+      lower.includes("name each chapter") ||
+      lower.includes("chapter names");
+    const wantsPurpose =
+      lower.includes("purpose") ||
+      lower.includes("purposes") ||
+      lower.includes("what each chapter should do");
+    const wantsCurrentBeat = lower.includes("current beat") || lower.includes("beats");
+    const wantsSceneList = lower.includes("scene list") || lower.includes("scene by scene") || lower.includes("scene-by-scene");
+    const wantsKeyBeats = lower.includes("key beats") || lower.includes("major beats");
+    const wantsDesiredMood = lower.includes("desired mood") || lower.includes("mood");
+    const wantsRequiredInclusions = lower.includes("required inclusions") || lower.includes("must include");
+    const wantsForbiddenElements = lower.includes("forbidden elements") || lower.includes("must not include");
+    const wantsOutline = true;
+    const wantsOutlineRevision =
+      lower.includes("fix") ||
+      lower.includes("tighten") ||
+      lower.includes("slight") ||
+      lower.includes("sharpen") ||
+      lower.includes("polish") ||
+      lower.includes("improve");
+    const fieldsToTouch: Array<{ key: string; label: string }> = [];
+
+    if (wantsTitles) {
+      fieldsToTouch.push({ key: "title", label: "Title" });
+    }
+    if (wantsPurpose) {
+      fieldsToTouch.push({ key: "purpose", label: "Purpose" });
+    }
+    if (wantsCurrentBeat) {
+      fieldsToTouch.push({ key: "currentBeat", label: "Current beat" });
+    }
+    if (wantsKeyBeats) {
+      fieldsToTouch.push({ key: "keyBeats", label: "Key beats" });
+    }
+    if (wantsRequiredInclusions) {
+      fieldsToTouch.push({ key: "requiredInclusions", label: "Required inclusions" });
+    }
+    if (wantsForbiddenElements) {
+      fieldsToTouch.push({ key: "forbiddenElements", label: "Forbidden elements" });
+    }
+    if (wantsDesiredMood) {
+      fieldsToTouch.push({ key: "desiredMood", label: "Desired mood" });
+    }
+    if (wantsSceneList) {
+      fieldsToTouch.push({ key: "sceneList", label: "Scene list" });
+    }
+    if (wantsOutline) {
+      fieldsToTouch.push({ key: "outline", label: "Outline" });
+    }
+
+    const touchedLabels = new Set<string>();
+    const chaptersInOrder = [...workingProject.chapters].sort((left, right) => left.number - right.number);
+    const batchSize = 3;
+
+    for (let index = 0; index < chaptersInOrder.length; index += batchSize) {
+      const batch = chaptersInOrder.slice(index, index + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async (chapter) => {
+          let workingChapter = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
+          const localTouched = new Set<string>();
+          const chapterInstruction = [
+            nextMessage,
+            `Focus only on Chapter ${workingChapter.number}.`,
+            "Use what this chapter sets up from earlier chapters and what later chapters still need, but do not act as if later events have already happened inside this chapter.",
+            "Do not restart the story or repeat the opening movement midway through the chapter outline.",
+          ].join("\n\n");
+
+          if (!workingChapter.outline.trim()) {
+            const outlineData = await requestJson<{
+              run: { suggestion: string };
+              contextPackage: ContextPackage;
+            }>(`/api/chapters/${workingChapter.id}/generate/outline`, { method: "POST" });
+            latestContext = outlineData.contextPackage;
+            const saveData = await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${workingChapter.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ outline: outlineData.run.suggestion }),
+            });
+            workingChapter = saveData.project.chapters.find((entry) => entry.id === chapter.id) ?? workingChapter;
+            localTouched.add(`Chapter ${workingChapter.number} outline`);
+          }
+
+          for (const field of fieldsToTouch) {
+            if (field.key === "outline" && workingChapter.outline.trim() && !wantsOutlineRevision) {
+              continue;
+            }
+            const draftItem = chapterDraftItem(workingChapter) as Record<string, unknown>;
+            const rawCurrentValue = draftItem[field.key];
+            const currentValue = Array.isArray(rawCurrentValue)
+              ? rawCurrentValue.join("\n")
+              : String(rawCurrentValue ?? "");
+            const data = await requestJson<TargetedFieldPayload>(`/api/projects/${project.id}/targeted-ai`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                scope: "SKELETON",
+                targetEntityType: "chapter",
+                itemId: workingChapter.id,
+                itemTitle: workingChapter.title,
+                fieldKey: field.key,
+                fieldLabel: field.label,
+                action,
+                currentValue,
+                instruction: chapterInstruction,
+                draftItem,
+              }),
+            });
+            latestContext = data.contextPackage ?? latestContext;
+            workingChapter = data.project.chapters.find((entry) => entry.id === chapter.id) ?? workingChapter;
+            localTouched.add(`Chapter ${workingChapter.number} ${field.label.toLowerCase()}`);
+          }
+
+          return Array.from(localTouched);
+        }),
+      );
+
+      for (const touched of batchResults) {
+        for (const label of touched) {
+          touchedLabels.add(label);
+        }
+      }
+
+      const latestProject = await requestJson<{ project: ProjectWorkspace }>(`/api/projects/${project.id}`);
+      workingProject = latestProject.project;
+    }
+
+    return {
+      reply: `I updated all ${workingProject.chapters.length} chapter runway entries and touched ${touchedLabels.size} planning targets across the chapter outlines. The chapter-level edits stayed in the chapter runway instead of drifting into notes or the manuscript.`,
+      actions: [],
+      project: workingProject,
+      contextPackage: latestContext,
+      scope: "SKELETON",
+      nextTab: "skeleton",
+    };
+  }
+
+  async function runAllChapterDraftWorkflow(nextMessage: string): Promise<AssistantPayload> {
+    let workingProject = project;
+    let latestContext: ContextPackage | null = null;
+    const chaptersInOrder = [...workingProject.chapters].sort((left, right) => left.number - right.number);
+    const chaptersNeedingOutlines = chaptersInOrder.some((chapter) => !chapter.outline.trim());
+
+    if (chaptersNeedingOutlines) {
+      const outlineResult = await runAllChapterOutlineWorkflow(
+        `${nextMessage}\n\nBefore drafting, make sure every chapter has a usable title, purpose, current beat, and outline.`,
+      );
+      workingProject = outlineResult.project;
+      latestContext = outlineResult.contextPackage;
+    }
+
+    const draftBatchSize = 2;
+
+    for (let index = 0; index < chaptersInOrder.length; index += draftBatchSize) {
+      const batch = chaptersInOrder.slice(index, index + draftBatchSize);
+      await Promise.all(
+        batch.map(async (chapter) => {
+          const workingChapter = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
+          const notePrefix = workingChapter.notes?.trim() ? `${workingChapter.notes.trim()}\n\n` : "";
+          await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${workingChapter.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              notes: `${notePrefix}Drafting instruction:\n${nextMessage}`.trim(),
+            }),
+          });
+
+          let lastError: Error | null = null;
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+              const draftData = await requestJson<{
+                run: { suggestion: string };
+                contextPackage: ContextPackage;
+              }>(`/api/chapters/${workingChapter.id}/generate/draft`, { method: "POST" });
+              latestContext = draftData.contextPackage;
+              await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${workingChapter.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  draft: draftData.run.suggestion,
+                  status: "DRAFTING",
+                }),
+              });
+              return;
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error("Could not draft chapter.");
+              await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+            }
+          }
+
+          throw lastError ?? new Error("Could not draft chapter.");
+        }),
+      );
+
+      const latestProject = await requestJson<{ project: ProjectWorkspace }>(`/api/projects/${project.id}`);
+      workingProject = latestProject.project;
+    }
+
+    for (const chapter of [...workingProject.chapters].sort((left, right) => left.number - right.number)) {
+      const workingChapter = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
+      if (!needsForcedChapterTitle(workingChapter.title, workingChapter.number)) {
+        continue;
+      }
+
+      const titleData = await requestJson<TargetedFieldPayload>(`/api/projects/${project.id}/targeted-ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "SKELETON",
+          targetEntityType: "chapter",
+          itemId: workingChapter.id,
+          itemTitle: workingChapter.title,
+          fieldKey: "title",
+          fieldLabel: "Title",
+          action: "develop",
+          currentValue: workingChapter.title,
+          instruction: [
+            nextMessage,
+            `This is Chapter ${workingChapter.number}.`,
+            "Return a commercially strong chapter title, not a generic chapter number.",
+            "Base it on what the chapter actually contains after drafting.",
+          ].join("\n\n"),
+          draftItem: chapterDraftItem(workingChapter),
+        }),
+      });
+      latestContext = titleData.contextPackage ?? latestContext;
+      workingProject = titleData.project;
+    }
+
+    const totalWords = workingProject.chapters.reduce(
+      (sum, chapter) => sum + String(chapter.draft || "").trim().split(/\s+/).filter(Boolean).length,
+      0,
+    );
+
+    return {
+      reply: `I drafted ${workingProject.chapters.length} chapters through the bottom AI bar workflow and landed at about ${totalWords} words in total. The chapters were written through the chapter generator after the runway was aligned first.`,
+      actions: [],
+      project: workingProject,
+      contextPackage: latestContext,
+      scope: "CHAPTER",
+      nextTab: "chapters",
+    };
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextMessage = message.trim();
@@ -152,17 +497,21 @@ export function ProjectCopilotBar({
         });
       }
 
-      const data = await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: nextMessage,
-          role: activeAiRole,
-          scope: effectiveScope,
-          chapterId: selectedChapterId,
-          applyChanges,
-        }),
-      });
+      const data = looksLikeAllChapterDraftRequest(nextMessage)
+        ? await runAllChapterDraftWorkflow(nextMessage)
+        : looksLikeAllChapterOutlineRequest(nextMessage, effectiveScope, activeTab)
+          ? await runAllChapterOutlineWorkflow(nextMessage)
+          : await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: nextMessage,
+              role: activeAiRole,
+              scope: effectiveScope,
+              chapterId: selectedChapterId,
+              applyChanges,
+            }),
+          });
 
       onProjectUpdate(data.project);
       onContextPackage(data.contextPackage);
@@ -256,6 +605,26 @@ export function ProjectCopilotBar({
                   Let {APP_NAME} implement direct changes
               </label>
             </div>
+
+            {phoneShell && phoneQuickActions.length ? (
+              <div className="grid gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">AI Engine</p>
+                <div className="flex flex-wrap gap-2">
+                  {phoneQuickActions.map((action) => (
+                    <Button
+                      key={action.id}
+                      className="min-h-[36px] px-3 text-xs"
+                      disabled={submitting}
+                      onClick={action.onClick}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div
               ref={bodyRef}

@@ -296,8 +296,7 @@ export async function createChapter(projectId: string) {
     include: {
       bookSettings: true,
       chapters: {
-        orderBy: { number: "desc" },
-        take: 1,
+        select: { id: true },
       },
     },
   });
@@ -306,7 +305,7 @@ export async function createChapter(projectId: string) {
     throw new Error("Project not found.");
   }
 
-  const nextNumber = (project.chapters[0]?.number ?? 0) + 1;
+  const nextNumber = project.chapters.length + 1;
 
   return prisma.chapter.create({
     data: {
@@ -426,6 +425,34 @@ async function resolveProjectChapterId(projectId: string, chapterId: string | nu
   }
 
   return null;
+}
+
+async function resolveRequiredProjectChapterId(
+  projectId: string,
+  requestedChapterId: string | null,
+  fallbackChapterId?: string | null,
+) {
+  const requested = await resolveProjectChapterId(projectId, requestedChapterId);
+  if (requested) {
+    return requested;
+  }
+
+  const fallback = await resolveProjectChapterId(projectId, fallbackChapterId ?? null);
+  if (fallback) {
+    return fallback;
+  }
+
+  const firstChapter = await prisma.chapter.findFirst({
+    where: { projectId },
+    orderBy: [{ number: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+
+  if (firstChapter) {
+    return firstChapter.id;
+  }
+
+  throw new Error("Project has no chapters.");
 }
 
 async function resolveProjectCharacterId(projectId: string, characterId: string | null) {
@@ -808,21 +835,33 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
   await ensureProjectExists(projectId);
 
   switch (mutation.entityType) {
-    case "structureBeat":
-      if (method === "DELETE" && mutation.id) {
-        await ensureStructureBeatBelongsToProject(projectId, mutation.id);
-        return prisma.structureBeat.delete({ where: { id: mutation.id } });
-      }
+      case "structureBeat":
+        if (method === "DELETE" && mutation.id) {
+          await ensureStructureBeatBelongsToProject(projectId, mutation.id);
+          return prisma.structureBeat.delete({ where: { id: mutation.id } });
+        }
 
-      if (mutation.id) {
-        await ensureStructureBeatBelongsToProject(projectId, mutation.id);
-      }
+        if (mutation.id) {
+          await ensureStructureBeatBelongsToProject(projectId, mutation.id);
+        }
 
-      return mutation.id
-        ? prisma.structureBeat.update({
+        if (mutation.id) {
+          const existingBeat = await prisma.structureBeat.findFirst({
+            where: {
+              id: mutation.id,
+              projectId,
+            },
+            select: { chapterId: true },
+          });
+
+          return prisma.structureBeat.update({
             where: { id: mutation.id },
             data: {
-              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+              chapterId: await resolveRequiredProjectChapterId(
+                projectId,
+                pickNullableString(payload, "chapterId"),
+                existingBeat?.chapterId ?? null,
+              ),
               type: (pickString(payload, "type") || "OPENING_DISTURBANCE") as never,
               label: pickString(payload, "label"),
               description: pickString(payload, "description"),
@@ -830,35 +869,49 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
               status: (pickString(payload, "status") || "PLANNED") as never,
               orderIndex: Number(payload.orderIndex) || 1,
             },
-          })
-        : prisma.structureBeat.create({
-            data: {
-              projectId,
-              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
-              type: (pickString(payload, "type") || "OPENING_DISTURBANCE") as never,
-              label: pickString(payload, "label") || "New structure beat",
-              description: pickString(payload, "description") || "Define the turning point this beat should deliver.",
-              notes: pickString(payload, "notes"),
-              status: (pickString(payload, "status") || "PLANNED") as never,
+          });
+        }
+
+        return prisma.structureBeat.create({
+              data: {
+                projectId,
+                chapterId: await resolveRequiredProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+                type: (pickString(payload, "type") || "OPENING_DISTURBANCE") as never,
+                label: pickString(payload, "label") || "New structure beat",
+                description: pickString(payload, "description") || "Define the turning point this beat should deliver.",
+                notes: pickString(payload, "notes"),
+                status: (pickString(payload, "status") || "PLANNED") as never,
               orderIndex: Number(payload.orderIndex) || 1,
             },
           });
 
-    case "sceneCard":
-      if (method === "DELETE" && mutation.id) {
-        await ensureSceneCardBelongsToProject(projectId, mutation.id);
-        return prisma.sceneCard.delete({ where: { id: mutation.id } });
-      }
+      case "sceneCard":
+        if (method === "DELETE" && mutation.id) {
+          await ensureSceneCardBelongsToProject(projectId, mutation.id);
+          return prisma.sceneCard.delete({ where: { id: mutation.id } });
+        }
 
-      if (mutation.id) {
-        await ensureSceneCardBelongsToProject(projectId, mutation.id);
-      }
+        if (mutation.id) {
+          await ensureSceneCardBelongsToProject(projectId, mutation.id);
+        }
 
-      return mutation.id
-        ? prisma.sceneCard.update({
+        if (mutation.id) {
+          const existingSceneCard = await prisma.sceneCard.findFirst({
+            where: {
+              id: mutation.id,
+              projectId,
+            },
+            select: { chapterId: true },
+          });
+
+          return prisma.sceneCard.update({
             where: { id: mutation.id },
             data: {
-              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+              chapterId: await resolveRequiredProjectChapterId(
+                projectId,
+                pickNullableString(payload, "chapterId"),
+                existingSceneCard?.chapterId ?? null,
+              ),
               povCharacterId: await resolveProjectCharacterId(projectId, pickNullableString(payload, "povCharacterId")),
               title: pickString(payload, "title"),
               summary: pickString(payload, "summary"),
@@ -872,16 +925,18 @@ export async function mutateSkeleton(projectId: string, mutation: SkeletonMutati
               orderIndex: Number(payload.orderIndex) || 1,
               frozen: Boolean(payload.frozen),
             },
-          })
-        : prisma.sceneCard.create({
-            data: {
-              projectId,
-              chapterId: await resolveProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
-              povCharacterId: await resolveProjectCharacterId(projectId, pickNullableString(payload, "povCharacterId")),
-              title: pickString(payload, "title") || "New scene",
-              summary: pickString(payload, "summary"),
-              goal: pickString(payload, "goal"),
-              conflict: pickString(payload, "conflict"),
+          });
+        }
+
+        return prisma.sceneCard.create({
+              data: {
+                projectId,
+                chapterId: await resolveRequiredProjectChapterId(projectId, pickNullableString(payload, "chapterId")),
+                povCharacterId: await resolveProjectCharacterId(projectId, pickNullableString(payload, "povCharacterId")),
+                title: pickString(payload, "title") || "New scene",
+                summary: pickString(payload, "summary"),
+                goal: pickString(payload, "goal"),
+                conflict: pickString(payload, "conflict"),
               outcome: pickString(payload, "outcome"),
               outcomeType: pickString(payload, "outcomeType")
                 ? (pickString(payload, "outcomeType") as never)
@@ -918,8 +973,32 @@ export async function deleteChapter(chapterId: string) {
     throw new Error("A project must keep at least one chapter.");
   }
 
-  await prisma.chapter.delete({
-    where: { id: chapterId },
+  await prisma.$transaction(async (tx) => {
+    await tx.chapter.delete({
+      where: { id: chapterId },
+    });
+
+    const remainingChapters = await tx.chapter.findMany({
+      where: { projectId: chapter.projectId },
+      orderBy: [{ number: "asc" }, { createdAt: "asc" }],
+      select: { id: true, number: true, title: true },
+    });
+
+    await Promise.all(
+      remainingChapters.map((entry, index) => {
+        const nextNumber = index + 1;
+        const defaultCurrentTitle = `Chapter ${entry.number}`;
+        const nextTitle = entry.title === defaultCurrentTitle ? `Chapter ${nextNumber}` : entry.title;
+
+        return tx.chapter.update({
+          where: { id: entry.id },
+          data: {
+            number: nextNumber,
+            title: nextTitle,
+          },
+        });
+      }),
+    );
   });
 
   return chapter.projectId;

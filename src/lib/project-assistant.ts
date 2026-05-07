@@ -9,7 +9,7 @@ import {
 import { APP_NAME } from "@/lib/brand";
 import { buildContextPackage } from "@/lib/memory";
 import { cleanGeneratedText, cleanSummaryText, sanitizeManuscriptText } from "@/lib/ai-output";
-import { generateTextWithProvider } from "@/lib/openai";
+import { generateChapterOutline, generateTextWithProvider } from "@/lib/openai";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { getChapterById, getProjectWorkspace } from "@/lib/project-data";
 import { syncChapterToStoryState } from "@/lib/story-sync";
@@ -1396,6 +1396,10 @@ function inferAssistantIntent(message: string, scope: ProjectChatScope): Assista
       lower.includes("chapter titles") ||
       lower.includes("chapter name") ||
       lower.includes("chapter names") ||
+      lower.includes("fill the title") ||
+      lower.includes("fill title") ||
+      lower.includes("title, purpose") ||
+      lower.includes("title and purpose") ||
       lower.includes("give each chapter a name") ||
       lower.includes("give each chapter a strong title") ||
       (lower.includes("title") && lower.includes("each chapter")) ||
@@ -1647,6 +1651,26 @@ function extractNamedEntityLabel(message: string) {
   return "";
 }
 
+function extractStructureBeatLabel(message: string) {
+  const patterns = [
+    /structure\s+beat\s+(?:named|called)\s+["â€œ]?([^"\n]{2,100})["â€]?/i,
+    /(?:opening disturbance|first doorway|midpoint|second doorway|climax|resolution)\s+(?:named|called)\s+["â€œ]?([^"\n]{2,100})["â€]?/i,
+    /structure\s+beat\s+for\s+["â€œ]?([^"\n]{2,100})["â€]?/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match?.[1]) {
+      const cleaned = cleanExtractedEntityLabel(match[1]);
+      if (cleaned) {
+        return cleaned;
+      }
+    }
+  }
+
+  return "";
+}
+
 function extractChapterNumberFromMessage(message: string) {
   const match = message.match(/\bchapter\s+(\d+)\b/i);
   if (!match?.[1]) {
@@ -1660,7 +1684,7 @@ function cleanExtractedEntityLabel(value: string) {
   return value
     .replace(/^["“'`]+|["”'`]+$/g, "")
     .replace(/[.,;:!?]+$/, "")
-    .split(/\s+(?:and|with|who|that|which|where|plus|as|build|make|give|using|keep)\b/i)[0]
+    .split(/\s+(?:and|with|who|that|which|where|plus|as|build|make|give|using|keep|fill|especially|properly)\b/i)[0]
     .trim();
 }
 
@@ -1669,6 +1693,7 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
     character: [
       /character(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
       /(?:named|called)\s+["“]?([^"\n]{2,100})["”]?\s+(?:as\s+)?a\s+character/i,
+      /character(?:\s+dossier)?\s+for\s+["“]?([^"\n]{2,100})["”]?/i,
     ],
     relationship: [
       /relationship(?:\s+entry)?\s+(?:named|called)\s+["“]?([^"\n]{2,100})["”]?/i,
@@ -4989,6 +5014,7 @@ async function tryDirectStructuredAssistantAction(input: {
     input.scope === "SKELETON" ||
     input.scope === "AUTO" ||
     input.scope === "PROJECT";
+  const directIntent = inferAssistantIntent(input.message, input.scope);
   const characterLabel = extractEntityLabelFromMessage(input.message, "character") || extractNamedEntityLabel(input.message);
   if (
     allowBibleDirect &&
@@ -5123,6 +5149,10 @@ async function tryDirectStructuredAssistantAction(input: {
       lower.includes("resolution"))
   ) {
     const beatType = inferStructureType(input.message);
+    const beatLabel =
+      extractStructureBeatLabel(input.message) ||
+      canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ||
+      "New structure beat";
     const created = await mutateSkeleton(
       input.project.id,
       {
@@ -5130,7 +5160,7 @@ async function tryDirectStructuredAssistantAction(input: {
         payload: {
           chapterId: input.chapterId,
           type: beatType,
-          label: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+          label: beatLabel,
           description: "",
           notes: "",
           status: "PLANNED",
@@ -5145,7 +5175,7 @@ async function tryDirectStructuredAssistantAction(input: {
         projectId: input.projectId,
         targetEntityType: "structureBeat",
         itemId: beatId,
-        itemTitle: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+        itemTitle: beatLabel,
         fieldKey: "description",
         fieldLabel: "Description",
         action: "develop",
@@ -5153,7 +5183,7 @@ async function tryDirectStructuredAssistantAction(input: {
         draftItem: {
           id: beatId,
           type: beatType,
-          label: canonicalStructureBeats.find((entry) => entry.type === beatType)?.label ?? "New structure beat",
+          label: beatLabel,
           description: "",
           notes: "",
           status: "PLANNED",
@@ -5180,6 +5210,131 @@ async function tryDirectStructuredAssistantAction(input: {
         nextTab: "skeleton" as StoryForgeTab,
       };
     }
+  }
+
+  if (
+    allowSkeletonDirect &&
+    input.applyChanges &&
+    input.project.chapters.length > 0 &&
+    lower.includes("outline") &&
+    directIntent.wantsAllChapters &&
+    (lower.includes("tighten") ||
+      lower.includes("expand") ||
+      lower.includes("develop") ||
+      lower.includes("sharpen") ||
+      lower.includes("fix") ||
+      lower.includes("improve") ||
+      lower.includes("rewrite"))
+  ) {
+    const revisionMode: "develop" | "expand" | "tighten" =
+      lower.includes("expand")
+        ? "expand"
+        : lower.includes("tighten") || lower.includes("sharpen")
+          ? "tighten"
+          : "develop";
+    const requestedFields = Array.from(
+      new Set<AssistFieldKey>([
+        "title",
+        "purpose",
+        "currentBeat",
+        "desiredMood",
+        "keyBeats",
+        "sceneList",
+        "requiredInclusions",
+        "forbiddenElements",
+        "outline",
+        ...(directIntent.wantsTitles ? ["title" as AssistFieldKey] : []),
+        ...(directIntent.wantsPurpose ? ["purpose" as AssistFieldKey] : []),
+        ...(directIntent.wantsCurrentBeat ? ["currentBeat" as AssistFieldKey] : []),
+        ...(directIntent.wantsKeyBeats ? ["keyBeats" as AssistFieldKey] : []),
+        ...(directIntent.wantsSceneList ? ["sceneList" as AssistFieldKey] : []),
+        ...(directIntent.wantsRequiredInclusions ? ["requiredInclusions" as AssistFieldKey] : []),
+        ...(directIntent.wantsForbiddenElements ? ["forbiddenElements" as AssistFieldKey] : []),
+        ...(directIntent.wantsDesiredMood ? ["desiredMood" as AssistFieldKey] : []),
+        ...(directIntent.wantsOutline ? ["outline" as AssistFieldKey] : []),
+      ]),
+    );
+    const generatedTitles: string[] = [];
+    const isGenericChapterTitle = (value: string, chapterNumber: number) =>
+      !value.trim() || value.trim().toLowerCase() === `chapter ${chapterNumber}`.toLowerCase();
+    const splitOutlineLines = (value: string) =>
+      value
+        .split(/\r?\n/)
+        .map((entry) => entry.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+        .filter(Boolean);
+
+    for (const chapter of [...input.project.chapters].sort((left, right) => left.number - right.number)) {
+      const outlineResult = await generateChapterOutline(
+        input.projectId,
+        chapter.id,
+        `${input.message}\n\nFill this outline with concrete scene beats, high dialogue pressure, and no repeated opening scaffold.`,
+      );
+      const outline = cleanChapterFieldContent(input.project, chapter, "outline", outlineResult.content, chapter.outline || "");
+      const outlineLines = splitOutlineLines(outline);
+      const firstBeat = outlineLines[0] ?? (chapter.currentBeat || "Fresh pressure enters the chapter.");
+      const lastBeat = outlineLines.at(-1) ?? (chapter.purpose || "The chapter should end in a stronger state than it began.");
+      const sceneList = outlineLines.slice(0, Math.min(6, outlineLines.length));
+      const keyBeats = outlineLines.slice(0, Math.min(5, outlineLines.length));
+      const requiredInclusions = [
+        sceneList[0] ? `Keep the opening grounded in ${sceneList[0].replace(/[.!?]+$/, "").toLowerCase()}.` : "",
+        "Keep the dialogue load high and character-specific.",
+        lastBeat ? `Land the chapter on ${lastBeat.replace(/[.!?]+$/, "").toLowerCase()}.` : "",
+      ].filter(Boolean);
+      const forbiddenElements = [
+        "Do not restart the chapter midway through.",
+        "Do not repeat exposition the reader already understands.",
+        "Do not let every speaker sound like the same person.",
+      ];
+
+      let nextTitle = chapter.title;
+      if (requestedFields.includes("title") && (isGenericChapterTitle(chapter.title, chapter.number) || directIntent.wantsTitles)) {
+        nextTitle = await regenerateDistinctChapterTitle({
+          project: input.project,
+          role: input.role,
+          message: input.message,
+          chapter: {
+            ...chapter,
+            outline,
+          },
+          blockedTitles: [...generatedTitles, ...input.project.chapters.map((entry) => entry.title).filter((entry) => entry !== chapter.title)],
+        });
+      }
+      generatedTitles.push(nextTitle);
+
+      const patch: Parameters<typeof updateChapter>[1] = {};
+      if (requestedFields.includes("title")) patch.title = nextTitle;
+      if (requestedFields.includes("purpose")) patch.purpose = chapter.purpose.trim() && chapter.purpose !== "Advance the next major movement of the story."
+        ? chapter.purpose
+        : `Drive the chapter through ${firstBeat.replace(/[.!?]+$/, "").toLowerCase()} and end on ${lastBeat.replace(/[.!?]+$/, "").toLowerCase()}.`;
+      if (requestedFields.includes("currentBeat")) patch.currentBeat = firstBeat;
+      if (requestedFields.includes("desiredMood")) patch.desiredMood = chapter.desiredMood.trim() || input.project.bookSettings.tone || "Tense, dialogue-heavy, high-pressure";
+      if (requestedFields.includes("outline")) patch.outline = outline;
+      if (requestedFields.includes("sceneList")) patch.sceneList = sceneList;
+      if (requestedFields.includes("keyBeats")) patch.keyBeats = keyBeats;
+      if (requestedFields.includes("requiredInclusions")) patch.requiredInclusions = requiredInclusions;
+      if (requestedFields.includes("forbiddenElements")) patch.forbiddenElements = forbiddenElements;
+
+      if (Object.keys(patch).length > 0) {
+        await updateChapter(chapter.id, patch);
+      }
+    }
+
+    const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+    const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+    return {
+      reply: `I ${revisionMode === "tighten" ? "tightened" : revisionMode === "expand" ? "expanded" : "developed"} the chapter runway for all ${input.project.chapters.length} chapters.`,
+      actions: nextProject.chapters.map((chapter) => ({
+        id: `direct-outline-edit-${chapter.id}`,
+        kind: "UPDATE_CHAPTER_FIELD" as const,
+        targetLabel: `Chapter ${chapter.number} outline`,
+        summary: `Updated the outline for Chapter ${chapter.number}.`,
+        status: "APPLIED" as const,
+      })),
+      project: nextProject,
+      contextPackage,
+      scope: input.scope,
+      nextTab: "skeleton" as StoryForgeTab,
+    };
   }
 
   const outlineChapterNumber = extractChapterNumberFromMessage(input.message);

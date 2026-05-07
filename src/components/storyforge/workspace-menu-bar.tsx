@@ -562,15 +562,11 @@ export function WorkspaceMenuBar({
         </div>
 
         {effectiveMobileMenuOpen ? (
-          <div className="fixed inset-0 z-[90] bg-slate-950/38" onClick={() => setMobileMenuOpen(false)} role="presentation">
+          <div className="fixed inset-0 z-[90] bg-slate-950/38" role="presentation">
             <aside
               className="h-full w-[min(88vw,22rem)] overflow-y-auto border-r border-[color:var(--line)] bg-[color:var(--panel-soft)] px-3 py-3 shadow-[0_24px_48px_rgba(15,23,42,0.26)]"
               onClick={(event) => {
                 event.stopPropagation();
-                const target = event.target as HTMLElement;
-                if (target.closest("button, a")) {
-                  window.setTimeout(() => setMobileMenuOpen(false), 0);
-                }
               }}
             >
               <div className="flex items-start justify-between gap-3">

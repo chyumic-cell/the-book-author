@@ -1142,7 +1142,7 @@ export function ChaptersTab({
       range.fieldKey,
       target,
       window.innerWidth / 2,
-      Math.max(104, window.innerHeight - 320),
+      Math.max(96, window.innerHeight - 220),
     );
   }
 
@@ -1172,7 +1172,7 @@ export function ChaptersTab({
               fieldKey,
               target,
               touchX,
-              Math.min(window.innerHeight - 132, touchY + 20),
+              Math.min(window.innerHeight - 96, touchY + 12),
             );
           }
         }, 120);
@@ -1604,12 +1604,14 @@ export function ChaptersTab({
                       {contextMenu ? (
                         <div
                           className={cn(
-                            "fixed z-[70] max-h-[min(85vh,560px)] overflow-y-auto rounded-lg border border-[color:var(--line-strong)] bg-[color:var(--panel)] p-2 shadow-[0_24px_50px_var(--shadow)]",
-                            phoneShell ? "w-[min(92vw,320px)]" : "w-[320px]",
+                            "fixed z-[70] overflow-y-auto rounded-lg border border-[color:var(--line-strong)] bg-[color:var(--panel)] p-2 shadow-[0_24px_50px_var(--shadow)]",
+                            phoneShell
+                              ? "bottom-[calc(env(safe-area-inset-bottom)+10.5rem)] left-1/2 max-h-[38dvh] w-[min(92vw,360px)] -translate-x-1/2"
+                              : "max-h-[min(85vh,560px)] w-[320px]",
                           )}
                           data-testid="chapter-context-menu"
                           ref={contextMenuRef}
-                          style={{ left: contextMenu.x, top: contextMenu.y }}
+                          style={phoneShell ? undefined : { left: contextMenu.x, top: contextMenu.y }}
                           onMouseDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >

@@ -49,7 +49,8 @@ function cleanTitle(value: string, fallback: string) {
     .replace(/^chapter\s+\d+\s*[:.\-–—]?\s*/i, "")
     .replace(/^(?:act|part|section|book)\s+(?:[ivxlcdm]+|\d+)\s*[:.\-–—]?\s*/i, "")
     .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, "")
-    .trim();
+    .trim()
+    .replace(/\*\*/g, "");
   return cleaned || fallback;
 }
 
@@ -370,8 +371,9 @@ async function generateSingleSkeletonFieldValue(options: {
   fieldLabel: string;
   action: PlanningAction;
   contextChapterId: string;
+  instruction?: string;
 }) {
-  const { project, targetEntityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId } = options;
+  const { project, targetEntityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId, instruction } = options;
   const currentValue = getEntityValue(entity, fieldKey);
   const context = buildContextPackage(project, contextChapterId, currentValue);
   const thinCurrent = skeletonFieldLooksThin(fieldKey, currentValue);
@@ -390,6 +392,7 @@ async function generateSingleSkeletonFieldValue(options: {
       thinCurrent
         ? "The current field value is blank, generic, or placeholder-level. Replace it with specific canon-safe content."
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      instruction ? `Additional request context:\n${instruction}` : "",
       action === "expand"
         ? "Expand this field into something fuller, more specific, and more useful."
         : action === "tighten"
@@ -1136,8 +1139,9 @@ async function generateSinglePlanningFieldValue(options: {
   fieldKey: AssistFieldKey;
   fieldLabel: string;
   action: Exclude<PlanningAction, "develop"> | "develop";
+  instruction?: string;
 }) {
-  const { project, chapter, fieldKey, fieldLabel, action } = options;
+  const { project, chapter, fieldKey, fieldLabel, action, instruction } = options;
   const currentValue = chapterFieldValue(chapter, fieldKey);
   const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
   const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
@@ -1159,6 +1163,7 @@ async function generateSinglePlanningFieldValue(options: {
       thinCurrent
         ? "The current field value is blank, generic, or placeholder-level. Replace it with specific canon-safe content. Do not repeat the placeholder wording."
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      instruction ? `Additional request context:\n${instruction}` : "",
       chapterFieldInstruction(fieldKey, action),
       fieldSpec ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}` : "",
       previousChapter
@@ -1227,8 +1232,9 @@ async function generateSingleStoryBibleFieldValue(options: {
   fieldLabel: string;
   action: Exclude<PlanningAction, "develop"> | "develop";
   contextChapterId: string;
+  instruction?: string;
 }) {
-  const { project, entityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId } = options;
+  const { project, entityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId, instruction } = options;
   const spec = STORY_BIBLE_ENTITY_SPECS.find((entry) => entry.entityType === entityType);
   const fieldSpec = spec?.fields.find((field) => field.key === fieldKey);
   const currentValue = getEntityValue(entity, fieldKey);
@@ -1249,6 +1255,7 @@ async function generateSingleStoryBibleFieldValue(options: {
       thinCurrent
         ? "The current field value is blank, generic, or thin. Replace it with specific canon-safe content instead of repeating the placeholder."
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
+      instruction ? `Additional request context:\n${instruction}` : "",
       action === "expand"
         ? "Expand this field into something fuller, more specific, and more useful."
         : action === "tighten"
@@ -1331,6 +1338,7 @@ export async function runTargetedPlanningFieldAi(input: {
   fieldLabel: string;
   action: PlanningAction;
   currentValue?: string;
+  instruction?: string;
   draftItem?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
@@ -1354,6 +1362,7 @@ export async function runTargetedPlanningFieldAi(input: {
     fieldKey: input.fieldKey,
     fieldLabel: input.fieldLabel,
     action: input.action,
+    instruction: input.instruction,
   });
   if (!generated) {
     throw new Error("AI did not return any visible planning text.");
@@ -1379,6 +1388,7 @@ export async function runTargetedSkeletonFieldAi(input: {
   fieldLabel: string;
   action: PlanningAction;
   currentValue?: string;
+  instruction?: string;
   draftItem?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
@@ -1408,6 +1418,7 @@ export async function runTargetedSkeletonFieldAi(input: {
     fieldLabel: input.fieldLabel,
     action: input.action,
     contextChapterId,
+    instruction: input.instruction,
   });
   if (!generated) {
     throw new Error("AI did not return any visible Story Skeleton text.");
@@ -1441,6 +1452,7 @@ export async function runTargetedStoryBibleFieldAi(input: {
   fieldLabel: string;
   action: PlanningAction;
   currentValue?: string;
+  instruction?: string;
   draftItem?: Record<string, unknown>;
 }) {
   const project = await getProjectWorkspace(input.projectId);
@@ -1472,6 +1484,7 @@ export async function runTargetedStoryBibleFieldAi(input: {
     fieldLabel: input.fieldLabel,
     action: input.action,
     contextChapterId,
+    instruction: input.instruction,
   });
   if (!generated) {
     throw new Error("AI did not return any visible Story Bible text.");
