@@ -1661,7 +1661,7 @@ function extractStructureBeatLabel(message: string) {
   for (const pattern of patterns) {
     const match = message.match(pattern);
     if (match?.[1]) {
-      const cleaned = cleanExtractedEntityLabel(match[1]);
+      const cleaned = finalizeExtractedEntityLabel(match[1]);
       if (cleaned) {
         return cleaned;
       }
@@ -1685,6 +1685,12 @@ function cleanExtractedEntityLabel(value: string) {
     .replace(/^["“'`]+|["”'`]+$/g, "")
     .replace(/[.,;:!?]+$/, "")
     .split(/\s+(?:and|with|who|that|which|where|plus|as|build|make|give|using|keep|fill|especially|properly)\b/i)[0]
+    .trim();
+}
+
+function finalizeExtractedEntityLabel(value: string) {
+  return cleanTitleText(cleanExtractedEntityLabel(value))
+    .replace(/[.,;:!?]+$/, "")
     .trim();
 }
 
@@ -1723,7 +1729,7 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
   for (const pattern of patternsByType[entityType]) {
     const match = message.match(pattern);
     if (match?.[1]) {
-      const cleaned = cleanExtractedEntityLabel(match[1]);
+      const cleaned = finalizeExtractedEntityLabel(match[1]);
       if (cleaned) {
         return cleaned;
       }
@@ -1749,7 +1755,7 @@ function extractEntityLabelFromMessage(message: string, entityType: AssistantSto
     const prefixIndex = lowerMessage.indexOf(prefix);
     if (prefixIndex >= 0) {
       const afterPrefix = message.slice(prefixIndex + prefix.length);
-      const simpleLabel = cleanExtractedEntityLabel(afterPrefix);
+      const simpleLabel = finalizeExtractedEntityLabel(afterPrefix);
       if (simpleLabel) {
         return simpleLabel;
       }
@@ -1794,7 +1800,7 @@ function extractMultipleEntityLabels(message: string, entityType: AssistantStory
   const normalizedList = rawList
     .replace(/\s+and\s+/gi, ", ")
     .split(",")
-    .map((part) => cleanExtractedEntityLabel(part))
+    .map((part) => finalizeExtractedEntityLabel(part))
     .filter((part) => {
       if (!part) {
         return false;

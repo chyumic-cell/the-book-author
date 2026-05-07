@@ -189,6 +189,21 @@ function balanceDialogueQuotes(paragraph: string, issues: string[]) {
   return `${trimmed}."`;
 }
 
+function balanceThoughtItalics(paragraph: string, issues: string[]) {
+  const starCount = (paragraph.match(/\*/g) ?? []).length;
+  if (starCount === 0 || starCount % 2 === 0 || /\*\*/.test(paragraph)) {
+    return paragraph;
+  }
+
+  const trimmed = paragraph.trimEnd();
+  if (!trimmed.includes("*")) {
+    return paragraph;
+  }
+
+  issues.push("Closed an unmatched internal-thought italic marker.");
+  return `${trimmed}*`;
+}
+
 function trimIncompleteEndingSentence(paragraph: string, issues: string[]) {
   const trimmed = paragraph.trim();
   if (!trimmed) {
@@ -231,8 +246,9 @@ function finalizeChapterEnding(paragraphs: string[], issues: string[]) {
       continue;
     }
 
-    const balanced = balanceDialogueQuotes(trimmed, issues);
-    const repaired = trimIncompleteEndingSentence(balanced, issues);
+    const dialogueBalanced = balanceDialogueQuotes(trimmed, issues);
+    const italicBalanced = balanceThoughtItalics(dialogueBalanced, issues);
+    const repaired = trimIncompleteEndingSentence(italicBalanced, issues);
 
     if (!repaired) {
       finalized.pop();
@@ -307,7 +323,7 @@ export function cleanInlineSuggestionText(value: unknown) {
     })
     .filter(Boolean)
     .filter((paragraph) => !inlineMetaLeadPattern.test(paragraph.trim()))
-    .map((paragraph) => balanceDialogueQuotes(paragraph, issues))
+    .map((paragraph) => balanceThoughtItalics(balanceDialogueQuotes(paragraph, issues), issues))
     .filter(Boolean);
 
   const cleaned = cleanedParagraphs.join("\n\n").trim();
@@ -452,8 +468,9 @@ export function sanitizeManuscriptText(
     }
 
     const dialogueBalanced = balanceDialogueQuotes(sentenceSanitized, issues);
-    if (dialogueBalanced !== sentenceSanitized) {
-      sentenceSanitized = dialogueBalanced;
+    const italicBalanced = balanceThoughtItalics(dialogueBalanced, issues);
+    if (italicBalanced !== sentenceSanitized) {
+      sentenceSanitized = italicBalanced;
     }
 
     if (index < 2) {

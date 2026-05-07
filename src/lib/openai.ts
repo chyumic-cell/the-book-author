@@ -215,6 +215,35 @@ function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstr
   return withAdditionalInstruction([base, fastPass].join("\n\n"), additionalInstruction);
 }
 
+function chapterNeedsDialogueForwardDraft(
+  project: ProjectWorkspace,
+  chapter: ChapterRecord,
+  additionalInstruction = "",
+) {
+  const dialogueSignals = [
+    project.bookSettings.tone,
+    project.bookSettings.storyBrief,
+    project.bookSettings.plotDirection,
+    chapter.purpose,
+    chapter.currentBeat,
+    chapter.desiredMood,
+    chapter.outline,
+    chapter.keyBeats.join(" "),
+    chapter.requiredInclusions.join(" "),
+    chapter.sceneList.join(" "),
+    additionalInstruction,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    project.styleProfile.dialogueDescriptionRatio >= 6 ||
+    /\bdialogue-heavy\b|\bdialogue heavy\b|\bquoted speech\b|\bconversation\b|\bargument\b|\bbargain(?:ing)?\b|\bnegotiation\b/.test(
+      dialogueSignals,
+    )
+  );
+}
+
 function buildFullChapterRevisionInstruction(chapter: ChapterRecord, instruction: string) {
   const range = getChapterWordRange(chapter);
   return [
@@ -1157,6 +1186,44 @@ async function repairChapterEndingIfNeeded(options: {
   return [...head, repairedEnding].join("\n\n").trim();
 }
 
+async function repairDialogueHeavyChapterIfNeeded(options: {
+  project: ProjectWorkspace;
+  chapter: ChapterRecord;
+  context: ContextPackage;
+  content: string;
+  additionalInstruction?: string;
+}) {
+  const hasQuotedDialogue = /"[^"\n]+"/.test(options.content);
+  if (hasQuotedDialogue || !chapterNeedsDialogueForwardDraft(options.project, options.chapter, options.additionalInstruction)) {
+    return options.content;
+  }
+
+  const repairPrompt = buildPromptEnvelope(
+    "Repair dialogue-heavy chapter draft",
+    options.project,
+    options.context,
+    [
+      formatChapterInstruction(options.chapter, "draft"),
+      options.additionalInstruction?.trim() ? `Additional writer direction:\n${options.additionalInstruction.trim()}` : "",
+      "The previous draft failed the dialogue-heavy requirement.",
+      "Rewrite the whole chapter so real quoted dialogue appears early and keeps carrying the chapter.",
+      "Every major scene beat should contain spoken exchange, interruption, bargaining, threat, confession, challenge, or argument.",
+      "Do not return notes about dialogue. Do not summarize what characters would say. Put the actual quoted speech on the page.",
+      "Keep the established canon, names, chronology, world rules, and chapter blueprint intact.",
+      "Return only the finished chapter prose.",
+      "Rejected draft:",
+      options.content,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+  const repairedRaw = await generateTextWithProvider(repairPrompt, {
+    maxOutputTokens: Math.max(hostedDraftOutputTokenBudget(options.chapter), 2200),
+  });
+  const repaired = repairedRaw ? sanitizeGeneratedChapterText(options.project, options.chapter, repairedRaw) : "";
+  return /"[^"\n]+"/.test(repaired) ? repaired : options.content;
+}
+
 async function expandShortChapterIfNeeded(options: {
   project: ProjectWorkspace;
   chapter: ChapterRecord;
@@ -1736,7 +1803,7 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
 
   const context = buildContextPackage(project, chapterId);
   const hostedFastMode = isHostedFastDraftMode();
-  return runPromptTask({
+  const result = await runPromptTask({
     task: "Generate chapter draft",
     project,
     context,
@@ -1750,6 +1817,18 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
     enforceChapterLength: !hostedFastMode,
     repairChapterEnding: true,
   });
+
+  if (hostedFastMode && result.content.trim()) {
+    result.content = await repairDialogueHeavyChapterIfNeeded({
+      project,
+      chapter,
+      context,
+      content: result.content,
+      additionalInstruction,
+    });
+  }
+
+  return result;
 }
 
 export async function reviseChapter(
