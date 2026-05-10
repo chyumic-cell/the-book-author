@@ -2,6 +2,8 @@ node_modules
 .next
 dist
 runtime
+android
+android-shell
 exports
 hosted-exports
 .tools

@@ -47,6 +47,12 @@ next-start.err.log
 /src/generated/
 /src/app/downloads/*.cmd
 
+# Android native build outputs
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/.cxx/
+
 # local data
 /prisma/*.db
 /prisma/*.db-*
