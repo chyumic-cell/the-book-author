@@ -116,6 +116,34 @@ function buildGuidedInstruction(step: GuidedStep, answer: string) {
   ].join("\n");
 }
 
+function inferRequestedChapterCount(value: string) {
+  const lower = value.toLowerCase();
+  const numeric = lower.match(/\b([2-9]|1[0-9]|2[0-9]|30)\s+chapters?\b/);
+  if (numeric) {
+    return Number(numeric[1]);
+  }
+
+  const words: Record<string, number> = {
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+  };
+
+  for (const [word, count] of Object.entries(words)) {
+    if (new RegExp(`\\b${word}\\s+chapters?\\b`).test(lower)) {
+      return count;
+    }
+  }
+
+  return null;
+}
+
 export function GuidedBuilderTab({
   project,
   selectedChapterId,
@@ -134,6 +162,7 @@ export function GuidedBuilderTab({
   const [running, setRunning] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [history, setHistory] = useState<Array<{ step: string; reply: string }>>([]);
+  const [requestedChapterCount, setRequestedChapterCount] = useState<number | null>(null);
   const step = GUIDED_STEPS[stepIndex] ?? GUIDED_STEPS[0];
   const progress = useMemo(() => Math.round(((stepIndex + 1) / GUIDED_STEPS.length) * 100), [stepIndex]);
 
@@ -141,6 +170,18 @@ export function GuidedBuilderTab({
     setDrafting(true);
     let workingProject = sourceProject;
     let latestContext: ContextPackage | null = null;
+    const finalCount = inferRequestedChapterCount(finalInstruction) ?? requestedChapterCount;
+
+    if (finalCount && finalCount > workingProject.chapters.length) {
+      while (workingProject.chapters.length < finalCount) {
+        const created = await requestJson<{ project: ProjectWorkspace }>(`/api/projects/${workingProject.id}/chapters`, {
+          method: "POST",
+        });
+        workingProject = created.project;
+      }
+      onProjectUpdate(workingProject);
+    }
+
     const chapters = [...workingProject.chapters].sort((left, right) => left.number - right.number);
 
     for (const chapter of chapters) {
@@ -209,6 +250,11 @@ export function GuidedBuilderTab({
 
     setRunning(true);
     try {
+      const nextRequestedChapterCount = inferRequestedChapterCount(trimmed);
+      if (nextRequestedChapterCount) {
+        setRequestedChapterCount(nextRequestedChapterCount);
+      }
+
       const data = await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
