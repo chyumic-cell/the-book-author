@@ -5,6 +5,7 @@ export const storyForgeTabs: { id: StoryForgeTab; label: string }[] = [
   { id: "setup", label: "Book Setup" },
   { id: "skeleton", label: "Story Skeleton" },
   { id: "bible", label: "Story Bible" },
+  { id: "guided", label: "Guided Builder" },
   { id: "chapters", label: "Chapters" },
   { id: "memory", label: "Memory" },
   { id: "continuity", label: "Continuity" },

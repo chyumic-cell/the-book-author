@@ -122,6 +122,7 @@ export function WorkspaceMenuBar({
   phoneShell = false,
   onOpenTab,
   onOpenProviders,
+  onOpenGuidedBuilder,
   onRedo,
   onResumeAutopilot,
   onReviseForPacing,
@@ -168,6 +169,7 @@ export function WorkspaceMenuBar({
   phoneShell?: boolean;
   onOpenTab: (tab: StoryForgeTab) => void;
   onOpenProviders: () => void;
+  onOpenGuidedBuilder: () => void;
   onRedo: () => void;
   onResumeAutopilot: () => void;
   onReviseForPacing: () => void;
@@ -210,6 +212,7 @@ export function WorkspaceMenuBar({
 
   const mobileWorkspaceLinks: Array<{ tab: StoryForgeTab; label: string }> = [
     { tab: "chapters", label: "Writing" },
+    { tab: "guided", label: "Guided Builder" },
     { tab: "setup", label: "Book Setup" },
     { tab: "skeleton", label: "Story Skeleton" },
     { tab: "bible", label: "Story Bible" },
@@ -358,6 +361,9 @@ export function WorkspaceMenuBar({
         return (
           <>
             <RibbonGroup compact={compactGroup} title="Writing">
+              <Button onClick={onOpenGuidedBuilder} variant={activeTab === "guided" ? "primary" : "secondary"}>
+                Guided Builder
+              </Button>
               <Button onClick={() => onOpenTab("chapters")} variant={activeTab === "chapters" ? "primary" : "secondary"}>
                 Writing View
               </Button>
@@ -487,6 +493,7 @@ export function WorkspaceMenuBar({
     copilotExpanded,
     manuscriptZoom,
     onOpenProviders,
+    onOpenGuidedBuilder,
     onOpenTab,
     onRedo,
     onReviseForPacing,

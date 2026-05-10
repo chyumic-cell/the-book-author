@@ -19,6 +19,7 @@ import { IdeaLabTab } from "@/components/storyforge/idea-lab-tab";
 import { AboutTab } from "@/components/storyforge/about-tab";
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { HelpTab } from "@/components/storyforge/help-tab";
+import { GuidedBuilderTab } from "@/components/storyforge/guided-builder-tab";
 import { MemoryTab } from "@/components/storyforge/memory-tab";
 import { ProjectCopilotBar } from "@/components/storyforge/project-copilot-bar";
 import { ProjectSidebar } from "@/components/storyforge/project-sidebar";
@@ -1804,6 +1805,7 @@ export function ProjectWorkspace({
           manuscriptZoom={manuscriptZoom}
           phoneShell={phoneShell}
           onOpenProviders={openProviders}
+          onOpenGuidedBuilder={() => setActiveTab("guided")}
           onOpenTab={setActiveTab}
           onRedo={handleRedo}
           onResumeAutopilot={() => void handleAutopilotRun({ action: "resume", mode: "BOOK" })}
@@ -1914,6 +1916,15 @@ export function ProjectWorkspace({
           ) : null}
 
           {activeTab === "ideaLab" && <IdeaLabTab mutateIdeaLab={mutateIdeaLab} project={project} />}
+          {activeTab === "guided" && (
+            <GuidedBuilderTab
+              onContextPackage={setContextPackage}
+              onOpenTab={setActiveTab}
+              onProjectUpdate={setProject}
+              project={project}
+              selectedChapterId={chapterId}
+            />
+          )}
           {activeTab === "setup" && (
             <BookSetupTab
               availableSeriesNames={project.availableSeriesNames}

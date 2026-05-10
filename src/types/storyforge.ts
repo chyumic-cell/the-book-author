@@ -3,6 +3,7 @@ export type StoryForgeTab =
   | "setup"
   | "skeleton"
   | "bible"
+  | "guided"
   | "chapters"
   | "memory"
   | "continuity"
