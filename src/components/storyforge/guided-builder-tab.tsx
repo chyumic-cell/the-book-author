@@ -279,9 +279,6 @@ export function GuidedBuilderTab({
       } else {
         setStepIndex((current) => current + 1);
       }
-      if (data.nextTab && stepIndex < GUIDED_STEPS.length - 1) {
-        onOpenTab(data.nextTab === "guided" ? "guided" : data.nextTab);
-      }
       toast.success(`${APP_NAME} placed that answer into the project.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Guided Builder could not apply that answer.");
