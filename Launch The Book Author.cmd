@@ -8,7 +8,8 @@ set "NODE_DIR=%APP_DIR%\node"
 if not exist "%NODE_DIR%\node.exe" set "NODE_DIR=C:\Users\pc1\Documents\.tooling\node-v22.22.1-win-x64"
 set "PATH=%NODE_DIR%;%PATH%"
 set "PORT=3000"
-set "HEALTH_URL=http://localhost:%PORT%/api/health"
+set "LOCAL_APP_URL=http://127.0.0.1:%PORT%"
+set "HEALTH_URL=%LOCAL_APP_URL%/api/health"
 set "RUNTIME_LOG=%APP_DIR%\.the-book-author-runtime.log"
 set "EDGE_EXE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
@@ -25,9 +26,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 if errorlevel 1 goto :start_failed
 
 if exist "%EDGE_EXE%" (
-  start "" "%EDGE_EXE%" --app=http://localhost:%PORT%
+  start "" "%EDGE_EXE%" --app=%LOCAL_APP_URL%
 ) else (
-  start "" http://localhost:%PORT%
+  start "" %LOCAL_APP_URL%
 )
 
 exit /b 0

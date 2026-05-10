@@ -50,6 +50,20 @@ foreach ($relativePath in $includePaths) {
   }
 }
 
+$nestedGeneratedPaths = @(
+  "runtime\dist",
+  "runtime\hosted-exports",
+  "runtime\.the-book-author-runtime.log",
+  "runtime\.the-book-author-runtime.err.log"
+)
+
+foreach ($relativePath in $nestedGeneratedPaths) {
+  $generatedPath = Join-Path $payloadRoot $relativePath
+  if (Test-Path $generatedPath) {
+    Remove-Item $generatedPath -Recurse -Force
+  }
+}
+
 if (-not (Test-Path (Join-Path $nodeSourceDir "node.exe"))) {
   throw "Portable Node runtime was not found at $nodeSourceDir"
 }
@@ -76,7 +90,7 @@ Set-Content -Path (Join-Path $payloadRoot ".the-book-author.providers.json") -Va
     "apiKey": "",
     "model": "openrouter/auto",
     "baseUrl": "https://openrouter.ai/api/v1",
-    "siteUrl": "http://localhost:3000",
+    "siteUrl": "http://127.0.0.1:3000",
     "appName": "The Book Author"
   },
   "custom": {
@@ -97,7 +111,7 @@ if (Test-Path $runtimeEnvPath) {
     'OPENROUTER_API_KEY=""',
     'OPENROUTER_MODEL="openrouter/auto"',
     'OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"',
-    'OPENROUTER_SITE_URL="http://localhost:3000"',
+    'OPENROUTER_SITE_URL="http://127.0.0.1:3000"',
     'OPENROUTER_APP_NAME="The Book Author"',
     'OPENROUTER_SETUP_URL="https://openrouter.ai/keys"',
     'THE_BOOK_AUTHOR_DEFAULT_PROVIDER="OPENROUTER"',
