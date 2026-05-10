@@ -1412,6 +1412,14 @@ async function enforceInlineLengthIfNeeded(options: {
     }
 
     const words = content.split(/\s+/).filter(Boolean).slice(0, Math.min(targetWords, maximumAcceptable));
+    while (
+      words.length > minimumAcceptable &&
+      /^(?:a|an|the|to|of|in|on|at|by|for|from|with|into|onto|under|over|and|or|but|because|while|though|that|which|who|whose)$/i.test(
+        words.at(-1)?.replace(/[^\p{L}\p{N}]+/gu, "") ?? "",
+      )
+    ) {
+      words.pop();
+    }
     const trimmed = words.join(" ").replace(/[,:;\-–—]+$/, "").trim();
     return /[.!?]["']?$/.test(trimmed) ? trimmed : `${trimmed}.`;
   };

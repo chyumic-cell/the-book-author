@@ -121,6 +121,25 @@ export async function generateProjectCoreSummary(projectId: string) {
       select: { coreSummaryHash: true },
     });
     if (existing?.coreSummaryHash === hash) {
+      const normalizedExisting = normalizeCoreSummary(project.coreSummary);
+      if (normalizedExisting && normalizedExisting !== project.coreSummary) {
+        await prisma.project.update({
+          where: { id: projectId },
+          data: {
+            coreSummary: normalizedExisting,
+            coreSummaryUpdatedAt: new Date(),
+          },
+        });
+        return {
+          project: {
+            ...project,
+            coreSummary: normalizedExisting,
+            coreSummaryUpdatedAt: new Date(),
+          },
+          summary: normalizedExisting,
+          generated: false,
+        };
+      }
       return {
         project,
         summary: project.coreSummary,
