@@ -262,6 +262,20 @@ function buildFullChapterRevisionInstruction(chapter: ChapterRecord, instruction
   ].join("\n");
 }
 
+function buildHostedFastRevisionInstruction(chapter: ChapterRecord, instruction: string) {
+  const sourceWords = roughWordCount(chapter.draft);
+  const target = sourceWords > 0 ? `roughly the current ${sourceWords}-word length` : "a concise complete scene-length pass";
+  return [
+    `Hosted fast-revision mode: revise the current chapter at ${target}.`,
+    "Make a useful manuscript-quality improvement in one pass; do not expand toward the full target word count during hosted ribbon revisions.",
+    "Preserve chronology, canon facts, POV, names, and continuity.",
+    "Do not restart the chapter. Do not repeat the opening or recap the story from the beginning.",
+    "Keep spoken dialogue in quotation marks and keep direct internal thoughts in italics.",
+    "Return only revised chapter prose, with no notes, markdown, headings, explanation, or checklist.",
+    instruction,
+  ].join("\n");
+}
+
 function formatChapterInstruction(chapter: ChapterRecord, task: "outline" | "draft") {
   const lines = [
     `${task === "outline" ? "Outline" : "Write"} chapter ${chapter.number}: ${chapter.title}.`,
@@ -1935,18 +1949,23 @@ export async function reviseChapter(
   }
 
   const context = buildContextPackage(project, chapterId, chapter.draft);
+  const hostedFastMode = isHostedFastDraftMode();
   return runPromptTask({
     task: "Revise chapter",
     project,
     context,
-    instruction: buildFullChapterRevisionInstruction(chapter, instruction),
+    instruction: hostedFastMode
+      ? buildHostedFastRevisionInstruction(chapter, instruction)
+      : buildFullChapterRevisionInstruction(chapter, instruction),
     roleInstruction: getRoleInstruction(role),
-    maxOutputTokens: revisionOutputTokenBudget(chapter, chapter.draft),
+    maxOutputTokens: hostedFastMode
+      ? wordBudgetToTokens(Math.min(Math.max(roughWordCount(chapter.draft) || 500, 500), 1400) + 120, 900, 2400)
+      : revisionOutputTokenBudget(chapter, chapter.draft),
     mockContent: mockRevision(actionType, chapter.draft, instruction),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
-    enforceChapterLength: true,
-    repairChapterEnding: true,
+    enforceChapterLength: !hostedFastMode,
+    repairChapterEnding: !hostedFastMode,
   });
 }
 

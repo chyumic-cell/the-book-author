@@ -118,6 +118,17 @@ async function setRibbonToggle(page, showLabel, hideLabel, shouldBeVisible) {
   throw new Error(`Could not resolve toggle button for ${showLabel}/${hideLabel}`);
 }
 
+async function openSidebarSection(page, sectionTestId) {
+  const section = page.getByTestId(sectionTestId).first();
+  await section.waitFor({ state: "visible", timeout: 20000 });
+  const isOpen = await section.evaluate((node) => node.hasAttribute("open"));
+  if (!isOpen) {
+    await section.locator("summary").first().evaluate((node) => node.click());
+    await pagePause(200);
+  }
+  return section;
+}
+
 async function createAuditProject(page) {
   await page.goto(base, { waitUntil: "networkidle" });
   await page.locator('a[href="/projects/new"]').first().click();
@@ -349,6 +360,19 @@ async function waitForInlinePreview(page) {
   await page.getByTestId("inline-ai-preview").waitFor({ timeout: 300000 });
 }
 
+async function waitForManuscriptChange(page, previousValue) {
+  const editor = page.getByTestId("manuscript-editor");
+  await editor.waitFor({ state: "visible", timeout: 30000 });
+  await page.waitForFunction(
+    ({ testId, previous }) => {
+      const input = document.querySelector(`[data-testid="${testId}"]`);
+      return input instanceof HTMLTextAreaElement && input.value.trim().length > 0 && input.value !== previous;
+    },
+    { testId: "manuscript-editor", previous: previousValue },
+    { timeout: 300000 },
+  );
+}
+
 async function resolveInlinePreview(page, buttonName) {
   const preview = page.getByTestId("inline-ai-preview").last();
   const target = preview.locator("button", { hasText: buttonName }).first();
@@ -370,7 +394,8 @@ async function testChapterWorkspace(page) {
   await openRibbon(page, "View");
   await setRibbonToggle(page, "Show Chapters", "Hide Chapters", true);
   const sidebar = page.locator("aside");
-  const chapterButtons = sidebar.getByTestId("sidebar-chapter-button");
+  const chapterSection = await openSidebarSection(page, "sidebar-section-chapters");
+  const chapterButtons = chapterSection.getByTestId("sidebar-chapter-button");
   const visibleChapterButtons = await chapterButtons.count();
   for (let index = 0; index < visibleChapterButtons; index += 1) {
     await jsClick(chapterButtons.nth(index));
@@ -413,9 +438,9 @@ async function testChapterWorkspace(page) {
 
   console.log("CHAPTER_STEP chapter draft generate");
   await openRibbon(page, "AI Engine");
+  const draftBeforeGenerate = await page.getByTestId("manuscript-editor").inputValue();
   await jsClick(ribbonButton(page, "Generate Chapter").first());
-  await waitForInlinePreview(page);
-  await resolveInlinePreview(page, "Accept");
+  await waitForManuscriptChange(page, draftBeforeGenerate);
 
   const editor = page.getByTestId("manuscript-editor");
   console.log("CHAPTER_STEP inline tighten");
@@ -740,28 +765,32 @@ async function testSidebar(page) {
   const sidebar = page.locator("aside");
   await sidebar.waitFor({ timeout: 20000 });
 
-  const viewButtons = sidebar.getByTestId("sidebar-section-views").getByTestId("sidebar-tree-button");
+  const viewsSection = await openSidebarSection(page, "sidebar-section-views");
+  const viewButtons = viewsSection.getByTestId("sidebar-tree-button");
   const viewCount = await viewButtons.count();
   for (let index = 0; index < viewCount; index += 1) {
     await jsClick(viewButtons.nth(index));
     await pagePause(150);
   }
 
-  const chapterPaneButtons = sidebar.getByTestId("sidebar-section-chapters").getByTestId("sidebar-chapter-button");
+  const chaptersSection = await openSidebarSection(page, "sidebar-section-chapters");
+  const chapterPaneButtons = chaptersSection.getByTestId("sidebar-chapter-button");
   const chapterCount = await chapterPaneButtons.count();
   for (let index = 0; index < chapterCount; index += 1) {
     await jsClick(chapterPaneButtons.nth(index));
     await pagePause(150);
   }
 
-  const characterButtons = sidebar.getByTestId("sidebar-section-characters").getByTestId("sidebar-tree-button");
+  const charactersSection = await openSidebarSection(page, "sidebar-section-characters");
+  const characterButtons = charactersSection.getByTestId("sidebar-tree-button");
   const characterCount = await characterButtons.count();
   for (let index = 0; index < characterCount; index += 1) {
     await jsClick(characterButtons.nth(index));
     await pagePause(120);
   }
 
-  const structureButtons = sidebar.getByTestId("sidebar-section-story-structure").getByTestId("sidebar-tree-button");
+  const structureSection = await openSidebarSection(page, "sidebar-section-story-structure");
+  const structureButtons = structureSection.getByTestId("sidebar-tree-button");
   const structureCount = await structureButtons.count();
   for (let index = 0; index < structureCount; index += 1) {
     await jsClick(structureButtons.nth(index));
@@ -769,7 +798,8 @@ async function testSidebar(page) {
   }
 
   await sidebar.locator('[data-testid="sidebar-section-idea-vault"] summary').click();
-  const ideaButtons = sidebar.getByTestId("sidebar-section-idea-vault").getByTestId("sidebar-tree-button");
+  const ideaSection = await openSidebarSection(page, "sidebar-section-idea-vault");
+  const ideaButtons = ideaSection.getByTestId("sidebar-tree-button");
   const ideaCount = await ideaButtons.count();
   for (let index = 0; index < ideaCount; index += 1) {
     await jsClick(ideaButtons.nth(index));
