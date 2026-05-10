@@ -97,7 +97,7 @@ const GUIDED_STEPS: GuidedStep[] = [
     placeholder: "Example: Write a 2,000 word, three-chapter medieval fantasy with heavy dialogue. Use the characters, rules, structure, and tone we just built.",
     scope: "CHAPTER",
     instruction:
-      "Prepare the project for drafting. If the user asks for actual prose, update the best matching chapter outline or notes so the chapter generator has precise instructions.",
+      "Prepare the project for drafting. Update chapter runway fields and notes so the chapter generator has precise instructions for every chapter.",
   },
 ];
 
@@ -132,9 +132,73 @@ export function GuidedBuilderTab({
   const [stepIndex, setStepIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [running, setRunning] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [history, setHistory] = useState<Array<{ step: string; reply: string }>>([]);
   const step = GUIDED_STEPS[stepIndex] ?? GUIDED_STEPS[0];
   const progress = useMemo(() => Math.round(((stepIndex + 1) / GUIDED_STEPS.length) * 100), [stepIndex]);
+
+  async function draftGuidedBook(sourceProject: ProjectWorkspace, finalInstruction: string) {
+    setDrafting(true);
+    let workingProject = sourceProject;
+    let latestContext: ContextPackage | null = null;
+    const chapters = [...workingProject.chapters].sort((left, right) => left.number - right.number);
+
+    for (const chapter of chapters) {
+      const current = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
+      const notePrefix = current.notes?.trim() ? `${current.notes.trim()}\n\n` : "";
+      await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${current.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: `${notePrefix}Guided Builder final drafting instruction:\n${finalInstruction}`.trim(),
+        }),
+      });
+
+      if (!current.outline.trim()) {
+        const outlineData = await requestJson<{
+          run: { suggestion: string };
+          contextPackage: ContextPackage;
+        }>(`/api/chapters/${current.id}/generate/outline`, { method: "POST" });
+        latestContext = outlineData.contextPackage;
+        await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${current.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ outline: outlineData.run.suggestion }),
+        });
+      }
+
+      const draftData = await requestJson<{
+        run: { suggestion: string };
+        contextPackage: ContextPackage;
+      }>(`/api/chapters/${current.id}/generate/draft`, { method: "POST" });
+      latestContext = draftData.contextPackage;
+      const patched = await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${current.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft: draftData.run.suggestion,
+          status: "DRAFTING",
+        }),
+      });
+      workingProject = patched.project;
+      onProjectUpdate(workingProject);
+    }
+
+    onContextPackage(latestContext);
+    const totalWords = workingProject.chapters.reduce(
+      (sum, chapter) => sum + String(chapter.draft || "").trim().split(/\s+/).filter(Boolean).length,
+      0,
+    );
+    setHistory((current) => [
+      ...current,
+      {
+        step: "Guided Draft",
+        reply: `Drafted ${workingProject.chapters.length} chapter(s) from the Guided Builder plan, about ${totalWords} words total.`,
+      },
+    ]);
+    setDrafting(false);
+    return workingProject;
+  }
 
   async function submitAnswer() {
     const trimmed = answer.trim();
@@ -157,14 +221,19 @@ export function GuidedBuilderTab({
         }),
       });
 
-      onProjectUpdate(data.project);
+      let nextProject = data.project;
+      onProjectUpdate(nextProject);
       onContextPackage(data.contextPackage);
       setHistory((current) => [...current, { step: step.title, reply: data.reply }]);
       setAnswer("");
-      if (stepIndex < GUIDED_STEPS.length - 1) {
+      if (stepIndex === GUIDED_STEPS.length - 1) {
+        nextProject = await draftGuidedBook(nextProject, trimmed);
+        onProjectUpdate(nextProject);
+        onOpenTab("chapters");
+      } else {
         setStepIndex((current) => current + 1);
       }
-      if (data.nextTab) {
+      if (data.nextTab && stepIndex < GUIDED_STEPS.length - 1) {
         onOpenTab(data.nextTab === "guided" ? "guided" : data.nextTab);
       }
       toast.success(`${APP_NAME} placed that answer into the project.`);
@@ -172,6 +241,7 @@ export function GuidedBuilderTab({
       toast.error(error instanceof Error ? error.message : "Guided Builder could not apply that answer.");
     } finally {
       setRunning(false);
+      setDrafting(false);
     }
   }
 
@@ -215,13 +285,19 @@ export function GuidedBuilderTab({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={running || !answer.trim()} onClick={() => void submitAnswer()}>
-            {running ? "Applying..." : stepIndex === GUIDED_STEPS.length - 1 ? "Apply final step" : "Apply and ask next"}
+          <Button disabled={running || drafting || !answer.trim()} onClick={() => void submitAnswer()}>
+            {drafting
+              ? "Drafting guided book..."
+              : running
+                ? "Applying..."
+                : stepIndex === GUIDED_STEPS.length - 1
+                  ? "Apply and draft book"
+                  : "Apply and ask next"}
           </Button>
-          <Button disabled={running || stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(0, current - 1))} variant="secondary">
+          <Button disabled={running || drafting || stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(0, current - 1))} variant="secondary">
             Back
           </Button>
-          <Button disabled={running || stepIndex >= GUIDED_STEPS.length - 1} onClick={() => setStepIndex((current) => Math.min(GUIDED_STEPS.length - 1, current + 1))} variant="secondary">
+          <Button disabled={running || drafting || stepIndex >= GUIDED_STEPS.length - 1} onClick={() => setStepIndex((current) => Math.min(GUIDED_STEPS.length - 1, current + 1))} variant="secondary">
             Skip
           </Button>
           <Button onClick={() => onOpenTab("chapters")} variant="ghost">
