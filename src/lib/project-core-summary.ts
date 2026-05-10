@@ -95,6 +95,7 @@ function sourceHash(source: string) {
 
 function normalizeCoreSummary(value: string) {
   const cleaned = cleanSummaryText(value)
+    .replace(/\*([^*]+)\*/g, "$1")
     .replace(/^(?:project\s+summary|summary)\s*:\s*/i, "")
     .trim();
   const sentences = cleaned.match(/[^.!?]+[.!?]+(?:["']+)?/g) ?? [cleaned];

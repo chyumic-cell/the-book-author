@@ -1389,6 +1389,33 @@ async function enforceInlineLengthIfNeeded(options: {
     return options.content;
   }
 
+  const clampWordsToRange = (content: string, minimumAcceptable: number, maximumAcceptable: number, targetWords: number) => {
+    const contentWords = roughWordCount(content);
+    if (contentWords <= maximumAcceptable) {
+      return content;
+    }
+
+    const sentences = content.match(/[^.!?]+[.!?]+(?:["']+)?/g) ?? [];
+    const kept: string[] = [];
+    for (const sentence of sentences) {
+      const candidate = [...kept, sentence.trim()].join(" ").trim();
+      const candidateWords = roughWordCount(candidate);
+      if (candidateWords > maximumAcceptable) {
+        break;
+      }
+      kept.push(sentence.trim());
+    }
+
+    const sentenceTrimmed = kept.join(" ").trim();
+    if (roughWordCount(sentenceTrimmed) >= minimumAcceptable) {
+      return sentenceTrimmed;
+    }
+
+    const words = content.split(/\s+/).filter(Boolean).slice(0, Math.min(targetWords, maximumAcceptable));
+    const trimmed = words.join(" ").replace(/[,:;\-–—]+$/, "").trim();
+    return /[.!?]["']?$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  };
+
   if (options.actionType === "EXPAND") {
     const targetWords = Math.max(sourceWords * 3, sourceWords + 12);
     const minimumAcceptable = Math.ceil(targetWords * 0.9);
@@ -1437,7 +1464,7 @@ async function enforceInlineLengthIfNeeded(options: {
         bestDistance = repairedDistance;
       }
     }
-    return bestContent;
+    return clampWordsToRange(bestContent, minimumAcceptable, maximumAcceptable, targetWords);
   }
 
   if (options.actionType === "TIGHTEN") {
@@ -1487,7 +1514,7 @@ async function enforceInlineLengthIfNeeded(options: {
         bestDistance = repairedDistance;
       }
     }
-    return bestContent;
+    return clampWordsToRange(bestContent, minimumAcceptable, maximumAcceptable, targetWords);
   }
 
   return options.content;
