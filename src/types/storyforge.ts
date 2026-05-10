@@ -543,6 +543,8 @@ export interface ProjectWorkspace {
   slug: string;
   premise: string;
   oneLineHook: string;
+  coreSummary: string;
+  coreSummaryUpdatedAt: string | Date | null;
   availableSeriesNames: string[];
   series: SeriesRecord | null;
   seriesCanonicalAnchors: string[];

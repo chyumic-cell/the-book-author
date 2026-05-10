@@ -1391,61 +1391,103 @@ async function enforceInlineLengthIfNeeded(options: {
 
   if (options.actionType === "EXPAND") {
     const targetWords = Math.max(sourceWords * 3, sourceWords + 12);
-    const minimumAcceptable = Math.ceil(targetWords * 0.82);
-    if (currentWords >= minimumAcceptable) {
+    const minimumAcceptable = Math.ceil(targetWords * 0.9);
+    const maximumAcceptable = Math.max(Math.ceil(targetWords * 1.1), minimumAcceptable + 1);
+    if (currentWords >= minimumAcceptable && currentWords <= maximumAcceptable) {
       return options.content;
     }
 
-    const repairPrompt = buildPromptEnvelope(
-      "Repair expand length",
-      options.project,
-      options.context,
-      [
-        "Rewrite only the selected text.",
-        "The previous result was too short.",
-        `Original selected text word count: ${sourceWords}.`,
-        `Your new result must land near ${targetWords} words, and not below ${minimumAcceptable} words.`,
-        "Do not append outside the selected moment. Rebuild the same selected passage at greater depth and with richer progression.",
-        "Preserve the same continuity, chronology, scene facts, and local speaker set.",
-        "Return only the replacement prose.",
-        "Selected text:",
-        options.selectionText,
-      ].join("\n\n"),
-    );
-    const repairedRaw = await generateTextWithProvider(repairPrompt, {
-      maxOutputTokens: wordBudgetToTokens(targetWords, 420, 6200),
-    });
-    const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
-    return roughWordCount(repaired) > currentWords ? repaired : options.content;
+    let bestContent = options.content;
+    let bestDistance = Math.abs(currentWords - targetWords);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const bestWords = roughWordCount(bestContent);
+      const repairPrompt = buildPromptEnvelope(
+        "Repair expand length",
+        options.project,
+        options.context,
+        [
+          "Rewrite only the selected text.",
+          bestWords < minimumAcceptable ? "The previous result was too short." : "The previous result was too long.",
+          `Original selected text word count: ${sourceWords}.`,
+          `Target replacement word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
+          "Do not do the math in prose. Use the provided target number.",
+          "Do not append outside the selected moment. Rebuild the same selected passage at greater depth and with richer progression.",
+          "Preserve the same continuity, chronology, scene facts, and local speaker set.",
+          "Return only the replacement prose.",
+          "Selected text:",
+          options.selectionText,
+          "Rejected previous result:",
+          bestContent,
+        ].join("\n\n"),
+      );
+      const repairedRaw = await generateTextWithProvider(repairPrompt, {
+        maxOutputTokens: wordBudgetToTokens(maximumAcceptable, 420, 6200),
+      });
+      const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+      const repairedWords = roughWordCount(repaired);
+      if (!repairedWords) {
+        continue;
+      }
+      if (repairedWords >= minimumAcceptable && repairedWords <= maximumAcceptable) {
+        return repaired;
+      }
+      const repairedDistance = Math.abs(repairedWords - targetWords);
+      if (repairedDistance < bestDistance) {
+        bestContent = repaired;
+        bestDistance = repairedDistance;
+      }
+    }
+    return bestContent;
   }
 
   if (options.actionType === "TIGHTEN") {
     const targetWords = Math.max(Math.ceil(sourceWords / 3), 8);
-    const maximumAcceptable = Math.max(Math.ceil(targetWords * 1.35), targetWords + 4);
-    if (currentWords <= maximumAcceptable) {
+    const minimumAcceptable = Math.max(Math.floor(targetWords * 0.9), 1);
+    const maximumAcceptable = Math.max(Math.ceil(targetWords * 1.1), targetWords + 2);
+    if (currentWords >= minimumAcceptable && currentWords <= maximumAcceptable) {
       return options.content;
     }
 
-    const repairPrompt = buildPromptEnvelope(
-      "Repair tighten length",
-      options.project,
-      options.context,
-      [
-        "Rewrite only the selected text.",
-        "The previous result was still too long.",
-        `Original selected text word count: ${sourceWords}.`,
-        `Your new result must land near ${targetWords} words, and stay at or below ${maximumAcceptable} words.`,
-        "Keep the core meaning, continuity, and scene logic, but compress hard.",
-        "Return only the replacement prose.",
-        "Selected text:",
-        options.selectionText,
-      ].join("\n\n"),
-    );
-    const repairedRaw = await generateTextWithProvider(repairPrompt, {
-      maxOutputTokens: wordBudgetToTokens(maximumAcceptable, 120, 1400),
-    });
-    const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
-    return roughWordCount(repaired) < currentWords ? repaired : options.content;
+    let bestContent = options.content;
+    let bestDistance = Math.abs(currentWords - targetWords);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const bestWords = roughWordCount(bestContent);
+      const repairPrompt = buildPromptEnvelope(
+        "Repair tighten length",
+        options.project,
+        options.context,
+        [
+          "Rewrite only the selected text.",
+          bestWords > maximumAcceptable ? "The previous result was too long." : "The previous result was too short and lost too much shape.",
+          `Original selected text word count: ${sourceWords}.`,
+          `Target replacement word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
+          "Do not do the math in prose. Use the provided target number.",
+          "Keep the core meaning, continuity, and scene logic, but compress hard.",
+          "Return only the replacement prose.",
+          "Selected text:",
+          options.selectionText,
+          "Rejected previous result:",
+          bestContent,
+        ].join("\n\n"),
+      );
+      const repairedRaw = await generateTextWithProvider(repairPrompt, {
+        maxOutputTokens: wordBudgetToTokens(maximumAcceptable + 12, 120, 1400),
+      });
+      const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+      const repairedWords = roughWordCount(repaired);
+      if (!repairedWords) {
+        continue;
+      }
+      if (repairedWords >= minimumAcceptable && repairedWords <= maximumAcceptable) {
+        return repaired;
+      }
+      const repairedDistance = Math.abs(repairedWords - targetWords);
+      if (repairedDistance < bestDistance) {
+        bestContent = repaired;
+        bestDistance = repairedDistance;
+      }
+    }
+    return bestContent;
   }
 
   return options.content;
@@ -1685,10 +1727,18 @@ function buildAssistScopedInstruction(
   project: ProjectWorkspace,
   actionType: AssistActionType,
   instruction: string,
+  selectionText = "",
   beforeSelection = "",
   afterSelection = "",
 ) {
   const actionInstruction = buildAssistActionInstruction(actionType);
+  const selectedWordCount = roughWordCount(selectionText);
+  const measuredLengthInstruction =
+    actionType === "EXPAND" && selectedWordCount > 0
+      ? `Measured length target: the selected text has ${selectedWordCount} words. Return roughly ${selectedWordCount * 3} words, with a 10 percent tolerance.`
+      : actionType === "TIGHTEN" && selectedWordCount > 0
+        ? `Measured length target: the selected text has ${selectedWordCount} words. Return roughly ${Math.max(Math.round(selectedWordCount / 3), 1)} words, with a 10 percent tolerance.`
+        : "";
   const boundaryInstruction =
     beforeSelection.trim() || afterSelection.trim()
       ? [
@@ -1724,6 +1774,7 @@ function buildAssistScopedInstruction(
   return [
     buildSelectionStyleInstruction(project, actionType),
     instruction || actionInstruction,
+    measuredLengthInstruction,
     boundaryInstruction,
     actionType === "CUSTOM_EDIT"
       ? "Treat the writer's custom instruction as the top priority for the selected text."
@@ -1913,6 +1964,7 @@ export async function assistSelection(input: {
       project,
       input.actionType,
       input.instruction,
+      input.selectionText,
       input.beforeSelection,
       input.afterSelection,
     ),

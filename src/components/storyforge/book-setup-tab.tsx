@@ -12,6 +12,8 @@ import type { SeriesBookRecord } from "@/types/storyforge";
 export function BookSetupTab({
   availableSeriesNames,
   busy,
+  coreSummary,
+  coreSummaryUpdatedAt,
   draft,
   onChange,
   onSave,
@@ -19,6 +21,8 @@ export function BookSetupTab({
 }: {
   availableSeriesNames: string[];
   busy: boolean;
+  coreSummary: string;
+  coreSummaryUpdatedAt: string | Date | null;
   draft: SetupDraft;
   onChange: (patch: Partial<SetupDraft>) => void;
   onSave: () => void;
@@ -37,6 +41,22 @@ export function BookSetupTab({
           <Button disabled={busy} onClick={onSave}>
             {busy ? "Saving..." : "Save setup"}
           </Button>
+        </div>
+        <div className="rounded-[18px] border border-[color:var(--line)] bg-[color:var(--panel-soft)]/78 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-base font-semibold text-[var(--text)]">Project compass</h4>
+            {coreSummaryUpdatedAt ? (
+              <Chip>
+                Updated {new Date(coreSummaryUpdatedAt).toLocaleDateString()}
+              </Chip>
+            ) : (
+              <Chip>Generated when you leave</Chip>
+            )}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+            {coreSummary ||
+              "When you leave this project, The Book Author will generate a short 5 to 10 sentence reminder of what this book is truly about, using the setup, story bible, skeleton, and memory."}
+          </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Project title">

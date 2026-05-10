@@ -464,6 +464,8 @@ export async function getProjectWorkspace(projectId: string): Promise<ProjectWor
     slug: project.slug,
     premise: project.premise,
     oneLineHook: project.oneLineHook ?? "",
+    coreSummary: project.coreSummary ?? "",
+    coreSummaryUpdatedAt: project.coreSummaryUpdatedAt,
     availableSeriesNames: availableSeries.map((entry) => entry.name),
     series,
     bookSettings: {

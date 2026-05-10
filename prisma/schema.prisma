@@ -204,6 +204,9 @@ model Project {
   slug                 String               @unique
   premise              String
   oneLineHook          String?
+  coreSummary          String               @default("")
+  coreSummaryHash      String               @default("")
+  coreSummaryUpdatedAt DateTime?
   status               ProjectStatus        @default(ACTIVE)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt

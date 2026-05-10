@@ -229,6 +229,7 @@ export function ProjectWorkspace({
   const saveNowRef = useRef<() => Promise<void> | void>(() => undefined);
   const autoMemorySyncRef = useRef<number | null>(null);
   const lastMemoryFingerprintRef = useRef("");
+  const coreSummaryTriggeredRef = useRef(false);
   const resizeStateRef = useRef<null | {
     side: "left" | "right" | "chapterContext";
     startX: number;
@@ -261,6 +262,35 @@ export function ProjectWorkspace({
     : autopilotActive
       ? `AI run ${autopilotRun?.status.toLowerCase()}`
       : "Idle";
+
+  useEffect(() => {
+    coreSummaryTriggeredRef.current = false;
+  }, [project.id]);
+
+  const triggerProjectCoreSummary = useCallback(() => {
+    if (coreSummaryTriggeredRef.current) {
+      return;
+    }
+    coreSummaryTriggeredRef.current = true;
+    void fetch(`/api/projects/${project.id}/core-summary`, {
+      method: "POST",
+      keepalive: true,
+    }).catch(() => {
+      coreSummaryTriggeredRef.current = false;
+    });
+  }, [project.id]);
+
+  useEffect(() => {
+    const handlePageExit = () => {
+      triggerProjectCoreSummary();
+    };
+
+    window.addEventListener("pagehide", handlePageExit);
+    return () => {
+      window.removeEventListener("pagehide", handlePageExit);
+      triggerProjectCoreSummary();
+    };
+  }, [triggerProjectCoreSummary]);
 
   const clampPaneWidth = useCallback((value: number, side: "left" | "right" | "chapterContext") => {
     const viewport = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -1888,6 +1918,8 @@ export function ProjectWorkspace({
             <BookSetupTab
               availableSeriesNames={project.availableSeriesNames}
               busy={busyAction === "setup-save"}
+              coreSummary={project.coreSummary}
+              coreSummaryUpdatedAt={project.coreSummaryUpdatedAt}
               draft={setupDraft}
               onChange={applySetupPatch}
               onSave={handleSetupSave}
