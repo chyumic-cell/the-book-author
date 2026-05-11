@@ -394,6 +394,28 @@ function buildStorySkeletonContext(project: ProjectWorkspace, chapter: ProjectWo
   ].filter(Boolean);
 }
 
+function buildAdjacentChapterDistinctness(project: ProjectWorkspace, chapterIndex: number) {
+  const currentChapter = project.chapters[chapterIndex];
+  const adjacentChapters = [project.chapters[chapterIndex - 1], project.chapters[chapterIndex + 1]].filter(Boolean);
+
+  return adjacentChapters
+    .map((chapter) => {
+      const summary = getLatestChapterSummary(chapter) || chapter.outline || chapter.purpose || chapter.currentBeat;
+      const sceneShape = [
+        chapter.purpose ? `purpose: ${compactText(chapter.purpose, 130)}` : "",
+        chapter.currentBeat ? `beat: ${compactText(chapter.currentBeat, 120)}` : "",
+        chapter.keyBeats.length ? `key beats: ${compactText(chapter.keyBeats.join(" | "), 170)}` : "",
+        chapter.sceneList.length ? `scene lane: ${compactText(chapter.sceneList.join(" | "), 170)}` : "",
+        summary ? `summary: ${compactText(summary, 180)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ; ");
+
+      return `Adjacent chapter ${chapter.number} (${chapter.number < currentChapter.number ? "previous" : "next"}): ${chapter.title} - ${sceneShape}`;
+    })
+    .filter(Boolean);
+}
+
 export function buildContextPackage(
   project: ProjectWorkspace,
   chapterId: string,
@@ -408,6 +430,7 @@ export function buildContextPackage(
   const previousChapter = chapterIndex > 0 ? project.chapters[chapterIndex - 1] : undefined;
   const previousChapterSummary = getLatestChapterSummary(previousChapter);
   const chapterBlueprint = buildChapterBlueprint(chapter);
+  const adjacentChapterDistinctness = buildAdjacentChapterDistinctness(project, chapterIndex);
 
   const seeds = [
     chapter.title,
@@ -492,6 +515,7 @@ export function buildContextPackage(
     project.bookSettings.storyBrief,
     chapter.purpose,
     previousChapterSummary,
+    ...adjacentChapterDistinctness,
     ...chapterBlueprint,
     ...seriesContext,
     ...storyBibleContext,
@@ -509,6 +533,7 @@ export function buildContextPackage(
     projectBrief: project.bookSettings.storyBrief,
     chapterGoal: chapter.purpose,
     previousChapterSummary,
+    adjacentChapterDistinctness,
     chapterBlueprint,
     seriesContext,
     storyBibleContext,

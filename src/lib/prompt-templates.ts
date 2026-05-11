@@ -283,6 +283,17 @@ function buildCanonicalAnchors(context: ContextPackage) {
   ].join("\n");
 }
 
+function buildChapterDistinctnessGuidance(context: ContextPackage) {
+  return [
+    "Chapter distinctness guard:",
+    "Do not merely rewrite the same chapter shape with different words.",
+    "Before writing, mentally compare this chapter to the adjacent chapter notes below.",
+    "Make this chapter distinct in at least four of these: opening image, physical setting, immediate objective, obstacle type, antagonist pressure, choice, consequence, emotional turn, information revealed, and final image.",
+    "If adjacent chapters already use temptation-refusal-cost, trial-argument-verdict, corridor-test-sacrifice, or market-bargain-price, do not repeat that same engine unless the outline explicitly requires a mirrored escalation.",
+    "The chapter must advance the book with a new causal event, not only another version of the same lesson.",
+  ].join("\n");
+}
+
 export function buildPromptEnvelope(
   task: string,
   project: ProjectWorkspace,
@@ -304,6 +315,8 @@ export function buildPromptEnvelope(
     context.previousChapterSummary
       ? `Previous chapter summary: ${compactText(context.previousChapterSummary, flavor === "drafting" ? 260 : 180)}`
       : "",
+    section("Adjacent chapter shapes to avoid duplicating", formatBullets(context.adjacentChapterDistinctness, 2, 260)),
+    section("Distinctness requirement", buildChapterDistinctnessGuidance(context)),
     context.localExcerpt
       ? section("Local excerpt", compactText(context.localExcerpt, budget.excerptChars))
       : "",

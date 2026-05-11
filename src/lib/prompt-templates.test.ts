@@ -72,6 +72,10 @@ function makeContext(): ContextPackage {
     projectBrief: "A royalist tragedy.",
     chapterGoal: "Show the protagonist recommitting himself to a doomed cause.",
     previousChapterSummary: "He escaped Paris but learned the king was already dead.",
+    adjacentChapterDistinctness: [
+      "Adjacent chapter 4 (previous): The Escape - purpose: flee Paris ; key beats: tunnel escape | failed disguise",
+      "Adjacent chapter 6 (next): The Duel - purpose: force a public confrontation ; key beats: challenge | wound",
+    ],
     chapterBlueprint: ["Chapter 5: The Oath", "Purpose: Renew his vow"],
     seriesContext: ["Series character from Book 1: Rene - older and more bitter after exile."],
     storyBibleContext: ["Character dossier: Rene - embittered cavalry officer"],
@@ -121,5 +125,8 @@ describe("prompt templates", () => {
     expect(prompt).toContain("If a character dossier is thin or missing");
     expect(prompt).toContain("Do not randomly assign mismatched speech patterns or fake accents.");
     expect(prompt).toContain("Story skeleton support:");
+    expect(prompt).toContain("Adjacent chapter shapes to avoid duplicating");
+    expect(prompt).toContain("Chapter distinctness guard");
+    expect(prompt).toContain("Do not merely rewrite the same chapter shape with different words");
   });
 });

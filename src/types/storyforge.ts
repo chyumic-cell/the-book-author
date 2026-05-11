@@ -503,6 +503,7 @@ export interface ContextPackage {
   projectBrief: string;
   chapterGoal: string;
   previousChapterSummary: string;
+  adjacentChapterDistinctness: string[];
   chapterBlueprint: string[];
   seriesContext: string[];
   storyBibleContext: string[];

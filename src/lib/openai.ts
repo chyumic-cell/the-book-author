@@ -187,6 +187,15 @@ function buildChapterWordRangeInstruction(chapter: ChapterRecord) {
   return `Length constraint: aim for about ${range.target} words and keep the finished chapter between ${range.min} and ${range.max} words.`;
 }
 
+function buildChapterDistinctnessInstruction() {
+  return [
+    "Chapter distinctness: do not repeat the same scene engine, lesson, emotional turn, or chapter shape from nearby chapters with different wording.",
+    "Make this chapter differ from adjacent chapters in opening image, setting, immediate goal, obstacle type, choice, consequence, information revealed, and final image.",
+    "If another nearby chapter already uses temptation-refusal-cost, market-bargain-price, corridor-test-sacrifice, or trial-argument-verdict, use a different dramatic engine unless the outline explicitly asks for a mirrored escalation.",
+    "Every chapter must add a new causal event or irreversible shift, not merely restate the same theme or repeat the same kind of pressure.",
+  ].join(" ");
+}
+
 function isHostedFastDraftMode() {
   return process.env.VERCEL === "1" || isHostedBetaEnabled();
 }
@@ -212,6 +221,7 @@ function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstr
     "Do not pad. Do not summarize. Write real prose that can be continued naturally in later passes.",
     "Do not restart the chapter midway through the response.",
     "Do not loop back to the opening setup once the chapter is already in motion.",
+    buildChapterDistinctnessInstruction(),
   ].join("\n");
   return withAdditionalInstruction([base, fastPass].join("\n\n"), additionalInstruction);
 }
@@ -252,6 +262,7 @@ function buildFullChapterRevisionInstruction(chapter: ChapterRecord, instruction
     "Rewrite the full chapter manuscript, not a short patch, excerpt, note, or sample.",
     "Preserve the chapter's chronology, canon facts, POV, and continuity unless the instruction explicitly changes them.",
     "Do not recycle a stock opening line, repeated mantra, or reused first image from another chapter.",
+    buildChapterDistinctnessInstruction(),
     `If the current chapter is materially under target, expand it with real scene development until it lands within ${range.min} to ${range.max} words.`,
     "Do not stop after a partial fix if the chapter still falls far short of the target range.",
     "Do not stop mid-sentence, mid-thought, or mid-paragraph.",
@@ -272,6 +283,7 @@ function buildHostedFastRevisionInstruction(chapter: ChapterRecord, instruction:
     "Make a useful manuscript-quality improvement in one pass; do not expand toward the full target word count during hosted ribbon revisions.",
     "Preserve chronology, canon facts, POV, names, and continuity.",
     "Do not restart the chapter. Do not repeat the opening or recap the story from the beginning.",
+    buildChapterDistinctnessInstruction(),
     "Keep spoken dialogue in quotation marks and keep direct internal thoughts in italics.",
     "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
     "Return only revised chapter prose, with no notes, markdown, headings, explanation, or checklist.",
@@ -285,6 +297,7 @@ function formatChapterInstruction(chapter: ChapterRecord, task: "outline" | "dra
     buildChapterWordRangeInstruction(chapter),
     "Treat the chapter blueprint, outline, story bible, story skeleton, memory layers, and continuity constraints as binding context, not optional hints.",
     "Give this chapter its own opening image and motion. Do not start with a recycled stock phrase or a paraphrase of an earlier chapter opener.",
+    buildChapterDistinctnessInstruction(),
     chapter.currentBeat ? `Current beat: ${chapter.currentBeat}` : "",
     chapter.purpose ? `Chapter purpose: ${chapter.purpose}` : "",
     chapter.desiredMood ? `Desired mood / aesthetic: ${chapter.desiredMood}` : "",

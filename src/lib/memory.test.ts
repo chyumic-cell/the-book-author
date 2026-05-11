@@ -377,6 +377,8 @@ describe("memory helpers", () => {
 
     expect(context.projectBrief).toContain("help without losing authorship");
     expect(context.previousChapterSummary).toContain("starts testing StoryForge");
+    expect(context.adjacentChapterDistinctness[0]).toContain("Adjacent chapter 1");
+    expect(context.adjacentChapterDistinctness[0]).toContain("Mara commits to the experiment");
     expect(context.chapterBlueprint[0]).toContain("Chapter 2");
     expect(context.seriesContext[0]).toContain("Series");
     expect(context.storyBibleContext.some((line) => line.includes("Character dossier: Mara Quill"))).toBe(true);
