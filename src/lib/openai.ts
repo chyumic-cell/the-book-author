@@ -113,6 +113,7 @@ function isRetryableProviderError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   return (
     message.includes("timeout") ||
+    message.includes("timed out") ||
     message.includes("temporarily unavailable") ||
     message.includes("rate limit") ||
     message.includes("unexpected end of json input") ||
