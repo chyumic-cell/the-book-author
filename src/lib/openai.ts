@@ -79,10 +79,10 @@ const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS 
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "openai/gpt-oss-20b:free",
-  "openai/gpt-oss-120b:free",
-  "z-ai/glm-4.5-air:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
   "meta-llama/llama-3.2-3b-instruct:free",
+  "z-ai/glm-4.5-air:free",
+  "openai/gpt-oss-120b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
 ] as const;
 
 function shouldUseOpenRouterFallbackFirst(model: string) {
@@ -1053,14 +1053,14 @@ async function callProvider(
       if (directChat) {
         return directChat;
       }
-      const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]));
+      const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]), 1);
       if (fallbackText) {
         return fallbackText;
       }
       throw new Error(`The active OpenRouter model (${preferredModel}) returned no visible text.`);
     } catch (error) {
       if (isRetryableProviderError(error)) {
-        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]));
+        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]), 1);
         if (fallbackText) {
           return fallbackText;
         }
@@ -1151,11 +1151,17 @@ async function tryOpenRouterFallbackModels(
   prompt: string,
   options: ProviderCallOptions,
   skippedModels = new Set<string>(),
+  maxAttempts = 2,
 ) {
+  let attempts = 0;
   for (const fallbackModel of OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS) {
     if (fallbackModel === provider.model || skippedModels.has(fallbackModel)) {
       continue;
     }
+    if (attempts >= maxAttempts) {
+      break;
+    }
+    attempts += 1;
 
     try {
       const fallbackText = await callChatCompletion(provider, prompt, options, fallbackModel);
