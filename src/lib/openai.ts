@@ -78,10 +78,11 @@ type ProviderCallOptions = {
 const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 45000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
-  "mistralai/mistral-small-3.1-24b-instruct:free",
   "openai/gpt-oss-20b:free",
+  "openai/gpt-oss-120b:free",
+  "z-ai/glm-4.5-air:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
   "meta-llama/llama-3.2-3b-instruct:free",
-  "arcee-ai/trinity-large-preview:free",
 ] as const;
 
 function shouldUseOpenRouterFallbackFirst(model: string) {
@@ -110,7 +111,7 @@ async function withProviderTimeout<T>(operation: Promise<T>, label: string, time
 
 function isRetryableProviderError(error: unknown) {
   const status = typeof error === "object" && error && "status" in error ? Number((error as { status?: unknown }).status) : null;
-  if (status && (status === 408 || status === 409 || status === 429 || status >= 500)) {
+  if (status && (status === 400 || status === 404 || status === 408 || status === 409 || status === 429 || status >= 500)) {
     return true;
   }
 
@@ -120,6 +121,8 @@ function isRetryableProviderError(error: unknown) {
     message.includes("timed out") ||
     message.includes("temporarily unavailable") ||
     message.includes("rate limit") ||
+    message.includes("no endpoints found") ||
+    message.includes("model not found") ||
     message.includes("unexpected end of json input") ||
     message.includes("terminated") ||
     message.includes("aborted")
