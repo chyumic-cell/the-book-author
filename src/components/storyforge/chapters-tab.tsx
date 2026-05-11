@@ -1606,7 +1606,7 @@ export function ChaptersTab({
                           className={cn(
                             "fixed z-[70] overflow-y-auto rounded-lg border border-[color:var(--line-strong)] bg-[color:var(--panel)] p-2 shadow-[0_24px_50px_var(--shadow)]",
                             phoneShell
-                              ? "bottom-[calc(env(safe-area-inset-bottom)+10.5rem)] left-1/2 max-h-[38dvh] w-[min(92vw,360px)] -translate-x-1/2"
+                              ? "left-1/2 top-[calc(env(safe-area-inset-top)+5.25rem)] max-h-[34dvh] w-[min(92vw,360px)] -translate-x-1/2"
                               : "max-h-[min(85vh,560px)] w-[320px]",
                           )}
                           data-testid="chapter-context-menu"

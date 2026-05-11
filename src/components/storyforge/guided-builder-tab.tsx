@@ -99,6 +99,15 @@ const GUIDED_STEPS: GuidedStep[] = [
     instruction:
       "Prepare the project for drafting. Update chapter runway fields and notes so the chapter generator has precise instructions for every chapter.",
   },
+  {
+    id: "final-notes",
+    title: "Anything Else?",
+    question: "Do you have anything else you want the AI to know before it writes the book?",
+    placeholder: "Example: Make it sad but not melodramatic. Avoid repeated chapter shapes. Keep each chapter distinct. End with a devastating twist.",
+    scope: "PROJECT",
+    instruction:
+      "Capture final drafting constraints, warnings, must-have details, must-avoid details, emotional priorities, and quality standards. Apply them to Book Setup, style guidance, chapter notes, and planning fields where relevant.",
+  },
 ];
 
 function buildGuidedInstruction(step: GuidedStep, answer: string) {
@@ -144,6 +153,21 @@ function inferRequestedChapterCount(value: string) {
   return null;
 }
 
+function inferRequestedWordCount(value: string) {
+  const normalized = value.toLowerCase().replace(/,/g, "");
+  const numeric = normalized.match(/\b(\d{4,6})\s*(?:word|words)\b/);
+  if (numeric) {
+    return Number(numeric[1]);
+  }
+
+  const compact = normalized.match(/\b(\d{1,3})k\s*(?:word|words)?\b/);
+  if (compact) {
+    return Number(compact[1]) * 1000;
+  }
+
+  return null;
+}
+
 export function GuidedBuilderTab({
   project,
   selectedChapterId,
@@ -163,6 +187,8 @@ export function GuidedBuilderTab({
   const [drafting, setDrafting] = useState(false);
   const [history, setHistory] = useState<Array<{ step: string; reply: string }>>([]);
   const [requestedChapterCount, setRequestedChapterCount] = useState<number | null>(null);
+  const [requestedWordCount, setRequestedWordCount] = useState<number | null>(null);
+  const [draftInstruction, setDraftInstruction] = useState("");
   const step = GUIDED_STEPS[stepIndex] ?? GUIDED_STEPS[0];
   const progress = useMemo(() => Math.round(((stepIndex + 1) / GUIDED_STEPS.length) * 100), [stepIndex]);
 
@@ -170,7 +196,9 @@ export function GuidedBuilderTab({
     setDrafting(true);
     let workingProject = sourceProject;
     let latestContext: ContextPackage | null = null;
-    const finalCount = inferRequestedChapterCount(finalInstruction) ?? requestedChapterCount;
+    const finalWordCount = inferRequestedWordCount(finalInstruction) ?? requestedWordCount;
+    const inferredCountFromWords = finalWordCount ? Math.max(3, Math.min(16, Math.ceil(finalWordCount / 1600))) : null;
+    const finalCount = inferRequestedChapterCount(finalInstruction) ?? requestedChapterCount ?? inferredCountFromWords;
 
     if (finalCount && finalCount > workingProject.chapters.length) {
       while (workingProject.chapters.length < finalCount) {
@@ -187,10 +215,13 @@ export function GuidedBuilderTab({
     for (const chapter of chapters) {
       const current = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
       const notePrefix = current.notes?.trim() ? `${current.notes.trim()}\n\n` : "";
+      const targetWordCount =
+        finalWordCount && finalCount ? Math.max(900, Math.round(finalWordCount / Math.max(finalCount, 1))) : current.targetWordCount;
       await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${current.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          targetWordCount,
           notes: `${notePrefix}Guided Builder final drafting instruction:\n${finalInstruction}`.trim(),
         }),
       });
@@ -254,6 +285,13 @@ export function GuidedBuilderTab({
       if (nextRequestedChapterCount) {
         setRequestedChapterCount(nextRequestedChapterCount);
       }
+      const nextRequestedWordCount = inferRequestedWordCount(trimmed);
+      if (nextRequestedWordCount) {
+        setRequestedWordCount(nextRequestedWordCount);
+      }
+      if (step.id === "draft") {
+        setDraftInstruction(trimmed);
+      }
 
       const data = await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
         method: "POST",
@@ -273,7 +311,13 @@ export function GuidedBuilderTab({
       setHistory((current) => [...current, { step: step.title, reply: data.reply }]);
       setAnswer("");
       if (stepIndex === GUIDED_STEPS.length - 1) {
-        nextProject = await draftGuidedBook(nextProject, trimmed);
+        const combinedFinalInstruction = [
+          draftInstruction || (step.id === "draft" ? trimmed : ""),
+          step.id !== "draft" ? `Final extra instructions:\n${trimmed}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        nextProject = await draftGuidedBook(nextProject, combinedFinalInstruction || trimmed);
         onProjectUpdate(nextProject);
         onOpenTab("chapters");
       } else {

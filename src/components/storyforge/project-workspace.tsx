@@ -1844,7 +1844,10 @@ export function ProjectWorkspace({
       <div
         className={cn(
           phoneShell
-            ? "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-visible pb-[9.5rem]"
+            ? cn(
+                "mt-2 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-visible",
+                copilotExpanded ? "pb-[calc(21rem+env(safe-area-inset-bottom))]" : "pb-[9.5rem]",
+              )
             : "mt-3 grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden",
         )}
         style={desktopGridStyle}
@@ -2121,7 +2124,7 @@ export function ProjectWorkspace({
       <ProjectCopilotBar
         activeAiRole={activeAiRole}
         activeTab={activeTab}
-        dockClassName={phoneShell ? "bottom-[calc(4.2rem+env(safe-area-inset-bottom))]" : "bottom-0"}
+        dockClassName={phoneShell ? "bottom-[calc(4.85rem+env(safe-area-inset-bottom))]" : "bottom-0"}
         expanded={copilotExpanded}
         phoneShell={phoneShell}
         onBeforeSubmit={handleCopilotBeforeSubmit}
