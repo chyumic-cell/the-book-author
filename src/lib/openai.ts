@@ -782,10 +782,13 @@ function buildBookGuidePrompt(project: ProjectWorkspace) {
       const summary = getLatestChapterSummary(chapter) || chapter.outline || chapter.purpose || chapter.currentBeat;
       const draft = chapter.draft?.trim() ?? "";
       const openingEvidence = compactText(draft.slice(0, 520), 240);
+      const middleStart = Math.max(0, Math.floor(draft.length / 2) - 260);
+      const middleEvidence = compactText(draft.slice(middleStart, middleStart + 520), 240);
       const endingEvidence = compactText(draft.slice(Math.max(0, draft.length - 520)), 240);
       return [
         `Chapter ${chapter.number}: ${chapter.title} | purpose: ${compactText(chapter.purpose || "Not set", 120)} | summary: ${compactText(summary || "No summary yet.", 180)} | words: ${chapter.wordCount}`,
         openingEvidence ? `  opening evidence: ${openingEvidence}` : "",
+        middleEvidence ? `  middle evidence: ${middleEvidence}` : "",
         endingEvidence ? `  ending evidence: ${endingEvidence}` : "",
       ]
         .filter(Boolean)
