@@ -75,7 +75,7 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
-const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 65000);
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 45000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "mistralai/mistral-small-3.1-24b-instruct:free",
@@ -1046,7 +1046,7 @@ async function callProvider(
         return directChat;
       }
     } catch (error) {
-      if (isRateLimitedProviderError(error)) {
+      if (isRetryableProviderError(error)) {
         const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options);
         if (fallbackText) {
           return fallbackText;
