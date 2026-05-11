@@ -803,19 +803,11 @@ function buildBookGuidePrompt(project: ProjectWorkspace) {
     .slice(0, 8)
     .map((beat) => `- ${beat.label} (${beat.type}): ${compactText(beat.description || beat.notes || "", 140)}`)
     .join("\n");
-  const continuityRows = project.continuityIssues
-    .filter((issue) => issue.status === "OPEN")
-    .slice(0, 6)
-    .map((issue) => `- ${issue.title}: ${compactText(issue.description, 150)}`)
-    .join("\n");
-  const longTermRows = project.longTermMemoryItems
-    .slice(0, 6)
-    .map((item) => `- ${item.title}: ${compactText(item.content, 140)}`)
-    .join("\n");
-
   return [
     "Task: Review the whole book against the James Scott Bell bestseller guide.",
     `You are ${APP_NAME}'s structured commercial-fiction reviewer. Diagnose alignment with Bell-style craft principles, especially LOCK, scene pressure, chapter momentum, structural turns, stakes, dialogue usefulness, and payoff logic.`,
+    "Do not act as the continuity checker. Do not flag canon consistency, memory sync, dropped planning notes, or factual contradictions unless the issue directly weakens Bell craft on the page.",
+    "Judge the manuscript by commercial-fiction craft: compelling lead, clear objective, escalating confrontation, knockout ending, opening disturbance, doorway turns, midpoint shift, second doorway, climax, scene goal/conflict/outcome, stakes, dialogue pressure, pacing, style/voice, and theme.",
     `Premise: ${compactText(project.premise, 220)}`,
     `Story brief: ${compactText(project.bookSettings.storyBrief, 260)}`,
     `Plot direction: ${compactText(project.bookSettings.plotDirection, 220)}`,
@@ -826,8 +818,6 @@ function buildBookGuidePrompt(project: ProjectWorkspace) {
     chapterRows ? `Chapter lineup:\n${chapterRows}` : "",
     threadRows ? `Active plot threads:\n${threadRows}` : "",
     structureRows ? `Structure beats:\n${structureRows}` : "",
-    continuityRows ? `Open continuity issues:\n${continuityRows}` : "",
-    longTermRows ? `Canon memory highlights:\n${longTermRows}` : "",
     "Return strict JSON only. No markdown, no commentary, no fenced code block.",
     `Use this exact shape:\n${buildGuideJsonContract("book")}`,
     "Give 2 to 5 strengths and 2 to 5 recommendations.",
