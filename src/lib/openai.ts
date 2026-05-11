@@ -75,7 +75,7 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
-const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 45000);
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 30000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "openai/gpt-oss-20b:free",
@@ -227,8 +227,8 @@ function isHostedFastDraftMode() {
 }
 
 function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
-  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 2400) * 0.5), 900), 1600);
-  return wordBudgetToTokens(targetWords + 120, 1000, 2500);
+  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 1800) * 0.35), 450), 900);
+  return wordBudgetToTokens(targetWords + 120, 700, 1500);
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -239,7 +239,7 @@ function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstr
   const base = formatChapterInstruction(chapter, "draft");
   const fastPass = [
     "Hosted fast-draft mode: deliver a strong first-pass chapter section that is complete, scene-rich, and commercially readable without trying to hit the entire final chapter length in one response.",
-    "Aim for roughly 1200 to 2200 words in this first pass.",
+    "Aim for roughly 500 to 900 words in this first pass so the hosted AI can return quickly and the writer can expand in passes.",
     "Prioritize sharp scene progression, lots of dialogue, clear emotional turns, and a complete ending beat for this pass.",
     "Put quoted spoken dialogue on the page early and often. Let dialogue do most of the dramatic work unless a brief silence is itself the dramatic move.",
     "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
