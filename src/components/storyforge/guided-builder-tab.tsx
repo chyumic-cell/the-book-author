@@ -10,7 +10,10 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { APP_NAME } from "@/lib/brand";
 import type {
+  BestsellerGuideRecommendation,
+  BestsellerGuideReport,
   ContextPackage,
+  ContinuityReport,
   ProjectChatActionRecord,
   ProjectChatScope,
   ProjectWorkspace,
@@ -24,6 +27,20 @@ type AssistantPayload = {
   contextPackage: ContextPackage | null;
   scope: ProjectChatScope;
   nextTab: StoryForgeTab | null;
+};
+
+type RevisionPayload = {
+  run: { suggestion: string };
+  contextPackage: ContextPackage;
+};
+
+type ContinuityPayload = {
+  report: ContinuityReport;
+  project: ProjectWorkspace;
+};
+
+type BestsellerPayload = {
+  report: BestsellerGuideReport;
 };
 
 type GuidedStep = {
@@ -168,6 +185,50 @@ function inferRequestedWordCount(value: string) {
   return null;
 }
 
+function countWords(value: string) {
+  return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function formatContinuityRepairInstruction(report: ContinuityReport) {
+  const issues = report.issues
+    .map((issue, index) =>
+      [
+        `${index + 1}. ${issue.title}`,
+        issue.description ? `Problem: ${issue.description}` : "",
+        issue.suggestedContext ? `Fix: ${issue.suggestedContext}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .join("\n\n");
+
+  return [
+    "Revise this chapter to resolve the continuity issues below.",
+    "Preserve established canon, names, chronology, relationships, voice, and chapter purpose.",
+    "Do not restart the chapter, do not add editorial notes, and do not explain the fix.",
+    "Return only the full revised chapter prose.",
+    issues,
+  ].join("\n\n");
+}
+
+function formatBestsellerRepairInstruction(recommendation: BestsellerGuideRecommendation) {
+  return [
+    "Revise this chapter to improve its James Scott Bell / commercial-fiction strength.",
+    recommendation.fixInstruction,
+    recommendation.whatToAdd ? `What to add or strengthen: ${recommendation.whatToAdd}` : "",
+    recommendation.whyItMatters ? `Why it matters: ${recommendation.whyItMatters}` : "",
+    "Keep continuity intact and preserve the chapter's established facts.",
+    "Do not restart the chapter, do not pad, and do not add commentary.",
+    "Return only the full revised chapter prose.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function shouldStopGuidedRepair(report: BestsellerGuideReport, openContinuityIssues: number) {
+  return openContinuityIssues === 0 && report.alignmentScore >= 95;
+}
+
 export function GuidedBuilderTab({
   project,
   selectedChapterId,
@@ -192,6 +253,143 @@ export function GuidedBuilderTab({
   const step = GUIDED_STEPS[stepIndex] ?? GUIDED_STEPS[0];
   const progress = useMemo(() => Math.round(((stepIndex + 1) / GUIDED_STEPS.length) * 100), [stepIndex]);
 
+  async function runGuidedQualityLoop(sourceProject: ProjectWorkspace) {
+    let workingProject = sourceProject;
+    let latestContext: ContextPackage | null = null;
+    const maxPasses = 3;
+    const maxContinuityRepairsPerPass = 4;
+    const maxBestsellerRepairsPerPass = 3;
+
+    for (let pass = 1; pass <= maxPasses; pass += 1) {
+      let openContinuityIssues = 0;
+      let continuityRepairs = 0;
+      const chapters = [...workingProject.chapters].sort((left, right) => left.number - right.number);
+
+      setHistory((current) => [
+        ...current,
+        {
+          step: `Quality Pass ${pass}`,
+          reply: "Running continuity checks, chapter summaries, and bestseller review.",
+        },
+      ]);
+
+      for (const chapter of chapters) {
+        const current = workingProject.chapters.find((entry) => entry.id === chapter.id) ?? chapter;
+        const continuity = await requestJson<ContinuityPayload>(`/api/chapters/${current.id}/continuity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            draft: current.draft,
+            mode: "CHAPTER",
+          }),
+        });
+        workingProject = continuity.project;
+        openContinuityIssues += continuity.report.issues.length;
+
+        if (continuity.report.issues.length > 0 && continuityRepairs < maxContinuityRepairsPerPass) {
+          const revision = await requestJson<RevisionPayload>(`/api/chapters/${current.id}/revise`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              actionType: "REVISE",
+              instruction: formatContinuityRepairInstruction(continuity.report),
+            }),
+          });
+          latestContext = revision.contextPackage;
+          const patched = await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${current.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              draft: revision.run.suggestion,
+              status: "REVISED",
+            }),
+          });
+          workingProject = patched.project;
+          continuityRepairs += 1;
+        }
+      }
+
+      for (const chapter of [...workingProject.chapters].sort((left, right) => left.number - right.number)) {
+        await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${chapter.id}/summary`, { method: "POST" })
+          .then((data) => {
+            workingProject = data.project;
+          })
+          .catch(() => {
+            // Summaries improve the book-level guide, but a summary failure should not discard the completed draft.
+          });
+      }
+
+      const bestseller = await requestJson<BestsellerPayload>(`/api/projects/${workingProject.id}/bestseller-guide`, {
+        method: "POST",
+      });
+      const recommendations = bestseller.report.recommendations.filter((recommendation) => recommendation.targetChapterId);
+
+      setHistory((current) => [
+        ...current,
+        {
+          step: `Quality Result ${pass}`,
+          reply: [
+            `Continuity issues found before repairs: ${openContinuityIssues}.`,
+            `Bestseller score: ${bestseller.report.alignmentScore}.`,
+            shouldStopGuidedRepair(bestseller.report, openContinuityIssues)
+              ? "Guided quality loop passed."
+              : "Applying targeted repair pass.",
+          ].join(" "),
+        },
+      ]);
+
+      if (shouldStopGuidedRepair(bestseller.report, openContinuityIssues)) {
+        onContextPackage(latestContext);
+        return workingProject;
+      }
+
+      let bestsellerRepairs = 0;
+      const repairedChapterIds = new Set<string>();
+      for (const recommendation of recommendations) {
+        if (!recommendation.targetChapterId || repairedChapterIds.has(recommendation.targetChapterId)) {
+          continue;
+        }
+        if (bestsellerRepairs >= maxBestsellerRepairsPerPass) {
+          break;
+        }
+
+        const revision = await requestJson<RevisionPayload>(`/api/chapters/${recommendation.targetChapterId}/revise`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actionType: "REVISE",
+            instruction: formatBestsellerRepairInstruction(recommendation),
+          }),
+        });
+        latestContext = revision.contextPackage;
+        const patched = await requestJson<{ project: ProjectWorkspace }>(`/api/chapters/${recommendation.targetChapterId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            draft: revision.run.suggestion,
+            status: "REVISED",
+          }),
+        });
+        workingProject = patched.project;
+        repairedChapterIds.add(recommendation.targetChapterId);
+        bestsellerRepairs += 1;
+      }
+
+      onProjectUpdate(workingProject);
+    }
+
+    const finalWords = workingProject.chapters.reduce((sum, chapter) => sum + countWords(String(chapter.draft || "")), 0);
+    setHistory((current) => [
+      ...current,
+      {
+        step: "Quality Loop Complete",
+        reply: `Automatic checks and repairs reached the safety limit. Current draft is about ${finalWords} words. Review the Continuity and Bestseller panels for any remaining issues.`,
+      },
+    ]);
+    onContextPackage(latestContext);
+    return workingProject;
+  }
+
   async function draftGuidedBook(sourceProject: ProjectWorkspace, finalInstruction: string) {
     setDrafting(true);
     let workingProject = sourceProject;
@@ -199,6 +397,22 @@ export function GuidedBuilderTab({
     const finalWordCount = inferRequestedWordCount(finalInstruction) ?? requestedWordCount;
     const inferredCountFromWords = finalWordCount ? Math.max(3, Math.min(16, Math.ceil(finalWordCount / 1600))) : null;
     const finalCount = inferRequestedChapterCount(finalInstruction) ?? requestedChapterCount ?? inferredCountFromWords;
+
+    if (finalWordCount) {
+      const patched = await requestJson<{ project: ProjectWorkspace }>(`/api/projects/${workingProject.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookSettings: {
+            ...workingProject.bookSettings,
+            targetBookLength: finalWordCount,
+            targetChapterLength: finalCount ? Math.max(900, Math.round(finalWordCount / Math.max(finalCount, 1))) : workingProject.bookSettings.targetChapterLength,
+          },
+        }),
+      });
+      workingProject = patched.project;
+      onProjectUpdate(workingProject);
+    }
 
     if (finalCount && finalCount > workingProject.chapters.length) {
       while (workingProject.chapters.length < finalCount) {
@@ -257,15 +471,13 @@ export function GuidedBuilderTab({
     }
 
     onContextPackage(latestContext);
-    const totalWords = workingProject.chapters.reduce(
-      (sum, chapter) => sum + String(chapter.draft || "").trim().split(/\s+/).filter(Boolean).length,
-      0,
-    );
+    workingProject = await runGuidedQualityLoop(workingProject);
+    const totalWords = workingProject.chapters.reduce((sum, chapter) => sum + countWords(String(chapter.draft || "")), 0);
     setHistory((current) => [
       ...current,
       {
-        step: "Guided Draft",
-        reply: `Drafted ${workingProject.chapters.length} chapter(s) from the Guided Builder plan, about ${totalWords} words total.`,
+        step: "Guided Draft + Quality",
+        reply: `Drafted and checked ${workingProject.chapters.length} chapter(s) from the Guided Builder plan, about ${totalWords} words total.`,
       },
     ]);
     setDrafting(false);
