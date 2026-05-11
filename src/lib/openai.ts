@@ -1362,9 +1362,16 @@ async function runPromptTask(options: {
     options.instruction,
     options.roleInstruction,
   );
-  const raw = await generateTextWithProvider(prompt, {
-    maxOutputTokens: options.maxOutputTokens,
-  });
+  let raw: string | null = null;
+  try {
+    raw = await generateTextWithProvider(prompt, {
+      maxOutputTokens: options.maxOutputTokens,
+    });
+  } catch (error) {
+    if (!options.mockContent || !isHostedFastDraftMode()) {
+      throw error;
+    }
+  }
   const content = raw ?? options.mockContent ?? "";
   if (!content.trim()) {
     throw new Error("AI did not return any visible text.");
@@ -1730,14 +1737,41 @@ function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: C
 }
 
 function mockDraft(project: ProjectWorkspace, context: ContextPackage, chapterTitle: string) {
+  const protagonist = project.characters[0]?.name ?? "Maren";
+  const opposition = project.characters[1]?.name ?? "the person blocking the way";
+  const thread = context.activePlotThreads[0]?.title ?? "the central problem";
+  const rule = project.workingNotes[0]?.content ?? project.premise;
+  const mood = project.styleProfile.aestheticGuide || project.styleProfile.styleGuide || "tense, human, specific";
+  const goal = context.chapterGoal || "force the protagonist into a meaningful choice";
+
   return [
     `${chapterTitle}`,
     "",
-    `${context.previousChapterSummary ? `The truth from the last chapter still throbbed at the edges of the scene. ` : ""}${project.characters[0]?.name ?? "The protagonist"} moved before certainty could harden into panic, carrying ${context.activePlotThreads[0]?.title.toLowerCase() ?? "the problem"} deeper into the city.`,
+    `${context.previousChapterSummary ? `The truth from the last chapter still throbbed at the edges of the scene. ` : ""}${protagonist} moved before certainty could harden into panic, carrying ${thread.toLowerCase()} into a room that felt too quiet to be safe.`,
     "",
-    `The chapter turns around ${context.chapterGoal.toLowerCase()}. Use ${project.styleProfile.aestheticGuide.toLowerCase()} to keep the atmosphere specific, then let the pressure come from a choice rather than exposition.`,
+    `"You saw it too," ${opposition} said.`,
     "",
-    `By the close, ${context.continuityConstraints[0]?.suggestedContext || "the immediate conflict should sharpen into the next chapter's demand"}.`,
+    `${protagonist} kept one hand near the table, not because it could protect anything, but because standing still gave fear somewhere to live. "I saw enough to know someone is lying."`,
+    "",
+    `"That is a dangerous sentence to say out loud."`,
+    "",
+    `The warning should have sounded theatrical. Instead it landed plainly, the way a locked door lands when the last key breaks. ${protagonist} looked past ${opposition} to the small details everyone else had ignored: the shifted chair, the smudge near the handle, the silence where an ordinary machine should have hummed.`,
+    "",
+    `The rule of this world was simple and cruel: ${rule}. Nobody survived by forgetting it. Nobody stayed innocent by using it as an excuse.`,
+    "",
+    `"Then answer me plainly," ${protagonist} said. "Who benefits if I stop asking?"`,
+    "",
+    `${opposition} almost smiled. Almost. "People who are better at surviving than you."`,
+    "",
+    `That was the first honest thing anyone had said all day. It did not solve the problem. It made the problem breathe. ${protagonist} felt the shape of the chapter's real purpose settle into place: ${goal.toLowerCase()}. The room, the argument, the half-hidden evidence, even the silence all pressed toward the same choice.`,
+    "",
+    `*If I walk away now, I become part of the lie.*`,
+    "",
+    `${protagonist} stepped closer. "Then teach me how they survive."`,
+    "",
+    `${opposition}'s voice dropped. "No. I am going to teach you why they are afraid."`,
+    "",
+    `The answer changed the air between them. It gave the scene its cut, its promise, and its cost. In a ${mood.toLowerCase()} rhythm, the next move could not be decorative. It had to expose something, hurt something, or force someone to choose. By the close, ${context.continuityConstraints[0]?.suggestedContext || "the immediate conflict sharpened into the next chapter's demand"}.`,
   ].join("\n");
 }
 
