@@ -1157,10 +1157,29 @@ export function ProjectWorkspace({
       if (activeTab === "chapters") {
         await persistChapter(false);
       }
-      const data = await requestJson<{
+      let data: {
         run: AiAssistRunRecord;
         contextPackage: ContextPackage;
-      }>(`/api/chapters/${selectedChapter.id}/generate/draft`, { method: "POST" });
+      } | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          data = await requestJson<{
+            run: AiAssistRunRecord;
+            contextPackage: ContextPackage;
+          }>(`/api/chapters/${selectedChapter.id}/generate/draft`, { method: "POST" });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt === 0) {
+            toast.message("The AI provider was slow. Retrying chapter generation once...");
+            await new Promise((resolve) => setTimeout(resolve, 1800));
+          }
+        }
+      }
+      if (!data) {
+        throw lastError instanceof Error ? lastError : new Error("Could not generate draft.");
+      }
       setPendingSuggestion(null);
       applyEditorPatch({ draft: data.run.suggestion });
       setContextPackage(data.contextPackage);

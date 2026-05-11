@@ -75,6 +75,8 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 65000);
+
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "mistralai/mistral-small-3.1-24b-instruct:free",
   "openai/gpt-oss-20b:free",
@@ -84,6 +86,22 @@ const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withProviderTimeout<T>(operation: Promise<T>, label: string, timeoutMs = PROVIDER_CALL_TIMEOUT_MS) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function isRetryableProviderError(error: unknown) {
@@ -1049,11 +1067,14 @@ async function callProvider(
     }
 
     try {
-      const response = await provider.client.responses.create({
-        model: provider.model,
-        input: prompt,
-        ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
-      });
+      const response = await withProviderTimeout(
+        provider.client.responses.create({
+          model: provider.model,
+          input: prompt,
+          ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
+        }),
+        `${provider.label} responses call`,
+      );
 
       const directText = extractTextFromResponsePayload(response);
       if (directText) {
@@ -1101,11 +1122,15 @@ async function callChatCompletion(
   options: ProviderCallOptions = {},
   modelOverride?: string,
 ) {
-  const response = await provider.client.chat.completions.create({
-    model: modelOverride ?? provider.model,
-    messages: [{ role: "user", content: prompt }],
-    ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
-  });
+  const model = modelOverride ?? provider.model;
+  const response = await withProviderTimeout(
+    provider.client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
+    }),
+    `${provider.label} chat call (${model})`,
+  );
 
   return extractTextFromResponsePayload(response);
 }
