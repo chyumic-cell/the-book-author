@@ -84,6 +84,10 @@ const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "arcee-ai/trinity-large-preview:free",
 ] as const;
 
+function shouldUseOpenRouterFallbackFirst(model: string) {
+  return model === "openrouter/free" || model.includes("owl-alpha");
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -220,8 +224,8 @@ function isHostedFastDraftMode() {
 }
 
 function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
-  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 2400) * 0.55), 1200), 2200);
-  return wordBudgetToTokens(targetWords + 120, 1200, 3200);
+  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 2400) * 0.5), 900), 1600);
+  return wordBudgetToTokens(targetWords + 120, 1000, 2500);
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -1036,7 +1040,7 @@ async function callProvider(
   options: ProviderCallOptions = {},
 ) {
   const preferredModel =
-    provider.label === "OpenRouter" && provider.model === "openrouter/free"
+    provider.label === "OpenRouter" && shouldUseOpenRouterFallbackFirst(provider.model)
       ? OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS[0]
       : provider.model;
 
@@ -1046,16 +1050,19 @@ async function callProvider(
       if (directChat) {
         return directChat;
       }
+      const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]));
+      if (fallbackText) {
+        return fallbackText;
+      }
+      throw new Error(`The active OpenRouter model (${preferredModel}) returned no visible text.`);
     } catch (error) {
       if (isRetryableProviderError(error)) {
-        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options);
+        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]));
         if (fallbackText) {
           return fallbackText;
         }
       }
-      if (!isRetryableProviderError(error)) {
-        throw error;
-      }
+      throw error;
     }
   }
 
@@ -1140,9 +1147,10 @@ async function tryOpenRouterFallbackModels(
   provider: NonNullable<Awaited<ReturnType<typeof getProviderClient>>>,
   prompt: string,
   options: ProviderCallOptions,
+  skippedModels = new Set<string>(),
 ) {
   for (const fallbackModel of OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS) {
-    if (fallbackModel === provider.model) {
+    if (fallbackModel === provider.model || skippedModels.has(fallbackModel)) {
       continue;
     }
 
