@@ -41,26 +41,6 @@ type TargetedFieldPayload = {
   contextPackage: ContextPackage | null;
 };
 
-function scopeFromTab(tab: StoryForgeTab): ProjectChatScope {
-  if (tab === "ideaLab") {
-    return "IDEA_LAB";
-  }
-
-  if (tab === "skeleton") {
-    return "SKELETON";
-  }
-
-  if (tab === "chapters") {
-    return "CHAPTER";
-  }
-
-  if (tab === "bible") {
-    return "STORY_BIBLE";
-  }
-
-  return "PROJECT";
-}
-
 function buildGreeting(projectId: string, projectTitle: string): ProjectChatTurnRecord {
   return {
     id: `greeting-${projectId}`,
@@ -76,7 +56,7 @@ function normalizeInstruction(value: string) {
   return value.trim().toLowerCase();
 }
 
-function looksLikeAllChapterOutlineRequest(message: string, scope: ProjectChatScope, activeTab: StoryForgeTab) {
+function looksLikeAllChapterOutlineRequest(message: string) {
   const lower = normalizeInstruction(message);
   const mentionsAllChapters =
     lower.includes("all chapters") ||
@@ -92,14 +72,7 @@ function looksLikeAllChapterOutlineRequest(message: string, scope: ProjectChatSc
     lower.includes("story skeleton") ||
     (lower.includes("titles") && lower.includes("chapters")) ||
     (lower.includes("chapter names") && !lower.includes("name a character"));
-  return (
-    mentionsAllChapters &&
-    mentionsOutlineWork &&
-    (scope === "SKELETON" ||
-      activeTab === "skeleton" ||
-      lower.includes("story skeleton") ||
-      lower.includes("chapter runway"))
-  );
+  return mentionsAllChapters && mentionsOutlineWork;
 }
 
 function inferPlanningAction(message: string): "develop" | "expand" | "tighten" {
@@ -154,7 +127,6 @@ function looksLikeAllChapterDraftRequest(message: string) {
 }
 
 export function ProjectCopilotBar({
-  activeTab,
   activeAiRole,
   expanded,
   dockClassName,
@@ -191,7 +163,6 @@ export function ProjectCopilotBar({
   onTabChange: (tab: StoryForgeTab) => void;
 }) {
   const [message, setMessage] = useState("");
-  const [scope, setScope] = useState<ProjectChatScope>("AUTO");
   const [applyChanges, setApplyChanges] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [turns, setTurns] = useState<ProjectChatTurnRecord[]>(() => [buildGreeting(project.id, project.title)]);
@@ -474,7 +445,7 @@ export function ProjectCopilotBar({
       return;
     }
 
-    const effectiveScope = scope === "AUTO" ? scopeFromTab(activeTab) : scope;
+    const effectiveScope: ProjectChatScope = "AUTO";
     const userTurn: ProjectChatTurnRecord = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -499,7 +470,7 @@ export function ProjectCopilotBar({
 
       const data = looksLikeAllChapterDraftRequest(nextMessage)
         ? await runAllChapterDraftWorkflow(nextMessage)
-        : looksLikeAllChapterOutlineRequest(nextMessage, effectiveScope, activeTab)
+        : looksLikeAllChapterOutlineRequest(nextMessage)
           ? await runAllChapterOutlineWorkflow(nextMessage)
           : await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
             method: "POST",
@@ -507,7 +478,7 @@ export function ProjectCopilotBar({
             body: JSON.stringify({
               message: nextMessage,
               role: activeAiRole,
-              scope: effectiveScope,
+              scope: "AUTO",
               chapterId: selectedChapterId,
               applyChanges,
             }),
@@ -552,7 +523,7 @@ export function ProjectCopilotBar({
                   <Chip>AI Dock</Chip>
                   <Chip>{activeRoleLabel}</Chip>
                   <Chip>{applyChanges ? "Apply changes on" : "Advice only"}</Chip>
-                  <Chip>{scope === "AUTO" ? "Auto scope" : scope}</Chip>
+                  <Chip>Auto-routing</Chip>
                   {submitting ? (
                     <Chip className="gap-2">
                       <span aria-hidden="true" className="storyforge-spinner" />
@@ -578,7 +549,7 @@ export function ProjectCopilotBar({
               </div>
             </div>
 
-            <div className={cn("grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]", phoneShell ? "gap-2" : "")}>
+            <div className={cn("grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]", phoneShell ? "gap-2" : "")}>
               <label className={cn("grid gap-1 text-sm", phoneShell ? "text-xs" : "")}>
                 <span className="text-[var(--muted)]">AI role</span>
                 <select value={activeAiRole} onChange={(event) => onRoleChange(event.target.value as AiRole)}>
@@ -587,17 +558,6 @@ export function ProjectCopilotBar({
                       {option.label}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className={cn("grid gap-1 text-sm", phoneShell ? "text-xs" : "")}>
-                <span className="text-[var(--muted)]">Scope</span>
-                <select value={scope} onChange={(event) => setScope(event.target.value as ProjectChatScope)}>
-                  <option value="AUTO">Auto from current tab</option>
-                  <option value="PROJECT">Project setup</option>
-                  <option value="IDEA_LAB">Idea Lab</option>
-                  <option value="SKELETON">Story Skeleton</option>
-                  <option value="CHAPTER">Selected chapter</option>
-                  <option value="STORY_BIBLE">Story Bible</option>
                 </select>
               </label>
               <label className={cn("inline-flex items-center gap-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-3 text-sm text-[var(--muted)]", phoneShell ? "px-3 py-2 text-xs leading-4" : "")}>
