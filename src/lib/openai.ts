@@ -207,6 +207,7 @@ function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstr
     "Aim for roughly 1200 to 2200 words in this first pass.",
     "Prioritize sharp scene progression, lots of dialogue, clear emotional turns, and a complete ending beat for this pass.",
     "Put quoted spoken dialogue on the page early and often. Let dialogue do most of the dramatic work unless a brief silence is itself the dramatic move.",
+    "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
     "If the chapter is meant to be dialogue-heavy, every major scene beat should contain spoken exchange, interruption, persuasion, threat, confession, bargaining, or argument.",
     "Do not pad. Do not summarize. Write real prose that can be continued naturally in later passes.",
     "Do not restart the chapter midway through the response.",
@@ -256,6 +257,7 @@ function buildFullChapterRevisionInstruction(chapter: ChapterRecord, instruction
     "Do not stop mid-sentence, mid-thought, or mid-paragraph.",
     "End with a complete final paragraph and a fully finished final sentence.",
     "Land the ending on consequence, tension, revelation, dread, or unresolved pressure rather than letting the prose trail off.",
+    "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
     "Do not include meta prose such as 'the chapter ends with' or editorial commentary.",
     "Return only the finished revised chapter prose.",
     instruction,
@@ -271,6 +273,7 @@ function buildHostedFastRevisionInstruction(chapter: ChapterRecord, instruction:
     "Preserve chronology, canon facts, POV, names, and continuity.",
     "Do not restart the chapter. Do not repeat the opening or recap the story from the beginning.",
     "Keep spoken dialogue in quotation marks and keep direct internal thoughts in italics.",
+    "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
     "Return only revised chapter prose, with no notes, markdown, headings, explanation, or checklist.",
     instruction,
   ].join("\n");
@@ -295,6 +298,7 @@ function formatChapterInstruction(chapter: ChapterRecord, task: "outline" | "dra
     "If you revise or write an earlier part of the book, do not act as if later reveals, outcomes, or decisions are already known in-scene unless this chapter is intentionally foreshadowing them.",
     "Format spoken dialogue in standard prose with double quotation marks, never as `Name: line` play-script formatting.",
     "Render internal thoughts as internal thought in italics rather than spoken dialogue, unless the writer explicitly asks for another style.",
+    "Use single-asterisk italics only for direct internal thought, never for emphasis labels or section headings. Do not use markdown bold.",
     "Do not leave dialogue with missing closing quotation marks.",
     "If a character lacks a full speech dossier, infer a plausible voice from rank, class, education, origin, role, and scene pressure rather than defaulting to generic AI dialogue.",
       "Do not make unrelated characters drift into the wrong accent, class register, or social rhythm unless the story explicitly motivates it.",
@@ -776,7 +780,16 @@ function buildBookGuidePrompt(project: ProjectWorkspace) {
     .slice(0, 24)
     .map((chapter) => {
       const summary = getLatestChapterSummary(chapter) || chapter.outline || chapter.purpose || chapter.currentBeat;
-      return `Chapter ${chapter.number}: ${chapter.title} | purpose: ${compactText(chapter.purpose || "Not set", 120)} | summary: ${compactText(summary || "No summary yet.", 180)} | words: ${chapter.wordCount}`;
+      const draft = chapter.draft?.trim() ?? "";
+      const openingEvidence = compactText(draft.slice(0, 520), 240);
+      const endingEvidence = compactText(draft.slice(Math.max(0, draft.length - 520)), 240);
+      return [
+        `Chapter ${chapter.number}: ${chapter.title} | purpose: ${compactText(chapter.purpose || "Not set", 120)} | summary: ${compactText(summary || "No summary yet.", 180)} | words: ${chapter.wordCount}`,
+        openingEvidence ? `  opening evidence: ${openingEvidence}` : "",
+        endingEvidence ? `  ending evidence: ${endingEvidence}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n");
   const threadRows = project.plotThreads

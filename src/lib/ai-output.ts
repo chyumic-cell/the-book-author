@@ -148,8 +148,12 @@ function sanitizeParagraphLines(paragraph: string) {
 
   const cleanedLines = lines
     .filter((line) => !isEditorialParagraph(line))
-    .map((line) => normalizeDialogueLine(line));
+    .map((line) => stripMarkdownBold(normalizeDialogueLine(line)));
   return cleanedLines.join(" ").trim();
+}
+
+function stripMarkdownBold(line: string) {
+  return line.replace(/\*\*([^*]+)\*\*/g, "$1");
 }
 
 function normalizeDialogueLine(line: string) {

@@ -61,6 +61,20 @@ He looked at the road and said, "If they find us, we are finished.
     expect(result.issues.some((issue) => issue.includes("quotation"))).toBe(true);
   });
 
+  it("strips markdown bold without breaking internal-thought italics", () => {
+    const raw = `
+**Tension:** The door would not open.
+
+*Not yet,* Rene thought. "Hold the line."
+`;
+
+    const result = sanitizeManuscriptText(raw);
+
+    expect(result.text).toContain("Tension: The door would not open.");
+    expect(result.text).toContain('*Not yet,* Rene thought. "Hold the line."');
+    expect(result.text).not.toContain("**");
+  });
+
   it("keeps inline rewrite suggestions instead of stripping them like whole chapters", () => {
     const raw = `Here is the expanded passage:\n\nDieb watched the fire. Smoke pressed into his eyes, and every pop of sap in the wood made the darkness beyond the circle feel closer.`;
 
