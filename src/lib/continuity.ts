@@ -93,7 +93,43 @@ function buildPlanningSeeds(chapter: ProjectWorkspace["chapters"][number]) {
     ...keyBeats.map((value) => ({ text: value, severity: "LOW" as const, kind: "Key beat" })),
   ]
     .filter((entry) => entry.text.trim().length > 0)
+    .filter((entry) => shouldContinuityTrackPlanningSeed(entry.text))
     .slice(0, 5);
+}
+
+function shouldContinuityTrackPlanningSeed(value: string) {
+  const normalized = normalizeAnalysisText(value);
+  if (!normalized) {
+    return false;
+  }
+
+  const genericCraftPatterns = [
+    /\bdistinct\b.*\bdialogue\b/,
+    /\bfresh\b.*\bconsequence\b/,
+    /\birreversible\b.*\bstory\b.*\bconsequence\b/,
+    /\bnew\b.*\birreversible\b.*\bconsequence\b/,
+    /\bno\b.*\brepeated\b/,
+    /\bdo not\b/,
+    /\bthoughts?\b.*\bitalic/,
+    /\bspeech\b.*\bquotation/,
+    /\badvance\b.*\bstory\b/,
+  ];
+  if (genericCraftPatterns.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  const terms = extractSignificantTerms(value, 5);
+  if (terms.length < 2) {
+    return false;
+  }
+
+  const hasConcreteSignal =
+    /[A-Z][\p{L}'-]+/u.test(value) ||
+    /\b(?:ledger|scroll|camel|well|jar|market|souk|trial|covenant|debt|collector|wish|name|voice|memory|breath|school|court|storm|fire|water|sand|jinn|ifrit|zolm|nadir|layla|jaber|sami|samira)\b/i.test(
+      value,
+    );
+
+  return hasConcreteSignal;
 }
 
 function dedupeIssues(issues: ContinuityIssueRecord[]) {
