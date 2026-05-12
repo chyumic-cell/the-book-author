@@ -219,7 +219,7 @@ function fallbackChapterFieldValue(options: {
     case "purpose":
       return `${protagonist} must act on the previous pressure instead of restarting the story. The chapter should force a concrete choice, expose a cost, and move the central conflict forward through dialogue and consequence.`;
     case "currentBeat":
-      return `${protagonist} is pushed from suspicion into action when the story's central rule creates a new immediate cost.`;
+      return `${protagonist} is pushed from the Oath Feast disturbance into action when the Witness Tithe creates a new immediate cost.`;
     case "desiredMood":
       return project.bookSettings.tone || "Tense, intimate, dialogue-heavy, emotionally sharp";
     case "outline":
