@@ -483,11 +483,24 @@ function buildChapterDraftPatchFromRecord(draftItem?: Record<string, unknown>) {
       continue;
     }
     const raw = draftItem[fieldKey];
-    patch[fieldKey] = chapterListFields.has(fieldKey as AssistFieldKey)
-      ? (Array.isArray(raw) ? raw.map((entry) => String(entry).trim()).filter(Boolean) : splitLines(String(raw ?? "")))
-      : fieldKey === "targetWordCount"
-        ? Number(raw ?? 0)
-        : String(raw ?? "");
+    if (chapterListFields.has(fieldKey as AssistFieldKey)) {
+      const listValue = Array.isArray(raw) ? raw.map((entry) => String(entry).trim()).filter(Boolean) : splitLines(String(raw ?? ""));
+      if (listValue.length > 0) {
+        patch[fieldKey] = listValue;
+      }
+      continue;
+    }
+    if (fieldKey === "targetWordCount") {
+      const numeric = Number(raw ?? 0);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        patch[fieldKey] = numeric;
+      }
+      continue;
+    }
+    const textValue = String(raw ?? "").trim();
+    if (textValue && !looksLikePlaceholderValue(textValue)) {
+      patch[fieldKey] = textValue;
+    }
   }
 
   return patch as Parameters<typeof updateChapter>[1];
