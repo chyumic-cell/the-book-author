@@ -547,7 +547,7 @@ async function testCopilot(page) {
   const expandedDock = page.locator("#project-copilot-dock");
   await expandedDock.getByLabel("Let The Book Author implement direct changes").uncheck();
   await expandedDock
-    .getByPlaceholder("Explain a scene problem, ask for stronger options, or tell The Book Author what to update.")
+    .getByPlaceholder(/Explain (what to update|a scene problem)/)
     .fill("Give short advice on how to use The Book Author well during drafting.");
   await jsClick(expandedDock.getByRole("button", { name: "Send", exact: true }));
   await pagePause(2500);
@@ -752,7 +752,7 @@ async function testMemory(page) {
 
 async function testContinuity(page) {
   await openRibbon(page, "Review");
-  await jsClick(ribbonButton(page, "Continuity").first());
+  await jsClick(ribbonButton(page, "Continuity View").first());
   await page.getByRole("heading", { name: "Continuity dashboard", exact: true }).waitFor({ timeout: 20000 });
   await jsClick(page.getByRole("button", { name: /Run chapter check|Checking/ }).first());
   await pagePause(2000);
