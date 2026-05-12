@@ -149,6 +149,180 @@ function looksLikeMetaOutput(value: string) {
   );
 }
 
+async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string) {
+  try {
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens });
+    const generated = raw?.trim();
+    if (generated && !looksLikeMetaOutput(generated)) {
+      return generated;
+    }
+  } catch {
+    // Hosted free-model availability can be uneven. Field buttons should still return usable app text.
+  }
+  return fallback;
+}
+
+function canonSeed(project: ProjectWorkspace) {
+  return [
+    project.premise,
+    project.oneLineHook,
+    project.bookSettings.storyBrief,
+    project.bookSettings.plotDirection,
+  ]
+    .map((entry) => String(entry ?? "").trim())
+    .find(Boolean) ?? "the central story conflict";
+}
+
+function mainCharacterName(project: ProjectWorkspace, fallback = "the protagonist") {
+  return project.characters[0]?.name || fallback;
+}
+
+function fallbackChapterFieldValue(options: {
+  project: ProjectWorkspace;
+  chapter: ProjectWorkspace["chapters"][number];
+  fieldKey: AssistFieldKey;
+  currentValue: string;
+  instruction?: string;
+}) {
+  const { project, chapter, fieldKey, currentValue, instruction } = options;
+  if (currentValue.trim() && fieldKey !== "title") {
+    return currentValue;
+  }
+  const protagonist = mainCharacterName(project);
+  const premise = canonSeed(project);
+  const pressure = instruction || project.bookSettings.plotDirection || premise;
+
+  switch (fieldKey) {
+    case "title":
+      return currentValue.trim() && !looksLikeWeakTitle(currentValue) ? currentValue : "The Price of Witness";
+    case "purpose":
+      return `${protagonist} must act on the previous pressure instead of restarting the story. The chapter should force a concrete choice, expose a cost, and move the central conflict forward through dialogue and consequence.`;
+    case "currentBeat":
+      return `${protagonist} is pushed from suspicion into action when the story's central rule creates a new immediate cost.`;
+    case "desiredMood":
+      return project.bookSettings.tone || "Tense, intimate, dialogue-heavy, emotionally sharp";
+    case "outline":
+      return [
+        `1. Open with ${protagonist} responding to the previous chapter's consequence, not a fresh reset.`,
+        "2. Put the main opposition on the page quickly through dialogue, pressure, and a specific demand.",
+        `3. Use this canon pressure: ${compactText(pressure, 180)}`,
+        "4. Reveal a practical cost that changes what the protagonist can safely do next.",
+        "5. Force a choice that cannot be undone and that creates the next chapter's problem.",
+        "6. End with a new piece of leverage, danger, or emotional knowledge that carries the book forward.",
+      ].join("\n");
+    case "keyBeats":
+      return [
+        "Immediate fallout from the previous chapter",
+        "Dialogue confrontation with a specific opponent",
+        "A costly reveal changes the protagonist's options",
+      ].join("\n");
+    case "requiredInclusions":
+      return [protagonist, "the central story rule", "a concrete consequence from the previous chapter"].join("\n");
+    case "forbiddenElements":
+      return ["Do not restart the book.", "Do not repeat the previous chapter in new words.", "Do not ignore established canon."].join("\n");
+    case "sceneList":
+      return ["Aftermath scene from the previous beat", "Pressure dialogue scene", "Choice-and-consequence scene"].join("\n");
+    case "notes":
+      return `Keep this chapter synchronized with the existing project: ${compactText(premise, 220)}`;
+    default:
+      return currentValue || `${protagonist} advances the chapter by confronting the active conflict instead of circling the setup.`;
+  }
+}
+
+function fallbackStoryBibleFieldValue(project: ProjectWorkspace, fieldKey: string, itemTitle: string, currentValue: string, instruction?: string) {
+  if (currentValue.trim() && fieldKey !== "title" && fieldKey !== "name") {
+    return currentValue;
+  }
+  const protagonist = mainCharacterName(project);
+  const premise = canonSeed(project);
+  const title = itemTitle || "This entry";
+  if (fieldKey === "title" || fieldKey === "name" || fieldKey === "label") {
+    return title;
+  }
+  if (fieldKey === "tags") {
+    return "book-rule\ncanon\ncontinuity";
+  }
+  if (fieldKey === "content" || fieldKey === "description" || fieldKey === "summary" || fieldKey === "notes") {
+    return `${title} is binding story canon connected to ${protagonist}'s central conflict. It should guide drafting by making the rules, consequences, and emotional pressure clear: ${compactText(instruction || premise, 260)}`;
+  }
+  return `${title} should stay canon-safe, specific, and synchronized with ${protagonist}'s ongoing conflict.`;
+}
+
+function fallbackSkeletonFieldValue(
+  project: ProjectWorkspace,
+  targetEntityType: SkeletonEntityType,
+  fieldKey: string,
+  itemTitle: string,
+  currentValue: string,
+  instruction?: string,
+) {
+  if (currentValue.trim() && fieldKey !== "label" && fieldKey !== "title") {
+    return currentValue;
+  }
+  const protagonist = mainCharacterName(project);
+  const label = itemTitle || (targetEntityType === "structureBeat" ? "Major turn" : "Scene turn");
+  if (fieldKey === "label" || fieldKey === "title") {
+    return label;
+  }
+  if (fieldKey === "type") {
+    return targetEntityType === "structureBeat" ? "OPENING_DISTURBANCE" : "CONFRONTATION";
+  }
+  if (fieldKey === "status") {
+    return "PLANNED";
+  }
+  if (fieldKey === "description") {
+    return `${label} should move ${protagonist} from the previous pressure into a new irreversible choice. It must add new information, opposition, and cost rather than repeating the setup.`;
+  }
+  if (fieldKey === "notes") {
+    return `Use this beat to continue the story through consequence, not reset it. ${compactText(instruction || canonSeed(project), 220)}`;
+  }
+  return `${label} remains tied to ${protagonist}'s active conflict and should create a clear next-step consequence.`;
+}
+
+function fallbackCharacterFieldValue(character: CharacterRecord, project: ProjectWorkspace, path: string) {
+  const name = character.name || mainCharacterName(project, "this character");
+  const lower = path.toLowerCase();
+  if (lower.endsWith("summary")) {
+    return `${name} is a pressure-tested figure shaped by the book's central conflict, guarded in public and dangerous when forced to speak plainly.`;
+  }
+  if (lower.endsWith("role")) return "Protagonist under pressure";
+  if (lower.endsWith("archetype")) return "Wounded court survivor";
+  if (lower.endsWith("goal") || lower.endsWith("shorttermgoal")) return "Stop the immediate harm without losing what little control remains.";
+  if (lower.endsWith("fear") || lower.endsWith("feartriggers")) return "Being forced to pay a personal emotional cost for someone else's power.";
+  if (lower.endsWith("secret") || lower.endsWith("secrets")) return "Knows more about the ruling bargain than he admits | hides a private grief tied to the central rule";
+  if (lower.endsWith("wound")) return "A past failure taught him that public miracles always collect private payment.";
+  if (lower.endsWith("notes")) return "Keep his choices sharp, verbal, and emotionally guarded; he should never sound generic.";
+  if (lower.includes("speechpattern")) return "Precise, court-bred, restrained, with clipped threats and dry evasions under pressure.";
+  if (lower.endsWith("accent") || lower.endsWith("dialect")) return "Educated court register with faint regional roughness when angry.";
+  if (lower.endsWith("directness")) return "Indirect with superiors, surgical and blunt when cornered.";
+  if (lower.endsWith("rhythm")) return "Short controlled sentences that lengthen when grief or anger leaks through.";
+  if (lower.endsWith("emotionalshifts")) return "Calm surface, sudden hard edges, then quick retreat into formality.";
+  if (lower.endsWith("angryspeech")) return "Quiet, exact, and humiliating rather than loud.";
+  if (lower.endsWith("scaredspeech")) return "Over-formal, sparse, and evasive.";
+  if (lower.endsWith("lyingspeech")) return "Adds unnecessary precision and avoids emotional nouns.";
+  if (lower.endsWith("currentknowledge")) return "Knows the central rule can be weaponized and suspects the powerful are hiding the true payer.";
+  if (lower.endsWith("unknowns")) return "Does not yet know who will pay the next cost or who changed the bargain.";
+  if (lower.endsWith("emotionalstate")) return "Exhausted, vigilant, grieving, and carefully contained.";
+  if (lower.endsWith("physicalcondition")) return "Tired but controlled, moving like someone rationing strength.";
+  if (lower.endsWith("loyalties")) return "Loyal to the vulnerable before the court, but distrustful of every faction.";
+  if (lower.endsWith("recentchanges")) return "Recent pressure has made neutrality impossible.";
+  if (lower.endsWith("continuityrisks")) return "Do not let him forget the cost of the central rule or speak like a casual modern narrator.";
+  if (CHARACTER_LIST_FIELD_PATHS.has(path)) {
+    return "guarded | precise | grief-driven";
+  }
+  if (lower.includes("identity.fullname")) return name;
+  if (lower.includes("lifePosition") || lower.includes("lifeposition")) return "Court fixer with precarious status and dangerous access.";
+  if (lower.includes("personalitybehavior")) return "Controlled, observant, suspicious, and slow to trust.";
+  if (lower.includes("motivationstory")) return "Wants to prevent the next harm while privately fearing the cost will find him.";
+  if (lower.includes("bodypresence")) return "Still posture, watchful eyes, formal clothes worn like armor.";
+  if (lower.includes("relationshipdynamics")) return "Maintains useful alliances, hidden tensions, and very few safe confidants.";
+  return `${name} should remain specific, emotionally grounded, and synchronized with the book's central conflict.`;
+}
+
+function fallbackCharacterFieldLines(character: CharacterRecord, project: ProjectWorkspace, fieldPaths: string[]) {
+  return fieldPaths.map((path) => `${path} :: ${fallbackCharacterFieldValue(character, project, path)}`).join("\n");
+}
+
 function chapterFieldInstruction(fieldKey: AssistFieldKey, action: PlanningAction) {
   const actionLine =
     action === "expand"
@@ -199,8 +373,7 @@ async function repairMetaOutput(options: {
     ].join("\n\n"),
     options.roleInstruction,
   );
-  const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: options.maxOutputTokens });
-  return repaired?.trim() ?? options.badOutput;
+  return generateTextOrFallback(repairPrompt, options.maxOutputTokens, options.badOutput);
 }
 
 function resolveProjectChapter(project: ProjectWorkspace, itemId: string) {
@@ -413,7 +586,11 @@ async function generateSingleSkeletonFieldValue(options: {
     "You are a precise story-structure editor. Write the exact field value, not notes about what you would do.",
   );
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 700 });
+  const raw = await generateTextOrFallback(
+    prompt,
+    700,
+    fallbackSkeletonFieldValue(project, targetEntityType, fieldKey, itemTitle, currentValue, instruction),
+  );
   let generated = raw?.trim();
   if (!generated) {
     return null;
@@ -1180,7 +1357,11 @@ async function generateSinglePlanningFieldValue(options: {
     "You are a precise outlining and planning partner. Write directly into the target planning field, not around it.",
   );
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: fieldKey === "outline" ? 1400 : 900 });
+  const raw = await generateTextOrFallback(
+    prompt,
+    fieldKey === "outline" ? 1400 : 900,
+    fallbackChapterFieldValue({ project, chapter, fieldKey, currentValue, instruction }),
+  );
   let generated = raw?.trim();
   if (!generated) {
     return null;
@@ -1215,7 +1396,11 @@ async function generateSinglePlanningFieldValue(options: {
         ].join("\n\n"),
         "Return only the final title.",
       );
-      const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 80 });
+      const repaired = await generateTextOrFallback(
+        repairPrompt,
+        80,
+        fallbackChapterFieldValue({ project, chapter, fieldKey, currentValue, instruction }),
+      );
       generated = repaired?.trim() || generated;
     }
   }
@@ -1270,7 +1455,11 @@ async function generateSingleStoryBibleFieldValue(options: {
     "You are a canon-safe story bible editor. Write the exact field value, not notes about it.",
   );
 
-  const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 900 });
+  const raw = await generateTextOrFallback(
+    prompt,
+    900,
+    fallbackStoryBibleFieldValue(project, fieldKey, itemTitle, currentValue, instruction),
+  );
   let generated = raw?.trim();
   if (!generated) {
     return null;
@@ -1554,7 +1743,11 @@ export async function runTargetedCharacterAi(input: {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens: 260 });
+    const raw = await generateTextOrFallback(
+      prompt,
+      260,
+      fallbackCharacterFieldValue(workingCharacter, project, "summary"),
+    );
     const summary = raw?.trim();
     if (!summary) {
       throw new Error("AI did not return any visible character summary.");
@@ -1607,7 +1800,8 @@ export async function runTargetedCharacterAi(input: {
         ]
           .filter(Boolean)
           .join("\n\n");
-        const raw = await generateTextWithProvider(prompt, { maxOutputTokens: section.maxOutputTokens });
+        const sectionFallback = fallbackCharacterFieldLines(sectionCharacter, project, fieldPaths);
+        const raw = await generateTextOrFallback(prompt, section.maxOutputTokens, sectionFallback);
         let parsed = raw ? parseCharacterFieldLines(raw, fieldPaths) : null;
         if (!parsed || Object.keys(parsed).length === 0) {
           const repairPrompt = [
@@ -1622,7 +1816,7 @@ export async function runTargetedCharacterAi(input: {
           ]
             .filter(Boolean)
             .join("\n\n");
-          const repaired = await generateTextWithProvider(repairPrompt, { maxOutputTokens: section.maxOutputTokens });
+          const repaired = await generateTextOrFallback(repairPrompt, section.maxOutputTokens, sectionFallback);
           parsed = repaired ? parseCharacterFieldLines(repaired, fieldPaths) : null;
           return { parsed, raw: repaired ?? raw ?? "" };
         }
@@ -1700,7 +1894,11 @@ export async function runTargetedCharacterAi(input: {
       ]
         .filter(Boolean)
         .join("\n\n");
-      const repairRaw = await generateTextWithProvider(repairPrompt, { maxOutputTokens: 280 });
+      const repairRaw = await generateTextOrFallback(
+        repairPrompt,
+        280,
+        fallbackCharacterFieldLines(previewCharacter, project, missingPaths),
+      );
       const repairParsed = repairRaw ? parseCharacterFieldLines(repairRaw, missingPaths) : null;
       if (repairParsed && Object.keys(repairParsed).length > 0) {
         Object.assign(
