@@ -75,11 +75,11 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
-const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 30000);
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 18000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
-  "openai/gpt-oss-20b:free",
   "meta-llama/llama-3.2-3b-instruct:free",
+  "openai/gpt-oss-20b:free",
   "z-ai/glm-4.5-air:free",
   "openai/gpt-oss-120b:free",
   "meta-llama/llama-3.3-70b-instruct:free",
