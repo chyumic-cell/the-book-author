@@ -92,6 +92,9 @@ function chapterFieldLooksThin(fieldKey: AssistFieldKey, value: string, chapterN
   if (!normalized) {
     return true;
   }
+  if (looksLikePlaceholderValue(value)) {
+    return true;
+  }
   if (fieldKey === "title") {
     return normalized === `chapter ${chapterNumber}` || looksLikeWeakTitle(value);
   }
@@ -116,6 +119,9 @@ function chapterFieldLooksThin(fieldKey: AssistFieldKey, value: string, chapterN
 function storyBibleFieldLooksThin(fieldKey: string, value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
+    return true;
+  }
+  if (looksLikePlaceholderValue(value)) {
     return true;
   }
   if (fieldKey === "name" || fieldKey === "title" || fieldKey === "label") {
@@ -146,6 +152,21 @@ function looksLikeMetaOutput(value: string) {
     normalized.includes("the instruction says") ||
     normalized.includes("looking back") ||
     normalized.includes("i should")
+  );
+}
+
+function looksLikePlaceholderValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === "capture the character here." ||
+    normalized === "define the turning point this beat should deliver." ||
+    normalized === "advance the next major movement of the story." ||
+    normalized === "establish the opening movement of the story." ||
+    normalized === "fresh pressure enters the chapter." ||
+    normalized.includes("explain the world rule, organizational logic, or off-page canon here") ||
+    normalized.includes("describe the place, atmosphere, rules, or story relevance") ||
+    normalized.includes("describe the faction, its power, and its story role") ||
+    normalized.includes("summarize the mystery, arc, or open thread")
   );
 }
 
@@ -185,7 +206,7 @@ function fallbackChapterFieldValue(options: {
   instruction?: string;
 }) {
   const { project, chapter, fieldKey, currentValue, instruction } = options;
-  if (currentValue.trim() && fieldKey !== "title") {
+  if (currentValue.trim() && fieldKey !== "title" && !looksLikePlaceholderValue(currentValue)) {
     return currentValue;
   }
   const protagonist = mainCharacterName(project);
@@ -230,7 +251,7 @@ function fallbackChapterFieldValue(options: {
 }
 
 function fallbackStoryBibleFieldValue(project: ProjectWorkspace, fieldKey: string, itemTitle: string, currentValue: string, instruction?: string) {
-  if (currentValue.trim() && fieldKey !== "title" && fieldKey !== "name") {
+  if (currentValue.trim() && fieldKey !== "title" && fieldKey !== "name" && !looksLikePlaceholderValue(currentValue)) {
     return currentValue;
   }
   const protagonist = mainCharacterName(project);
@@ -256,7 +277,7 @@ function fallbackSkeletonFieldValue(
   currentValue: string,
   instruction?: string,
 ) {
-  if (currentValue.trim() && fieldKey !== "label" && fieldKey !== "title") {
+  if (currentValue.trim() && fieldKey !== "label" && fieldKey !== "title" && !looksLikePlaceholderValue(currentValue)) {
     return currentValue;
   }
   const protagonist = mainCharacterName(project);
@@ -526,6 +547,9 @@ function skeletonFieldLooksThin(fieldKey: string, value: string) {
   if (!normalized) {
     return true;
   }
+  if (looksLikePlaceholderValue(value)) {
+    return true;
+  }
   if (fieldKey === "label" || fieldKey === "title") {
     return normalized.length < 6;
   }
@@ -548,6 +572,7 @@ async function generateSingleSkeletonFieldValue(options: {
 }) {
   const { project, targetEntityType, entity, itemTitle, fieldKey, fieldLabel, action, contextChapterId, instruction } = options;
   const currentValue = getEntityValue(entity, fieldKey);
+  const hasRealCurrentValue = Boolean(currentValue.trim()) && !looksLikePlaceholderValue(currentValue);
   const context = buildContextPackage(project, contextChapterId, currentValue);
   const thinCurrent = skeletonFieldLooksThin(fieldKey, currentValue);
   const prompt = buildPromptEnvelope(
@@ -559,7 +584,7 @@ async function generateSingleSkeletonFieldValue(options: {
       "Update only this exact field on this exact record.",
       "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
       "Do not contradict the rest of the project. Keep everything synchronized.",
-      currentValue
+      hasRealCurrentValue
         ? "Base the result on what is already written in this exact textbox. Preserve the core idea and improve it."
         : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
       thinCurrent
@@ -580,7 +605,7 @@ async function generateSingleSkeletonFieldValue(options: {
             : fieldKey === "povCharacterId"
               ? "Return the exact character name that should own this scene, or leave it blank."
               : "Return only the final text for this exact field.",
-      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      hasRealCurrentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
       "Return only the final field value. No JSON, no labels, no commentary.",
     ].join("\n\n"),
     "You are a precise story-structure editor. Write the exact field value, not notes about what you would do.",
@@ -1320,6 +1345,7 @@ async function generateSinglePlanningFieldValue(options: {
 }) {
   const { project, chapter, fieldKey, fieldLabel, action, instruction } = options;
   const currentValue = chapterFieldValue(chapter, fieldKey);
+  const hasRealCurrentValue = Boolean(currentValue.trim()) && !looksLikePlaceholderValue(currentValue);
   const context = buildContextPackage(project, chapter.id, currentValue || chapter.draft || chapter.outline);
   const previousChapter = project.chapters.find((entry) => entry.number === chapter.number - 1) ?? null;
   const nextChapter = project.chapters.find((entry) => entry.number === chapter.number + 1) ?? null;
@@ -1334,7 +1360,7 @@ async function generateSinglePlanningFieldValue(options: {
       "Update only this one field. Do not write to notes. Do not write to the manuscript unless the target field is the manuscript.",
       "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
       "Do not contradict already written or already planned material. Extend, refine, reconcile, or sharpen it.",
-      currentValue
+      hasRealCurrentValue
         ? "Base the result on what is already written in this exact textbox. Preserve its core idea and improve that existing text instead of wandering away from it."
         : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
       thinCurrent
@@ -1349,7 +1375,7 @@ async function generateSinglePlanningFieldValue(options: {
       nextChapter
         ? `Next chapter target: Chapter ${nextChapter.number} - ${nextChapter.title}. Purpose: ${nextChapter.purpose}`
         : "",
-      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      hasRealCurrentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
       "Return only the final text to store in this field. No explanations, no labels, no markdown fences.",
     ]
       .filter(Boolean)
@@ -1423,6 +1449,7 @@ async function generateSingleStoryBibleFieldValue(options: {
   const spec = STORY_BIBLE_ENTITY_SPECS.find((entry) => entry.entityType === entityType);
   const fieldSpec = spec?.fields.find((field) => field.key === fieldKey);
   const currentValue = getEntityValue(entity, fieldKey);
+  const hasRealCurrentValue = Boolean(currentValue.trim()) && !looksLikePlaceholderValue(currentValue);
   const context = buildContextPackage(project, contextChapterId, currentValue);
   const thinCurrent = storyBibleFieldLooksThin(fieldKey, currentValue);
   const prompt = buildPromptEnvelope(
@@ -1434,7 +1461,7 @@ async function generateSingleStoryBibleFieldValue(options: {
       "Update only this exact field on this exact record.",
       "Use all existing project, series, story-bible, skeleton, chapter, memory, and continuity material as binding canon.",
       "Do not invent contradictions. Improve what already exists and keep it synchronized with the rest of the project.",
-      currentValue
+      hasRealCurrentValue
         ? "Base the result on what is already written in this exact textbox. Preserve its core idea and improve that existing text instead of drifting into a different record."
         : "The textbox is blank, so you may generate the field freely as long as it stays canon-safe.",
       thinCurrent
@@ -1447,7 +1474,7 @@ async function generateSingleStoryBibleFieldValue(options: {
           ? "Tighten this field into a shorter, cleaner, sharper version without losing the core idea."
           : "Develop this field so it becomes specific, useful, and canon-safe.",
       fieldSpec ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}` : "",
-      currentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
+      hasRealCurrentValue ? `Current field value:\n${currentValue}` : "Current field value is blank.",
       "Return only the final value for this field. No commentary, no JSON, no labels.",
     ]
       .filter(Boolean)
