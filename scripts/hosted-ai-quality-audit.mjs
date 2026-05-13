@@ -4,6 +4,7 @@ const base = process.env.STORYFORGE_BASE_URL ?? "https://the-book-author.vercel.
 const username = process.env.STORYFORGE_USERNAME ?? "MichaelPolevoy";
 const password = process.env.STORYFORGE_PASSWORD ?? "0525786222";
 const keepProject = process.env.STORYFORGE_KEEP_QUALITY_PROJECT === "1";
+const requestTimeoutMs = Number(process.env.STORYFORGE_AUDIT_REQUEST_TIMEOUT_MS ?? 240000);
 
 let cookie = "";
 
@@ -16,6 +17,8 @@ function mergeCookies(headers) {
 }
 
 async function request(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error(`${options.method ?? "GET"} ${path} timed out`)), requestTimeoutMs);
   const headers = {
     Origin: base,
     Referer: `${base}/`,
@@ -26,25 +29,30 @@ async function request(path, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  const startedAt = Date.now();
-  const response = await fetch(`${base}${path}`, {
-    ...options,
-    headers,
-    redirect: "manual",
-  });
-  mergeCookies(response.headers);
-  const text = await response.text();
-  let data;
   try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
+    const startedAt = Date.now();
+    const response = await fetch(`${base}${path}`, {
+      ...options,
+      headers,
+      redirect: "manual",
+      signal: controller.signal,
+    });
+    mergeCookies(response.headers);
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
+    const elapsedMs = Date.now() - startedAt;
+    if (!response.ok) {
+      throw new Error(`${options.method ?? "GET"} ${path} failed ${response.status} after ${elapsedMs}ms: ${text.slice(0, 1200)}`);
+    }
+    return { data, text, elapsedMs };
+  } finally {
+    clearTimeout(timeout);
   }
-  const elapsedMs = Date.now() - startedAt;
-  if (!response.ok) {
-    throw new Error(`${options.method ?? "GET"} ${path} failed ${response.status} after ${elapsedMs}ms: ${text.slice(0, 1200)}`);
-  }
-  return { data, text, elapsedMs };
 }
 
 async function signIn() {
@@ -428,6 +436,7 @@ function assertDossier(character) {
 }
 
 async function runAudit() {
+  console.log("QUALITY_STEP sign in");
   await signIn();
   const projectId = await createProject();
   console.log(`QUALITY_STEP project ${projectId}`);

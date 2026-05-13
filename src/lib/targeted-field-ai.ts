@@ -1,5 +1,5 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
-import { cleanGeneratedText, cleanSummaryText } from "@/lib/ai-output";
+import { cleanGeneratedText, cleanStructuredText, cleanSummaryText } from "@/lib/ai-output";
 import {
   normalizeCharacterDossier,
   normalizeCharacterQuickProfile,
@@ -72,10 +72,15 @@ function looksLikeWeakTitle(value: string) {
 }
 
 function cleanFieldText(fieldKey: string, value: string, fallback: string) {
+  const raw = String(value ?? "").replace(/\r/g, "").trim();
   const base =
-    fieldKey === "outline" ? cleanGeneratedText(value) : cleanSummaryText(value);
-  const cleaned = base
-    .replace(/^(?:summary|description|notes|outline|purpose|title|rule name|rule \/ internal logic)\s*:\s*/i, "")
+    fieldKey === "outline"
+      ? cleanGeneratedText(value)
+      : fieldKey === "desiredMood" || fieldKey === "type" || fieldKey === "status"
+        ? cleanStructuredText(value)
+        : cleanSummaryText(value);
+  const cleaned = (base || raw)
+    .replace(/^(?:summary|description|notes|outline|purpose|title|desired mood|mood|type|status|rule name|rule \/ internal logic)\s*:\s*/i, "")
     .trim();
   return cleaned || fallback;
 }
