@@ -11,6 +11,7 @@ import { getProjectWorkspace } from "@/lib/project-data";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { mutateSkeleton, mutateStoryBible, updateChapter } from "@/lib/story-service";
 import { compactText } from "@/lib/utils";
+import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import type {
   AssistFieldKey,
   CharacterRecord,
@@ -176,6 +177,10 @@ function looksLikePlaceholderValue(value: string) {
 }
 
 async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string) {
+  if ((process.env.VERCEL === "1" || isHostedBetaEnabled()) && process.env.STORYFORGE_LIVE_TARGETED_AI !== "1") {
+    return fallback;
+  }
+
   try {
     const raw = await generateTextWithProvider(prompt, { maxOutputTokens });
     const generated = raw?.trim();
