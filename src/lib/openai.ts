@@ -1840,7 +1840,10 @@ function mockCoach(context: ContextPackage, instruction: string) {
 }
 
 function balanceFallbackFormatting(value: string) {
-  let text = value.trim();
+  let text = value
+    .trim()
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/([.!?])\s+"/g, '$1"');
   if ((text.match(/"/g) ?? []).length % 2 === 1) {
     text += '"';
   }
@@ -1850,7 +1853,23 @@ function balanceFallbackFormatting(value: string) {
   return /[.!?]["*']?$/.test(text) ? text : `${text}.`;
 }
 
+function paragraphizeFallback(value: string) {
+  const sentences = value.match(/[^.!?]+[.!?]+(?:["']+)?/g)?.map((entry) => entry.trim()).filter(Boolean) ?? [];
+  if (sentences.length < 5) {
+    return value;
+  }
+
+  const paragraphCount = Math.min(4, Math.max(3, Math.ceil(sentences.length / 3)));
+  const paragraphs: string[] = [];
+  const perParagraph = Math.ceil(sentences.length / paragraphCount);
+  for (let index = 0; index < sentences.length; index += perParagraph) {
+    paragraphs.push(sentences.slice(index, index + perParagraph).join(" "));
+  }
+  return paragraphs.join("\n\n");
+}
+
 function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.1) {
+  const shouldKeepParagraphs = /\n\s*\n/.test(value);
   const minWords = Math.max(1, Math.floor(targetWords * (1 - tolerance)));
   const maxWords = Math.max(minWords, Math.ceil(targetWords * (1 + tolerance)));
   let words = value.trim().split(/\s+/).filter(Boolean);
@@ -1872,7 +1891,8 @@ function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.
     words = words.slice(0, maxWords);
   }
 
-  return balanceFallbackFormatting(words.join(" ").replace(/[,:;\-]+$/, "").trim());
+  const balanced = balanceFallbackFormatting(words.join(" ").replace(/[,:;\-]+$/, "").trim());
+  return shouldKeepParagraphs ? paragraphizeFallback(balanced) : balanced;
 }
 
 function mockRevision(actionType: AssistActionType, selectionText: string, instruction: string) {
