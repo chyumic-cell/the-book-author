@@ -1385,30 +1385,42 @@ async function runPromptTask(options: {
   let cleaned = options.clean ? options.clean(content) : content.trim();
 
   if (options.enforceOutlineDepth && options.chapter && cleaned.trim()) {
-    cleaned = await repairThinOutlineIfNeeded({
-      project: options.project,
-      chapter: options.chapter,
-      context: options.context,
-      content: cleaned,
-    });
+    try {
+      cleaned = await repairThinOutlineIfNeeded({
+        project: options.project,
+        chapter: options.chapter,
+        context: options.context,
+        content: cleaned,
+      });
+    } catch (error) {
+      console.warn("[ai] outline repair failed; keeping generated outline", error);
+    }
   }
 
   if (options.enforceChapterLength && options.chapter && cleaned.trim()) {
-    cleaned = await expandShortChapterIfNeeded({
-      project: options.project,
-      chapter: options.chapter,
-      context: options.context,
-      content: cleaned,
-    });
+    try {
+      cleaned = await expandShortChapterIfNeeded({
+        project: options.project,
+        chapter: options.chapter,
+        context: options.context,
+        content: cleaned,
+      });
+    } catch (error) {
+      console.warn("[ai] chapter expansion repair failed; keeping generated draft", error);
+    }
   }
 
   if (options.repairChapterEnding && options.chapter && cleaned.trim()) {
-    cleaned = await repairChapterEndingIfNeeded({
-      project: options.project,
-      chapter: options.chapter,
-      context: options.context,
-      content: cleaned,
-    });
+    try {
+      cleaned = await repairChapterEndingIfNeeded({
+        project: options.project,
+        chapter: options.chapter,
+        context: options.context,
+        content: cleaned,
+      });
+    } catch (error) {
+      console.warn("[ai] chapter ending repair failed; keeping generated draft", error);
+    }
   }
 
   return {
@@ -1734,11 +1746,23 @@ async function enforceInlineTransformationIfNeeded(options: {
 }
 
 function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: ContextPackage) {
+  const protagonist = project.characters[0]?.name ?? "the protagonist";
+  const opposition = project.characters[1]?.name ?? "the opponent";
+  const ruleTitle = project.workingNotes[0]?.title ?? "the central rule";
+  const ruleSignal = project.workingNotes[0]?.content
+    ? truncateText(project.workingNotes[0].content, 120)
+    : project.premise || "the world rule changes the cost of every choice";
+  const thread = context.activePlotThreads[0]?.title ?? context.chapterGoal ?? "the main conflict";
+  const constraint = context.continuityConstraints[0]?.suggestedContext ?? "the latest consequence";
+
   return [
-    `1. Hook the chapter with ${chapterTitle} starting inside active pressure.`,
-    `2. Bring in ${context.activePlotThreads[0]?.title ?? "the main plot thread"} before the midpoint.`,
-    `3. Force a choice that complicates ${context.continuityConstraints[0]?.relatedEntity || "the current promise"}.`,
-    "4. End with a revelation, sharper question, or practical setback that carries the reader forward.",
+    `1. Open ${chapterTitle} in immediate pressure: ${protagonist} is already reacting to ${thread}, not waiting for the plot to begin.`,
+    `2. Put ${protagonist} into dialogue with ${opposition}, letting accusation, denial, bargaining, or threat reveal what each one wants from the scene.`,
+    `3. Bring ${ruleTitle} onto the page through action: ${ruleSignal}. Show its cost through a concrete choice rather than an explanation dump.`,
+    `4. Force ${protagonist} to notice a contradiction in the room, record, witness, law, or promise that changes the meaning of the opening pressure.`,
+    `5. Escalate the opposition so ${protagonist} cannot solve the problem by asking one clean question; someone must lie, withhold proof, or make a public demand.`,
+    `6. Turn the chapter at the midpoint with a discovery that makes ${ruleTitle} personal and dangerous, especially if ${context.continuityConstraints[0]?.relatedEntity || "a trusted bond"} is involved.`,
+    `7. End with ${protagonist} making a choice that creates a new cost, exposes a new enemy, or locks the next chapter into motion.`,
   ].join("\n");
 }
 
@@ -2015,13 +2039,17 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
   });
 
   if (hostedFastMode && result.content.trim()) {
-    result.content = await repairDialogueHeavyChapterIfNeeded({
-      project,
-      chapter,
-      context,
-      content: result.content,
-      additionalInstruction,
-    });
+    try {
+      result.content = await repairDialogueHeavyChapterIfNeeded({
+        project,
+        chapter,
+        context,
+        content: result.content,
+        additionalInstruction,
+      });
+    } catch (error) {
+      console.warn("[ai] dialogue-heavy repair failed; keeping generated draft", error);
+    }
   }
 
   return result;
