@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { assessManuscriptEnding, cleanGeneratedText, cleanInlineSuggestionText, sanitizeManuscriptText } from "@/lib/ai-output";
+import {
+  assessManuscriptEnding,
+  cleanAiFieldText,
+  cleanGeneratedText,
+  cleanInlineSuggestionText,
+  looksLikeAiLeakage,
+  sanitizeManuscriptText,
+} from "@/lib/ai-output";
 
 describe("ai output cleanup", () => {
   it("strips editorial notes and chapter-end markers from manuscript text", () => {
@@ -104,5 +111,15 @@ The chapter ends with Lucius staring at the Temple and realizing the city is alr
 
     expect(assessment.needsRepair).toBe(true);
     expect(assessment.isTruncated).toBe(true);
+  });
+
+  it("rejects leaked AI reasoning and raw app field paths from app fields", () => {
+    expect(looksLikeAiLeakage("The user wants me to fill the character dossier.")).toBe(true);
+    expect(looksLikeAiLeakage("dossier.relationshipDynamics.hiddenLoyalties:: Loyal before the court.")).toBe(true);
+    expect(looksLikeAiLeakage("guarded | precise | grief-driven")).toBe(true);
+    expect(cleanAiFieldText("quickProfile.age :: David Weiss should remain specific.", "Adult")).toBe("Adult");
+    expect(cleanAiFieldText("Educated court register with faint regional roughness.", "")).toBe(
+      "Educated court register with faint regional roughness.",
+    );
   });
 });

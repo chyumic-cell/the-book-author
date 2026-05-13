@@ -8,7 +8,7 @@ import {
 } from "@/lib/assistant-site-map";
 import { APP_NAME } from "@/lib/brand";
 import { buildContextPackage } from "@/lib/memory";
-import { cleanGeneratedText, cleanSummaryText, sanitizeManuscriptText } from "@/lib/ai-output";
+import { cleanAiFieldText, cleanGeneratedText, cleanSummaryText, looksLikeAiLeakage, sanitizeManuscriptText } from "@/lib/ai-output";
 import { generateChapterOutline, generateTextWithProvider } from "@/lib/openai";
 import { buildPromptEnvelope } from "@/lib/prompt-templates";
 import { getChapterById, getProjectWorkspace } from "@/lib/project-data";
@@ -643,7 +643,7 @@ function cleanTitleText(value: string, fallback = "") {
 }
 
 function cleanShortFieldText(fieldKey: AssistFieldKey, value: string, fallback = "") {
-  const cleaned = cleanSummaryText(value)
+  const cleaned = cleanAiFieldText(cleanSummaryText(value), "")
     .replace(new RegExp(`^${fieldLabel(fieldKey).replace(/\s+/g, "\\s+")}\\s*:\\s*`, "i"), "")
     .replace(/^(?:summary|purpose|beat|mood)\s*:\s*/i, "")
     .trim();
@@ -656,6 +656,9 @@ function cleanOutlineText(value: string, fallback = "") {
     .replace(/^(?:chapter\s+\d+\s*)?outline\s*:\s*/i, "")
     .trim();
 
+  if (looksLikeAiLeakage(cleaned)) {
+    return fallback.trim();
+  }
   return cleaned || fallback.trim();
 }
 
@@ -725,7 +728,7 @@ function cleanChapterFieldContent(
   fallback = "",
 ) {
   if (CHAPTER_LIST_FIELDS.has(fieldKey)) {
-    const cleanedList = cleanStringList(value);
+    const cleanedList = cleanStringList(cleanAiFieldText(value, ""));
     return cleanedList.length > 0 ? cleanedList.join("\n") : cleanStringList(fallback).join("\n");
   }
 
@@ -792,6 +795,7 @@ function cleanStringList(value: unknown) {
     return value
       .split(/\n|,/)
       .map((entry) => entry.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
+      .filter((entry) => !looksLikeAiLeakage(entry))
       .filter(Boolean);
   }
 
@@ -1251,7 +1255,7 @@ function cleanTextPayloadValue(value: unknown) {
     return value;
   }
 
-  return cleanGeneratedText(String(value ?? "").trim());
+  return cleanAiFieldText(value, "");
 }
 
 function cleanProgressMarkers(value: unknown) {

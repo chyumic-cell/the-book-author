@@ -107,6 +107,40 @@ function stripLeadingWrapper(value: unknown) {
   return text.trim();
 }
 
+const aiLeakagePattern =
+  /(?:\b(?:the user wants|the user asked|i need to|we need to|i should|we should|let'?s|return only|field path|requested field|target field|target area|current field value|rejected result|instruction says|do not output|json only|strict json|app-ready|canon-safe|the dossier|this field should|should remain specific)\b|(?:dossier|quickProfile|currentState|relationshipDynamics|personalityBehavior|speechLanguage|basicIdentity|lifePosition)\.)/i;
+const aiLeakageLeadPattern =
+  /^(?:okay|alright|sure|certainly|here(?:'s| is)|below is|first[, ]|wait[, ]|let(?:'s| us)|i(?:'ll| will| need to| should)|we(?: need to| should| must)|the user wants|the instruction says)\b/i;
+const repeatedTraitTripletPattern = /^(?:guarded|precise|grief[- ]driven)(?:\s*(?:[|,;]|\n)\s*(?:guarded|precise|grief[- ]driven)){1,4}$/i;
+
+export function looksLikeAiLeakage(value: unknown) {
+  const text = asText(value).trim();
+  if (!text) {
+    return false;
+  }
+  const normalized = text.replace(/\s+/g, " ");
+  return aiLeakageLeadPattern.test(normalized) || aiLeakagePattern.test(normalized) || repeatedTraitTripletPattern.test(normalized);
+}
+
+export function cleanAiFieldText(value: unknown, fallback = "") {
+  const cleaned = cleanStructuredText(value)
+    .replace(/^(?:value|answer|field|result)\s*:\s*/i, "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
+
+  if (!cleaned || looksLikeAiLeakage(cleaned)) {
+    return fallback.trim();
+  }
+
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !looksLikeAiLeakage(line));
+
+  return (lines.join("\n").trim() || fallback.trim()).trim();
+}
+
 export function cleanStructuredText(value: unknown) {
   return stripLeadingWrapper(value)
     .replace(/\r/g, "")

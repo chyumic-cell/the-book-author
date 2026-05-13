@@ -1,5 +1,5 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
-import { cleanGeneratedText, cleanStructuredText, cleanSummaryText } from "@/lib/ai-output";
+import { cleanAiFieldText, cleanGeneratedText, cleanStructuredText, cleanSummaryText, looksLikeAiLeakage } from "@/lib/ai-output";
 import {
   normalizeCharacterDossier,
   normalizeCharacterQuickProfile,
@@ -78,11 +78,14 @@ function cleanFieldText(fieldKey: string, value: string, fallback: string) {
     fieldKey === "outline"
       ? cleanGeneratedText(value)
       : fieldKey === "desiredMood" || fieldKey === "type" || fieldKey === "status"
-        ? cleanStructuredText(value)
+        ? cleanAiFieldText(value, "")
         : cleanSummaryText(value);
   const cleaned = (base || raw)
     .replace(/^(?:summary|description|notes|outline|purpose|title|desired mood|mood|type|status|rule name|rule \/ internal logic)\s*:\s*/i, "")
     .trim();
+  if (looksLikeAiLeakage(cleaned)) {
+    return fallback;
+  }
   return cleaned || fallback;
 }
 
@@ -145,6 +148,7 @@ function storyBibleFieldLooksThin(fieldKey: string, value: string) {
 function looksLikeMetaOutput(value: string) {
   const normalized = value.trim().toLowerCase();
   return (
+    looksLikeAiLeakage(value) ||
     normalized.startsWith("okay") ||
     normalized.startsWith("alright") ||
     normalized.startsWith("let me") ||
@@ -316,11 +320,17 @@ function fallbackSkeletonFieldValue(
 function fallbackCharacterFieldValue(character: CharacterRecord, project: ProjectWorkspace, path: string) {
   const name = character.name || mainCharacterName(project, "this character");
   const lower = path.toLowerCase();
+  const centralConflict = compactText(canonSeed(project), 120);
+  const role = character.role || character.quickProfile.profession || "central-story insider";
+  const settingHome = project.bookSettings.storyBrief || project.premise || "the main story world";
+  if (lower === "quickprofile.age" || lower.endsWith(".age")) return "Adult; exact age not fixed in canon yet.";
+  if (lower === "quickprofile.profession") return character.quickProfile.profession || character.role || "Pressure-tested insider tied to the central conflict.";
+  if (lower === "quickprofile.placeofliving") return character.quickProfile.placeOfLiving || `Lives close to the pressure point of ${compactText(settingHome, 80)}.`;
   if (lower.endsWith("summary")) {
-    return `${name} is a pressure-tested figure shaped by the book's central conflict, guarded in public and dangerous when forced to speak plainly.`;
+    return `${name} is a pressure-tested ${role} shaped by ${centralConflict}, controlled in public but dangerous when forced to speak plainly.`;
   }
-  if (lower.endsWith("role")) return "Protagonist under pressure";
-  if (lower.endsWith("archetype")) return "Wounded court survivor";
+  if (lower.endsWith("role")) return character.role || "Key supporting character under pressure";
+  if (lower.endsWith("archetype")) return "Burdened insider with a private cost";
   if (lower.endsWith("goal") || lower.endsWith("shorttermgoal")) return "Stop the immediate harm without losing what little control remains.";
   if (lower.endsWith("fear") || lower.endsWith("feartriggers")) return "Being forced to pay a personal emotional cost for someone else's power.";
   if (lower.endsWith("secret") || lower.endsWith("secrets")) return "Knows more about the ruling bargain than he admits | hides a private grief tied to the central rule";
@@ -341,16 +351,51 @@ function fallbackCharacterFieldValue(character: CharacterRecord, project: Projec
   if (lower.endsWith("loyalties")) return "Loyal to the vulnerable before the court, but distrustful of every faction.";
   if (lower.endsWith("recentchanges")) return "Recent pressure has made neutrality impossible.";
   if (lower.endsWith("continuityrisks")) return "Do not let him forget the cost of the central rule or speak like a casual modern narrator.";
-  if (CHARACTER_LIST_FIELD_PATHS.has(path)) {
-    return "guarded | precise | grief-driven";
-  }
+  if (lower.endsWith("basicidentity.fullname")) return name;
+  if (lower.endsWith("basicidentity.nicknames")) return `${name.split(/\s+/)[0] || name} | the quiet witness`;
+  if (lower.endsWith("basicidentity.dateofbirth")) return "Not fixed in canon yet; keep consistent once chosen.";
+  if (lower.endsWith("basicidentity.gender")) return "Not fixed in canon yet.";
+  if (lower.endsWith("basicidentity.culturalbackground")) return "Rooted in the book's main culture and marked by its social tensions.";
+  if (lower.endsWith("basicidentity.nationality")) return "Local to the primary story region unless later canon says otherwise.";
+  if (lower.endsWith("basicidentity.currentresidence")) return `Near the center of ${compactText(settingHome, 70)}.`;
+  if (lower.endsWith("basicidentity.placeoforigin")) return "Raised close enough to power to understand its language, but not safely inside it.";
+  if (lower.endsWith("basicidentity.beliefsystem")) return "Practical public piety mixed with private doubt.";
+  if (lower.endsWith("basicidentity.maritalstatus")) return "Not fixed in canon yet.";
+  if (lower.endsWith("basicidentity.familystatus")) return "Carries family pressure that complicates every public choice.";
+  if (lower.endsWith("lifeposition.profession")) return character.quickProfile.profession || character.role || "Court-connected fixer with dangerous access.";
+  if (lower.endsWith("lifeposition.workplace")) return "Moves between official rooms, back channels, and places where the powerless ask for help.";
+  if (lower.endsWith("lifeposition.roletitle")) return character.role || "Unofficial problem-solver";
+  if (lower.endsWith("lifeposition.socialclass")) return "Respected enough to be useful, vulnerable enough to be expendable.";
+  if (lower.endsWith("lifeposition.educationlevel")) return "Educated, observant, and trained to read subtext.";
+  if (lower.endsWith("lifeposition.trainingbackground")) return "Learned procedure, etiquette, and survival by watching powerful people lie politely.";
+  if (lower.endsWith("lifeposition.militarybackground")) return "No fixed military history unless later canon adds it.";
+  if (lower.endsWith("lifeposition.criminalrecord")) return "Clean on paper, compromised by favors and quiet bargains.";
+  if (lower.endsWith("lifeposition.politicalorientation")) return "Publicly cautious; privately loyal to whoever prevents the next harm.";
+  if (lower.endsWith("lifeposition.reputation")) return "Useful, discreet, hard to read, and more compassionate than his enemies assume.";
+  if (lower.endsWith("personalitybehavior.coretraits")) return "controlled | observant | protective | suspicious";
+  if (lower.endsWith("personalitybehavior.virtues")) return "protects people with less power | keeps promises under pressure | notices what others miss";
+  if (lower.endsWith("personalitybehavior.flaws")) return "withholds truth too long | assumes betrayal too quickly | mistakes control for safety";
+  if (lower.endsWith("motivationstory.secrets")) return "Knows more about the ruling bargain than he admits | hides a private grief tied to the central rule";
+  if (lower.endsWith("speechlanguage.otherlanguages")) return "formal court register | marketplace idiom when anger slips";
+  if (lower.endsWith("speechlanguage.descriptors")) return "measured | formal | dry-edged | emotionally contained";
+  if (lower.endsWith("speechlanguage.repeatedphrases")) return "Say it plainly. | That is not what the bargain says.";
+  if (lower.endsWith("speechlanguage.favoriteexpressions")) return "A debt is still a debt. | Words cost less than truth.";
+  if (lower.endsWith("bodypresence.distinguishingfeatures")) return "watchful eyes | formal clothes worn like armor | stillness before answering";
+  if (lower.endsWith("bodypresence.habitstics")) return "smooths a cuff before lying | pauses one beat before saying a name | lowers his voice instead of raising it";
+  if (lower.endsWith("relationshipdynamics.friends")) return "one cautious ally who knows part of the truth | a vulnerable person he quietly protects";
+  if (lower.endsWith("relationshipdynamics.enemies")) return "officials who profit from the central bargain | anyone who turns suffering into policy";
+  if (lower.endsWith("relationshipdynamics.rivals")) return "a sharper insider competing for influence | a public moralist with private compromises";
+  if (lower.endsWith("relationshipdynamics.loversexes")) return "A past attachment remains politically dangerous and emotionally unfinished.";
+  if (lower.endsWith("relationshipdynamics.family")) return "Family ties carry duty, silence, and old grief rather than easy comfort.";
+  if (lower.endsWith("relationshipdynamics.mentors")) return "An older authority taught him etiquette, leverage, and the price of obedience.";
+  if (lower.endsWith("relationshipdynamics.subordinatessuperiors")) return "Careful with superiors, protective but demanding with anyone under his care.";
   if (lower.includes("identity.fullname")) return name;
   if (lower.includes("lifePosition") || lower.includes("lifeposition")) return "Court fixer with precarious status and dangerous access.";
   if (lower.includes("personalitybehavior")) return "Controlled, observant, suspicious, and slow to trust.";
   if (lower.includes("motivationstory")) return "Wants to prevent the next harm while privately fearing the cost will find him.";
   if (lower.includes("bodypresence")) return "Still posture, watchful eyes, formal clothes worn like armor.";
   if (lower.includes("relationshipdynamics")) return "Maintains useful alliances, hidden tensions, and very few safe confidants.";
-  return `${name} should remain specific, emotionally grounded, and synchronized with the book's central conflict.`;
+  return `${name} carries a concrete stake in ${centralConflict}, with choices shaped by private pressure rather than generic heroics.`;
 }
 
 function fallbackCharacterFieldLines(character: CharacterRecord, project: ProjectWorkspace, fieldPaths: string[]) {
@@ -420,7 +465,8 @@ function normalizeChapterFieldUpdate(fieldKey: AssistFieldKey, currentValue: str
   }
 
   if (chapterListFields.has(fieldKey)) {
-    return { [fieldKey]: splitLines(generated) } as Parameters<typeof updateChapter>[1];
+    const cleaned = cleanAiFieldText(generated, currentValue);
+    return { [fieldKey]: splitLines(cleaned || currentValue) } as Parameters<typeof updateChapter>[1];
   }
 
   return { [fieldKey]: cleanFieldText(fieldKey, generated, currentValue) } as Parameters<typeof updateChapter>[1];
@@ -508,8 +554,14 @@ function buildChapterDraftPatchFromRecord(draftItem?: Record<string, unknown>) {
       continue;
     }
     const textValue = String(raw ?? "").trim();
-    if (textValue && !looksLikePlaceholderValue(textValue)) {
-      patch[fieldKey] = textValue;
+    const cleanedTextValue =
+      fieldKey === "draft"
+        ? cleanGeneratedText(textValue)
+        : fieldKey === "outline"
+          ? cleanFieldText(fieldKey, textValue, "")
+          : cleanAiFieldText(textValue, "");
+    if (cleanedTextValue && !looksLikePlaceholderValue(cleanedTextValue) && !looksLikeMetaOutput(cleanedTextValue)) {
+      patch[fieldKey] = cleanedTextValue;
     }
   }
 
@@ -1153,6 +1205,79 @@ function setCharacterFieldPath(target: Record<string, unknown>, path: string, va
   });
 }
 
+function characterPayloadLeafCount(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean).length;
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).reduce<number>(
+      (sum, entry) => sum + characterPayloadLeafCount(entry),
+      0,
+    );
+  }
+  return String(value ?? "").trim() ? 1 : 0;
+}
+
+function looksLikeCharacterFieldGarbage(path: string, value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (looksLikeMetaOutput(value)) {
+    return true;
+  }
+  if (
+    normalized.includes("::") ||
+    normalized.includes("=>") ||
+    normalized.includes("dossier.") ||
+    normalized.includes("quickprofile.") ||
+    normalized.includes("currentstate.") ||
+    normalized.includes("relationshipdynamics") ||
+    normalized.includes("personalitybehavior") ||
+    normalized.includes("speechlanguage") ||
+    normalized.includes("basicidentity") ||
+    normalized.includes("lifeposition")
+  ) {
+    return true;
+  }
+  if (
+    normalized.includes("should remain specific") ||
+    normalized.includes("canon-safe") ||
+    normalized.includes("requested field") ||
+    normalized.includes("field path") ||
+    normalized.includes("the dossier") ||
+    normalized.includes("app-ready")
+  ) {
+    return true;
+  }
+  if (/^(guarded|precise|grief[- ]driven)(?:\s*[|,]\s*(guarded|precise|grief[- ]driven)){1,3}$/i.test(value.trim())) {
+    return true;
+  }
+  if (path === "quickProfile.age" && value.trim().split(/\s+/).length > 9) {
+    return true;
+  }
+  return false;
+}
+
+function cleanCharacterLineValue(path: string, rawValue: string) {
+  const cleaned = cleanAiFieldText(rawValue, "");
+  if (looksLikeCharacterFieldGarbage(path, cleaned)) {
+    return null;
+  }
+  if (CHARACTER_LIST_FIELD_PATHS.has(path)) {
+    const items = splitLines(cleaned)
+      .map((entry) => entry.replace(/^["'`]+|["'`]+$/g, "").trim())
+      .filter((entry) => entry && !looksLikeCharacterFieldGarbage(path, entry));
+    const normalizedItems = items.map((entry) => entry.toLowerCase());
+    const uniqueItems = items.filter((entry, index) => normalizedItems.indexOf(entry.toLowerCase()) === index).slice(0, 5);
+    if (uniqueItems.length === 0) {
+      return null;
+    }
+    return uniqueItems;
+  }
+  return cleaned;
+}
+
 function inferCharacterEmotionalStateFromRecord(character: CharacterRecord) {
   const explicit = String(character.currentState.emotionalState ?? "").trim();
   if (explicit) {
@@ -1194,39 +1319,36 @@ function inferCharacterEmotionalStateFromRecord(character: CharacterRecord) {
 
 function parseCharacterFieldLines(raw: string, allowedPaths: string[]) {
   const payload: Record<string, unknown> = {};
-  const cleanedRaw = raw
+  const cleanedLines = raw
     .replace(/```[a-z]*|```/gi, " ")
-    .replace(/\r?\n/g, " ")
-    .replace(/\s*\.\s*/g, ".")
-    .replace(/\s+/g, " ");
-  const markers = allowedPaths
-    .map((path) => {
-      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const match = cleanedRaw.match(new RegExp(`${escaped}\\s*(?:::|=>|=)`, "i"));
-      if (!match || match.index == null) {
-        return null;
-      }
-      return {
-        path,
-        index: match.index,
-        markerLength: match[0].length,
-      };
-    })
-    .filter((entry): entry is { path: string; index: number; markerLength: number } => Boolean(entry))
-    .sort((left, right) => left.index - right.index);
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const pathMatchers = allowedPaths
+    .slice()
+    .sort((left, right) => right.length - left.length)
+    .map((path) => ({ path, normalized: path.toLowerCase() }));
 
-  for (const [index, marker] of markers.entries()) {
-    const valueStart = marker.index + marker.markerLength;
-    const valueEnd = markers[index + 1]?.index ?? cleanedRaw.length;
-    const value = cleanedRaw.slice(valueStart, valueEnd).trim();
-    if (!value) {
-      continue;
+  for (const line of cleanedLines) {
+    for (const matcher of pathMatchers) {
+      if (!line.toLowerCase().startsWith(matcher.normalized)) {
+        continue;
+      }
+      const rest = line.slice(matcher.path.length).trimStart();
+      const delimiter = ["::", "=>", "="].find((entry) => rest.startsWith(entry));
+      if (!delimiter) {
+        continue;
+      }
+      const value = rest.slice(delimiter.length).trim();
+      if (!value) {
+        break;
+      }
+      const cleanedValue = cleanCharacterLineValue(matcher.path, value);
+      if (cleanedValue !== null) {
+        setCharacterFieldPath(payload, matcher.path, cleanedValue);
+      }
+      break;
     }
-    setCharacterFieldPath(
-      payload,
-      marker.path,
-      CHARACTER_LIST_FIELD_PATHS.has(marker.path) ? splitLines(value.replace(/\s+\w+\.$/, "")) : value,
-    );
   }
 
   return payload;
@@ -1842,6 +1964,9 @@ export async function runTargetedCharacterAi(input: {
           "Keep values compact, concrete, and immediately usable inside the app.",
           "Use short lists for array fields and short, vivid phrases for string fields.",
           "Do not output commentary.",
+          "Do not describe what the field should do. Put the actual character fact, behavior, speech rule, or relationship in the field.",
+          "Do not reuse the same three generic traits across unrelated fields.",
+          "Do not include field names, JSON keys, app instructions, or words like dossier, canon-safe, requested field, or should remain specific inside field values.",
           "Every requested field path must appear exactly once in your answer, even if the value is short.",
           "Do not collapse multiple requested fields into one paragraph. Emit one path line per field.",
           "Return exactly one line per requested field using this format: path :: value",
@@ -1863,6 +1988,8 @@ export async function runTargetedCharacterAi(input: {
             `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> ${section.label}.`,
             "Return exactly one line per requested field using the format path :: value.",
             "For list fields, separate items with |.",
+            "Write the final field values only. Do not talk about the request, the app, field paths, or what the values should accomplish.",
+            "Every field must receive a different, field-appropriate answer.",
             `Requested field paths:\n- ${fieldPaths.join("\n- ")}`,
             input.instruction ? `Additional request context:\n${input.instruction}` : "",
             `Rejected answer:\n${raw ?? ""}`,
@@ -1877,9 +2004,12 @@ export async function runTargetedCharacterAi(input: {
       }),
     );
 
+    let parsedLeafCount = 0;
     for (const result of sectionResults) {
       const resultRaw = cleanGeneratedText(result.raw ?? "").trim();
-      if (resultRaw.length > fallbackDossier.length) {
+      const resultLeafCount = characterPayloadLeafCount(result.parsed);
+      parsedLeafCount += resultLeafCount;
+      if (resultLeafCount === 0 && resultRaw.length > fallbackDossier.length) {
         fallbackDossier = resultRaw;
       }
       aggregatePayload = mergeCharacterAiPayload(
@@ -1894,7 +2024,7 @@ export async function runTargetedCharacterAi(input: {
       workingCharacter,
       aggregatePayload,
       null,
-      fallbackDossier,
+      parsedLeafCount === 0 ? fallbackDossier : "",
     );
     const previewCharacter = applyCharacterPatch(workingCharacter, mergedPayload);
     const missingPaths = sectionPrompts.flatMap((section) =>
@@ -1923,6 +2053,7 @@ export async function runTargetedCharacterAi(input: {
         "Return exactly one line per requested field using this format: path :: value",
         "For list fields, separate items with | on the same line.",
         "Do not output commentary.",
+        "Write actual field values. Do not write field names, app instructions, or generic repeated trait triplets as values.",
         "Fill only the missing fields listed below. Keep everything consistent with the current saved character values.",
         input.instruction ? `Additional request context:\n${input.instruction}` : "",
         `Missing field paths:\n- ${missingPaths.join("\n- ")}`,
@@ -1986,3 +2117,12 @@ export async function runTargetedCharacterAi(input: {
     contextPackage: null,
   };
 }
+
+export const __targetedFieldAiTestUtils = {
+  characterPayloadLeafCount,
+  cleanCharacterLineValue,
+  collectCharacterFieldPaths,
+  fallbackCharacterFieldLines,
+  mergeCharacterAiPayload,
+  parseCharacterFieldLines,
+};
