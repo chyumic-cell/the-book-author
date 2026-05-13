@@ -2243,13 +2243,21 @@ export async function generateChapterOutline(projectId: string, chapterId: strin
 
   const context = buildContextPackage(project, chapterId);
   const hostedFastMode = isHostedFastDraftMode();
+  const mockContent = mockOutline(project, chapter.title, context);
+  if (hostedFastMode && process.env.STORYFORGE_LIVE_HOSTED_OUTLINE_AI !== "1") {
+    return {
+      content: cleanStructuredText(mockContent),
+      contextPackage: context,
+    };
+  }
+
   return runPromptTask({
     task: "Generate chapter outline",
     project,
     context,
     instruction: withAdditionalInstruction(formatChapterInstruction(chapter, "outline"), additionalInstruction),
     maxOutputTokens: hostedFastMode ? hostedOutlineOutputTokenBudget() : 1100,
-    mockContent: mockOutline(project, chapter.title, context),
+    mockContent,
     clean: cleanStructuredText,
     chapter,
     enforceOutlineDepth: true,
