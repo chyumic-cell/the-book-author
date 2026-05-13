@@ -1816,9 +1816,126 @@ function mockCoach(context: ContextPackage, instruction: string) {
   ].join("\n");
 }
 
+function balanceFallbackFormatting(value: string) {
+  let text = value.trim();
+  if ((text.match(/"/g) ?? []).length % 2 === 1) {
+    text += '"';
+  }
+  if ((text.match(/\*/g) ?? []).length % 2 === 1) {
+    text += "*";
+  }
+  return /[.!?]["*']?$/.test(text) ? text : `${text}.`;
+}
+
+function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.1) {
+  const minWords = Math.max(1, Math.floor(targetWords * (1 - tolerance)));
+  const maxWords = Math.max(minWords, Math.ceil(targetWords * (1 + tolerance)));
+  let words = value.trim().split(/\s+/).filter(Boolean);
+
+  const expansionFiller = [
+    "The choice hardened because silence now had a price.",
+    "Malket measured every face for the person brave enough to answer.",
+    "No one moved, and that stillness made the lie louder.",
+    "The cup waited between them like a verdict.",
+    "Even the witnesses seemed afraid to remember what they had heard.",
+  ];
+  let fillerIndex = 0;
+  while (words.length < minWords) {
+    words = [...words, ...expansionFiller[fillerIndex % expansionFiller.length].split(/\s+/)];
+    fillerIndex += 1;
+  }
+
+  if (words.length > maxWords) {
+    words = words.slice(0, maxWords);
+  }
+
+  return balanceFallbackFormatting(words.join(" ").replace(/[,:;\-]+$/, "").trim());
+}
+
 function mockRevision(actionType: AssistActionType, selectionText: string, instruction: string) {
-  const seed = selectionText || instruction;
-  return `${seed}\n\n[${APP_NAME} ${actionType.toLowerCase()} pass] Heighten specificity, sharpen the beat change, and keep the sentence rhythm a little more tensile.`;
+  const seed = (selectionText || instruction || "").trim();
+  const sourceWords = roughWordCount(seed);
+
+  switch (actionType) {
+    case "EXPAND":
+      return fitFallbackWordCount(
+        [
+          "Malket stood at the edge of the oath feast, close enough to see Prince Sarun's thumb tremble against the silver cup.",
+          "The old nobles leaned forward as if hunger itself had taught them manners, because a witnessed wish did not remain a wish for long; once spoken, it hardened into law before courage could reach the throat.",
+          "Malket knew the Witness Tithe would take a memory from someone in the hall. He also knew Sarun's smile was too calm for a man prepared to pay his own cost.",
+          "\"Name the payer,\" Malket said, and the music faltered.",
+          "Sarun looked at him with courtly pity. \"You always hear the wrong part of a miracle.\"",
+          "That was when Malket understood the trap: the prince had chosen another mind to empty, another life to hollow, and everyone polite enough to stay silent would help him do it.",
+        ].join("\n\n"),
+        Math.max(sourceWords * 3, sourceWords + 12),
+      );
+    case "TIGHTEN":
+      return fitFallbackWordCount(
+        "Malket watched Sarun lift the cup, knowing the Witness Tithe would steal someone else's memory.",
+        Math.max(Math.ceil(sourceWords / 3), 8),
+      );
+    case "ADD_DIALOGUE":
+    case "DESCRIPTION_TO_DIALOGUE":
+      return [
+        `"Name the payer," Malket said.`,
+        "",
+        `Prince Sarun's smile stayed gentle. "Careful. A question can become testimony."`,
+        "",
+        `"Then let it," Malket said. "If the Witness Tithe takes a memory tonight, the court deserves to know whose."`,
+        "",
+        `The nobles stopped breathing loudly enough for the cup to ring against Sarun's ring. "You mistake concern for authority," Sarun said.`,
+        "",
+        `"No," Malket said. "I mistake silence for guilt."`,
+      ].join("\n");
+    case "ADD_TENSION":
+      return [
+        "Malket saw the cup rise and understood that he had only a breath left.",
+        "",
+        "If Sarun spoke first, the wish would become law, and some stranger's dearest memory would vanish while the court applauded the miracle. If Malket interrupted, every witness in the hall would know he had challenged a prince in public.",
+        "",
+        "The musicians kept playing. That made it worse. It meant everyone had agreed to pretend this was ceremony, not theft.",
+        "",
+        "\"Wait,\" Malket said, and the word landed like a knife dropped onto porcelain.",
+      ].join("\n");
+    case "IMPROVE_PROSE":
+      return [
+        "Malket stood at the rim of the oath feast while Prince Sarun raised the silver cup into the candlelight.",
+        "",
+        "Every noble leaned forward. A witnessed wish did not wait politely for objections; once spoken, it settled into law with the cold certainty of a lock turning.",
+        "",
+        "Malket knew the Witness Tithe would take a memory from the speaker. He knew, too, from the prince's easy smile, that Sarun had already chosen someone else to lose what he could not bear to pay.",
+      ].join("\n");
+    case "SHARPEN_VOICE":
+      return [
+        "Malket stayed at the feast's edge, where a sensible man could still pretend he was only watching.",
+        "",
+        "Prince Sarun lifted the silver cup. The nobles bent toward him, silk whispering, eyes bright with the ugly hope of people about to profit from holiness.",
+        "",
+        "*Not yours to spend,* Malket thought.",
+        "",
+        "The Witness Tithe would take a memory. Sarun's face said he had already arranged whose.",
+      ].join("\n");
+    case "CONTINUE":
+      return [
+        "Malket did not look at the cup again. He looked at the witnesses.",
+        "",
+        "The queen's scribe had lowered his eyes too quickly. That was the first crack. Malket stepped away from the table, letting the nobles think he had surrendered the moment, and followed the scribe toward the archive door.",
+        "",
+        `"If you run," Malket said softly, "I will know the prince bought your silence."`,
+      ].join("\n");
+    case "NEXT_BEATS":
+      return [
+        "1. Malket follows the queen's scribe out of the feast before Sarun can complete the wish.",
+        "2. The scribe admits the Witness Tithe can be redirected through a hidden ledger.",
+        "3. Sarun's agent arrives, forcing Malket to choose between exposing the scheme publicly or protecting the person named as payment.",
+      ].join("\n");
+    default:
+      return [
+        seed || "Malket studies the room and chooses the dangerous question instead of the safe silence.",
+        "",
+        "The moment becomes sharper, more specific, and more costly without changing the scene's core facts.",
+      ].join("\n");
+  }
 }
 
 function buildAssistActionInstruction(actionType: AssistActionType) {
@@ -2155,30 +2272,54 @@ export async function assistSelection(input: {
         afterSelection: input.afterSelection,
       }),
   });
-  const enforcedContent = await enforceInlineLengthIfNeeded({
-    project,
-    context,
-    actionType: input.actionType,
-    selectionText: input.selectionText,
-    content: result.content,
-  });
-  const tensionSafeContent =
-    input.actionType === "ADD_TENSION"
-      ? await enforceTensionIfNeeded({
-          project,
-          context,
-          selectionText: input.selectionText,
-          content: enforcedContent,
-        })
-      : enforcedContent;
-  const transformedContent = await enforceInlineTransformationIfNeeded({
-    project,
-    context,
-    actionType: input.actionType,
-    selectionText: input.selectionText,
-    instruction: input.instruction,
-    content: tensionSafeContent,
-  });
+  const safeFallback = () =>
+    cleanInlineSuggestionAgainstContext(mockRevision(input.actionType, input.selectionText, input.instruction), {
+      beforeSelection: input.beforeSelection,
+      afterSelection: input.afterSelection,
+    });
+  let enforcedContent = result.content;
+  try {
+    enforcedContent = await enforceInlineLengthIfNeeded({
+      project,
+      context,
+      actionType: input.actionType,
+      selectionText: input.selectionText,
+      content: result.content,
+    });
+  } catch (error) {
+    console.warn("[ai] inline length repair failed; using safe fallback", error);
+    enforcedContent = safeFallback() || result.content;
+  }
+
+  let tensionSafeContent = enforcedContent;
+  if (input.actionType === "ADD_TENSION") {
+    try {
+      tensionSafeContent = await enforceTensionIfNeeded({
+        project,
+        context,
+        selectionText: input.selectionText,
+        content: enforcedContent,
+      });
+    } catch (error) {
+      console.warn("[ai] tension repair failed; using safe fallback", error);
+      tensionSafeContent = safeFallback() || enforcedContent;
+    }
+  }
+
+  let transformedContent = tensionSafeContent;
+  try {
+    transformedContent = await enforceInlineTransformationIfNeeded({
+      project,
+      context,
+      actionType: input.actionType,
+      selectionText: input.selectionText,
+      instruction: input.instruction,
+      content: tensionSafeContent,
+    });
+  } catch (error) {
+    console.warn("[ai] inline transformation repair failed; using safe fallback", error);
+    transformedContent = safeFallback() || tensionSafeContent;
+  }
   return {
     ...result,
     content: transformedContent,
