@@ -21,7 +21,11 @@ export async function POST(
       applyChanges: input.applyChanges,
     });
 
-    return ok(result);
+    return ok({
+      ...result,
+      message: result.reply,
+      assistantMessage: result.reply,
+    });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "The project copilot could not complete that request.");
   }
