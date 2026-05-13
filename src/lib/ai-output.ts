@@ -41,8 +41,15 @@ function splitParagraphs(value: string) {
 }
 
 function splitSentences(value: string) {
-  const matches = value.match(/[^.!?]+(?:[.!?]+|$)/g);
+  const matches = value.match(/[^.!?]+(?:[.!?]+(?:["']+)?|$)/g);
   return (matches ?? [value]).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+function normalizeQuoteSpacing(value: string) {
+  return value
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/([.!?])\s+(["'])(?=\s|$|[,.;:!?])/g, "$1$2")
+    .replace(/(["'])\s+([,.!?;:])/g, "$1$2");
 }
 
 function splitCompleteSentences(value: string) {
@@ -330,7 +337,7 @@ export function cleanInlineSuggestionText(value: unknown) {
     .map((paragraph) => balanceThoughtItalics(balanceDialogueQuotes(paragraph, issues), issues))
     .filter(Boolean);
 
-  const cleaned = cleanedParagraphs.join("\n\n").trim();
+  const cleaned = normalizeQuoteSpacing(cleanedParagraphs.join("\n\n").trim());
   return cleaned || cleanStructuredText(value);
 }
 
@@ -538,8 +545,9 @@ export function sanitizeManuscriptText(
       continue;
     }
 
-    seenParagraphs.push(sentenceSanitized);
-    cleanedParagraphs.push(sentenceSanitized);
+    const quoteNormalized = normalizeQuoteSpacing(sentenceSanitized);
+    seenParagraphs.push(quoteNormalized);
+    cleanedParagraphs.push(quoteNormalized);
   }
 
   const finalizedParagraphs = finalizeChapterEnding(cleanedParagraphs, issues);
