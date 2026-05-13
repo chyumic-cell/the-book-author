@@ -5222,6 +5222,72 @@ async function tryDirectStructuredAssistantAction(input: {
     allowSkeletonDirect &&
     input.applyChanges &&
     input.project.chapters.length > 0 &&
+    lower.includes("chapter") &&
+    lower.includes("outline") &&
+    (lower.includes("fill") || lower.includes("build") || lower.includes("develop") || lower.includes("update")) &&
+    (lower.includes("field") || lower.includes("not only update one field") || lower.includes("all chapter outline"))
+  ) {
+    const requestedFields: AssistFieldKey[] = ["title", "purpose", "currentBeat", "desiredMood", "outline"];
+    const targetChapters = directIntent.wantsAllChapters
+      ? [...input.project.chapters].sort((left, right) => left.number - right.number)
+      : [
+          getChapterById(input.project, input.chapterId) ??
+            input.project.chapters.find((chapter) => chapter.id === input.chapterId) ??
+            input.project.chapters[0],
+        ].filter(Boolean);
+
+    for (const chapter of targetChapters) {
+      for (const fieldKey of requestedFields) {
+        await runTargetedPlanningFieldAi({
+          projectId: input.projectId,
+          itemId: chapter.id,
+          itemTitle: chapter.title || `Chapter ${chapter.number}`,
+          fieldKey,
+          fieldLabel: fieldLabel(fieldKey),
+          action: "develop",
+          currentValue: String(chapter[fieldKey] ?? ""),
+          instruction: input.message,
+          draftItem: {
+            id: chapter.id,
+            title: chapter.title,
+            purpose: chapter.purpose,
+            currentBeat: chapter.currentBeat,
+            targetWordCount: chapter.targetWordCount,
+            desiredMood: chapter.desiredMood,
+            outline: chapter.outline,
+            keyBeats: chapter.keyBeats,
+            requiredInclusions: chapter.requiredInclusions,
+            forbiddenElements: chapter.forbiddenElements,
+            sceneList: chapter.sceneList,
+          },
+        });
+      }
+    }
+
+    const nextProject = (await getProjectWorkspace(input.projectId)) || input.project;
+    const contextPackage = input.chapterId ? buildContextPackage(nextProject, input.chapterId) : null;
+    return {
+      reply: `I filled the core chapter outline fields for ${targetChapters.length === 1 ? `Chapter ${targetChapters[0]?.number ?? ""}`.trim() : `${targetChapters.length} chapters`}.`,
+      actions: targetChapters.flatMap((chapter) =>
+        requestedFields.map((fieldKey) => ({
+          id: `direct-outline-field-${chapter.id}-${fieldKey}`,
+          kind: "UPDATE_CHAPTER_FIELD" as const,
+          targetLabel: `Chapter ${chapter.number} ${fieldLabel(fieldKey)}`,
+          summary: `Updated Chapter ${chapter.number} ${fieldLabel(fieldKey)}.`,
+          status: "APPLIED" as const,
+        })),
+      ),
+      project: nextProject,
+      contextPackage,
+      scope: input.scope,
+      nextTab: "skeleton" as StoryForgeTab,
+    };
+  }
+
+  if (
+    allowSkeletonDirect &&
+    input.applyChanges &&
+    input.project.chapters.length > 0 &&
     lower.includes("outline") &&
     directIntent.wantsAllChapters &&
     (lower.includes("tighten") ||
@@ -5229,6 +5295,8 @@ async function tryDirectStructuredAssistantAction(input: {
       lower.includes("develop") ||
       lower.includes("sharpen") ||
       lower.includes("fix") ||
+      lower.includes("fill") ||
+      lower.includes("update") ||
       lower.includes("improve") ||
       lower.includes("rewrite"))
   ) {
