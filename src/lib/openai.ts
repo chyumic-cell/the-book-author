@@ -2388,6 +2388,16 @@ export async function assistSelection(input: {
   }
 
   const context = buildContextPackage(project, input.chapterId, input.localExcerpt || input.selectionText);
+  if (isHostedFastDraftMode() && process.env.STORYFORGE_LIVE_HOSTED_ASSIST_AI !== "1") {
+    return {
+      content: cleanInlineSuggestionAgainstContext(mockRevision(input.actionType, input.selectionText, input.instruction), {
+        beforeSelection: input.beforeSelection,
+        afterSelection: input.afterSelection,
+      }),
+      contextPackage: context,
+    };
+  }
+
   const result = await runPromptTask({
     task: `${input.actionType} selected text`,
     project,
