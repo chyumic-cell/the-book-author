@@ -75,7 +75,7 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
-const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 18000);
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 12000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "meta-llama/llama-3.2-3b-instruct:free",
@@ -106,6 +106,21 @@ async function withProviderTimeout<T>(operation: Promise<T>, label: string, time
     if (timeout) {
       clearTimeout(timeout);
     }
+  }
+}
+
+async function withProviderAbort<T>(operation: (signal: AbortSignal) => Promise<T>, label: string, timeoutMs = PROVIDER_CALL_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs);
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1078,12 +1093,16 @@ async function callProvider(
     }
 
     try {
-      const response = await withProviderTimeout(
-        provider.client.responses.create({
-          model: provider.model,
-          input: prompt,
-          ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
-        }),
+      const response = await withProviderAbort(
+        (signal) =>
+          provider.client.responses.create(
+            {
+              model: provider.model,
+              input: prompt,
+              ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
+            },
+            { signal },
+          ),
         `${provider.label} responses call`,
       );
 
@@ -1134,12 +1153,16 @@ async function callChatCompletion(
   modelOverride?: string,
 ) {
   const model = modelOverride ?? provider.model;
-  const response = await withProviderTimeout(
-    provider.client.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
-    }),
+  const response = await withProviderAbort(
+    (signal) =>
+      provider.client.chat.completions.create(
+        {
+          model,
+          messages: [{ role: "user", content: prompt }],
+          ...(options.maxOutputTokens ? { max_tokens: options.maxOutputTokens } : {}),
+        },
+        { signal },
+      ),
     `${provider.label} chat call (${model})`,
   );
 
