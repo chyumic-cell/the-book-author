@@ -1956,6 +1956,7 @@ export function ProjectWorkspace({
               draft={setupDraft}
               onChange={applySetupPatch}
               onSave={handleSetupSave}
+              projectId={project.id}
               seriesBooks={project.series?.books.filter((book) => book.projectId !== project.id) ?? []}
             />
           )}
@@ -2047,13 +2048,7 @@ export function ProjectWorkspace({
             <ContinuityTab busy={busyAction === "continuity"} onRunCheck={handleContinuityCheck} project={project} />
           )}
           {activeTab === "settings" && (
-            <SettingsTab
-              busy={busyAction === "setup-save"}
-              draft={setupDraft}
-              onChange={applySetupPatch}
-              onSave={handleSetupSave}
-              projectId={project.id}
-            />
+            <SettingsTab />
           )}
           {activeTab === "about" && (
             <AboutTab

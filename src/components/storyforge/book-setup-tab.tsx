@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
 import { APP_NAME } from "@/lib/brand";
+import { StyleExportSettingsCard } from "@/components/storyforge/style-export-settings-card";
 
 import type { SetupDraft } from "@/components/storyforge/workspace-helpers";
 import type { SeriesBookRecord } from "@/types/storyforge";
@@ -17,6 +18,7 @@ export function BookSetupTab({
   draft,
   onChange,
   onSave,
+  projectId,
   seriesBooks,
 }: {
   availableSeriesNames: string[];
@@ -26,6 +28,7 @@ export function BookSetupTab({
   draft: SetupDraft;
   onChange: (patch: Partial<SetupDraft>) => void;
   onSave: () => void;
+  projectId: string;
   seriesBooks: SeriesBookRecord[];
 }) {
   return (
@@ -173,6 +176,13 @@ export function BookSetupTab({
           </div>
         ) : null}
       </Card>
+      <StyleExportSettingsCard
+        busy={busy}
+        draft={draft}
+        onChange={onChange}
+        onSave={onSave}
+        projectId={projectId}
+      />
     </div>
   );
 }
