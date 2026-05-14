@@ -1857,7 +1857,7 @@ function mockDraft(project: ProjectWorkspace, context: ContextPackage, chapter: 
       "",
       `"You should have paid your own tithe."`,
       "",
-      `Sarun's smile thinned. The lamps behind him turned the gold thread at his collar into small, disciplined flames. "Careful, Malket. A ledger can accuse. It cannot protect."`,
+      `Sarun's smile thinned. The lamps behind him turned the gold thread at his collar into small, disciplined flames. "Careful, ${protagonist}. A ledger can accuse. It cannot protect."`,
       "",
       `${protagonist} opened the book to the wet new line. "Whose memory did you write into the debt?"`,
       "",
@@ -1961,11 +1961,11 @@ function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.
   let words = value.trim().split(/\s+/).filter(Boolean);
 
   const expansionFiller = [
-    "The choice hardened because silence now had a price.",
-    "Malket measured every face for the person brave enough to answer.",
-    "No one moved, and that stillness made the lie louder.",
-    "The cup waited between them like a verdict.",
-    "Even the witnesses seemed afraid to remember what they had heard.",
+    "The pause that followed made the choice feel less safe than it had a moment earlier.",
+    "A small reaction in the room gave the pressure a more personal edge.",
+    "What mattered now was not only what happened, but what it forced the character to notice.",
+    "The silence around the moment carried consequence, and the next move could not stay harmless.",
+    "By the end of the beat, the situation felt narrower, sharper, and harder to escape.",
   ];
   let fillerIndex = 0;
   while (words.length < minWords) {
@@ -1981,88 +1981,122 @@ function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.
   return shouldKeepParagraphs ? paragraphizeFallback(balanced) : balanced;
 }
 
-function mockRevision(actionType: AssistActionType, selectionText: string, instruction: string) {
-  const seed = (selectionText || instruction || "").trim();
+function splitFallbackSentences(value: string) {
+  return value.match(/[^.!?]+[.!?]+(?:["']+)?/g)?.map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
+function getFallbackSeed(selectionText: string, instruction: string) {
+  const selected = cleanInlineSuggestionText(selectionText).trim();
+  if (selected) {
+    return selected;
+  }
+
+  const instructed = cleanInlineSuggestionText(instruction).trim();
+  if (instructed && !/^(?:apply|expand|tighten|rewrite|improve|sharpen|add|convert)\b/i.test(instructed)) {
+    return instructed;
+  }
+
+  return "The moment shifted, forcing a difficult choice into the open.";
+}
+
+function buildFallbackExpansion(seed: string, targetWords: number) {
+  const balancedSeed = balanceFallbackFormatting(seed);
+  const sentences = splitFallbackSentences(balancedSeed);
+  const expansionBeats = [
+    "The pause after it mattered because it gave the pressure time to settle.",
+    "A small physical detail made the moment feel less abstract and more dangerous.",
+    "The character had to register not only the event itself, but the cost hidden inside it.",
+    "That cost changed the shape of the next choice, making retreat feel harder than action.",
+  ];
+
+  const expanded =
+    sentences.length > 0
+      ? sentences
+          .map((sentence, index) => `${sentence} ${expansionBeats[index % expansionBeats.length]}`)
+          .join(" ")
+      : `${balancedSeed} ${expansionBeats.join(" ")}`;
+
+  return fitFallbackWordCount(expanded, targetWords);
+}
+
+function buildFallbackTighten(seed: string, targetWords: number) {
+  const words = balanceFallbackFormatting(seed).split(/\s+/).filter(Boolean);
+  if (words.length <= targetWords) {
+    return fitFallbackWordCount(words.join(" "), targetWords);
+  }
+
+  return balanceFallbackFormatting(words.slice(0, targetWords).join(" ").replace(/[,:;\-]+$/, "").trim());
+}
+
+function buildFallbackDialogue(seed: string) {
+  const sentences = splitFallbackSentences(balanceFallbackFormatting(seed));
+  const first = sentences[0] ?? seed;
+  const second = sentences[1] ?? "The answer made the room feel smaller.";
+
+  return [
+    `"Say it plainly," one character said.`,
+    "",
+    `"Plainly?" The reply came too quickly. "Then here it is: ${first.replace(/^["']+|["']+$/g, "")}"`,
+    "",
+    `${second}`,
+  ].join("\n");
+}
+
+function buildFallbackTension(seed: string) {
+  const source = balanceFallbackFormatting(seed);
+  return [
+    source,
+    "",
+    "The moment did not relax after that. It tightened, because someone in the scene now had something to lose and no clean way to protect it.",
+  ].join("\n");
+}
+
+const demoScaffoldTerms = ["Malket", "Prince Sarun", "Witness Tithe", "silver cup", "oath feast"];
+
+function containsForeignDemoScaffold(content: string, allowedContext: string) {
+  const normalizedContent = content.toLowerCase();
+  const normalizedAllowed = allowedContext.toLowerCase();
+  const foreignHits = demoScaffoldTerms.filter(
+    (term) => normalizedContent.includes(term.toLowerCase()) && !normalizedAllowed.includes(term.toLowerCase()),
+  );
+
+  return foreignHits.length >= 2 || (foreignHits.includes("Malket") && foreignHits.length >= 1);
+}
+
+export function createFallbackAssistRevision(actionType: AssistActionType, selectionText: string, instruction: string) {
+  const seed = getFallbackSeed(selectionText, instruction);
   const sourceWords = roughWordCount(seed);
 
   switch (actionType) {
     case "EXPAND":
-      return fitFallbackWordCount(
-        [
-          "Malket stood at the edge of the oath feast, close enough to see Prince Sarun's thumb tremble against the silver cup.",
-          "The old nobles leaned forward as if hunger itself had taught them manners, because a witnessed wish did not remain a wish for long; once spoken, it hardened into law before courage could reach the throat.",
-          "Malket knew the Witness Tithe would take a memory from someone in the hall. He also knew Sarun's smile was too calm for a man prepared to pay his own cost.",
-          "\"Name the payer,\" Malket said, and the music faltered.",
-          "Sarun looked at him with courtly pity. \"You always hear the wrong part of a miracle.\"",
-          "That was when Malket understood the trap: the prince had chosen another mind to empty, another life to hollow, and everyone polite enough to stay silent would help him do it.",
-        ].join("\n\n"),
-        Math.max(sourceWords * 3, sourceWords + 12),
-      );
+      return buildFallbackExpansion(seed, Math.max(sourceWords * 3, sourceWords + 12));
     case "TIGHTEN":
-      return fitFallbackWordCount(
-        "Malket watched Sarun lift the cup, knowing the Witness Tithe would steal someone else's memory.",
-        Math.max(Math.ceil(sourceWords / 3), 8),
-      );
+      return buildFallbackTighten(seed, Math.max(Math.ceil(sourceWords / 3), 8));
     case "ADD_DIALOGUE":
     case "DESCRIPTION_TO_DIALOGUE":
-      return [
-        `"Name the payer," Malket said.`,
-        "",
-        `Prince Sarun's smile stayed gentle. "Careful. A question can become testimony."`,
-        "",
-        `"Then let it," Malket said. "If the Witness Tithe takes a memory tonight, the court deserves to know whose."`,
-        "",
-        `The nobles stopped breathing loudly enough for the cup to ring against Sarun's ring. "You mistake concern for authority," Sarun said.`,
-        "",
-        `"No," Malket said. "I mistake silence for guilt."`,
-      ].join("\n");
+      return buildFallbackDialogue(seed);
     case "ADD_TENSION":
-      return [
-        "Malket saw the cup rise and understood that he had only a breath left.",
-        "",
-        "If Sarun spoke first, the wish would become law, and some stranger's dearest memory would vanish while the court applauded the miracle. If Malket interrupted, every witness in the hall would know he had challenged a prince in public.",
-        "",
-        "The musicians kept playing. That made it worse. It meant everyone had agreed to pretend this was ceremony, not theft.",
-        "",
-        "\"Wait,\" Malket said, and the word landed like a knife dropped onto porcelain.",
-      ].join("\n");
+      return buildFallbackTension(seed);
     case "IMPROVE_PROSE":
-      return [
-        "Malket stood at the rim of the oath feast while Prince Sarun raised the silver cup into the candlelight.",
-        "",
-        "Every noble leaned forward. A witnessed wish did not wait politely for objections; once spoken, it settled into law with the cold certainty of a lock turning.",
-        "",
-        "Malket knew the Witness Tithe would take a memory from the speaker. He knew, too, from the prince's easy smile, that Sarun had already chosen someone else to lose what he could not bear to pay.",
-      ].join("\n");
     case "SHARPEN_VOICE":
-      return [
-        "Malket stayed at the feast's edge, where a sensible man could still pretend he was only watching.",
-        "",
-        "Prince Sarun lifted the silver cup. The nobles bent toward him, silk whispering, eyes bright with the ugly hope of people about to profit from holiness.",
-        "",
-        "*Not yours to spend,* Malket thought.",
-        "",
-        "The Witness Tithe would take a memory. Sarun's face said he had already arranged whose.",
-      ].join("\n");
+      return buildFallbackTension(seed);
     case "CONTINUE":
       return [
-        "Malket did not look at the cup again. He looked at the witnesses.",
+        "The next beat followed from that pressure instead of restarting the scene.",
         "",
-        "The queen's scribe had lowered his eyes too quickly. That was the first crack. Malket stepped away from the table, letting the nobles think he had surrendered the moment, and followed the scribe toward the archive door.",
-        "",
-        `"If you run," Malket said softly, "I will know the prince bought your silence."`,
+        "Someone made a choice, someone else reacted badly, and the conflict moved one step closer to its real cost.",
       ].join("\n");
     case "NEXT_BEATS":
       return [
-        "1. Malket follows the queen's scribe out of the feast before Sarun can complete the wish.",
-        "2. The scribe admits the Witness Tithe can be redirected through a hidden ledger.",
-        "3. Sarun's agent arrives, forcing Malket to choose between exposing the scheme publicly or protecting the person named as payment.",
+        "1. Continue from the immediate consequence of the selected moment instead of reopening the scene.",
+        "2. Let one character press for what they want while another blocks, evades, or raises the cost.",
+        "3. End the next movement with a concrete discovery, refusal, threat, or choice that pushes the chapter forward.",
       ].join("\n");
     default:
       return [
-        seed || "Malket studies the room and chooses the dangerous question instead of the safe silence.",
+        balanceFallbackFormatting(seed),
         "",
-        "The moment becomes sharper, more specific, and more costly without changing the scene's core facts.",
+        "The moment becomes more specific and more costly without changing the scene's core facts.",
       ].join("\n");
   }
 }
@@ -2244,7 +2278,7 @@ export async function generateChapterOutline(projectId: string, chapterId: strin
   const context = buildContextPackage(project, chapterId);
   const hostedFastMode = isHostedFastDraftMode();
   const mockContent = mockOutline(project, chapter.title, context);
-  if (hostedFastMode && process.env.STORYFORGE_LIVE_HOSTED_OUTLINE_AI !== "1") {
+  if (hostedFastMode && process.env.STORYFORGE_FORCE_HOSTED_OUTLINE_MOCK === "1") {
     return {
       content: cleanStructuredText(mockContent),
       contextPackage: context,
@@ -2339,7 +2373,7 @@ export async function reviseChapter(
     maxOutputTokens: hostedFastMode
       ? wordBudgetToTokens(Math.min(Math.max(roughWordCount(chapter.draft) || 500, 500), 1400) + 120, 900, 2400)
       : revisionOutputTokenBudget(chapter, chapter.draft),
-    mockContent: mockRevision(actionType, chapter.draft, instruction),
+    mockContent: createFallbackAssistRevision(actionType, chapter.draft, instruction),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
     enforceChapterLength: !hostedFastMode,
@@ -2388,9 +2422,9 @@ export async function assistSelection(input: {
   }
 
   const context = buildContextPackage(project, input.chapterId, input.localExcerpt || input.selectionText);
-  if (isHostedFastDraftMode() && process.env.STORYFORGE_LIVE_HOSTED_ASSIST_AI !== "1") {
+  if (isHostedFastDraftMode() && process.env.STORYFORGE_FORCE_HOSTED_ASSIST_MOCK === "1") {
     return {
-      content: cleanInlineSuggestionAgainstContext(mockRevision(input.actionType, input.selectionText, input.instruction), {
+      content: cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction), {
         beforeSelection: input.beforeSelection,
         afterSelection: input.afterSelection,
       }),
@@ -2412,7 +2446,7 @@ export async function assistSelection(input: {
     ),
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
-    mockContent: mockRevision(input.actionType, input.selectionText, input.instruction),
+    mockContent: createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
     clean: (value) =>
       cleanInlineSuggestionAgainstContext(value, {
         beforeSelection: input.beforeSelection,
@@ -2420,10 +2454,31 @@ export async function assistSelection(input: {
       }),
   });
   const safeFallback = () =>
-    cleanInlineSuggestionAgainstContext(mockRevision(input.actionType, input.selectionText, input.instruction), {
+    cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction), {
       beforeSelection: input.beforeSelection,
       afterSelection: input.afterSelection,
     });
+  const allowedDemoContext = [
+    project.title,
+    project.premise,
+    project.oneLineHook,
+    project.coreSummary,
+    input.selectionText,
+    input.instruction,
+    input.localExcerpt,
+    input.beforeSelection,
+    input.afterSelection,
+    ...project.characters.map((character) =>
+      [character.name, character.role, character.summary, character.goal, character.fear].filter(Boolean).join(" "),
+    ),
+    ...project.workingNotes.map((note) => [note.title, note.content].filter(Boolean).join(" ")),
+    ...project.structureBeats.map((beat) => [beat.label, beat.description, beat.notes].filter(Boolean).join(" ")),
+    ...project.chapters.map((chapter) =>
+      [chapter.title, chapter.purpose, chapter.currentBeat, chapter.outline].filter(Boolean).join(" "),
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
   let enforcedContent = result.content;
   try {
     enforcedContent = await enforceInlineLengthIfNeeded({
@@ -2467,6 +2522,12 @@ export async function assistSelection(input: {
     console.warn("[ai] inline transformation repair failed; using safe fallback", error);
     transformedContent = safeFallback() || tensionSafeContent;
   }
+
+  if (containsForeignDemoScaffold(transformedContent, allowedDemoContext)) {
+    console.warn("[ai] blocked foreign demo scaffold from inline assist output");
+    transformedContent = safeFallback() || input.selectionText || "";
+  }
+
   return {
     ...result,
     content: transformedContent,
