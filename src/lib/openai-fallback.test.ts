@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildAssistScopedInstruction, createFallbackAssistRevision } from "@/lib/openai";
+import { buildAssistScopedInstruction, createFallbackAssistRevision, extractSourceAnchors } from "@/lib/openai";
 
 function wordCount(value: string) {
   return value.trim() ? value.trim().split(/\s+/).length : 0;
@@ -14,7 +14,11 @@ describe("AI assist fallback revisions", () => {
     const expanded = createFallbackAssistRevision("EXPAND", selected, "");
 
     expect(expanded).toContain("Rafi");
+    expect(expanded).toContain("lantern");
+    expect(expanded).toContain("road");
     expect(expanded).not.toMatch(/Malket|Prince Sarun|Witness Tithe|silver cup|oath feast/i);
+    expect(expanded).not.toMatch(/\b(?:the moment|the pause|the pressure|the choice|the situation)\b/i);
+    expect(expanded).not.toMatch(/\b(?:selected text|selected passage|selected event|reader|on the page)\b/i);
     expect(wordCount(expanded)).toBeGreaterThanOrEqual(Math.floor(wordCount(selected) * 2.7));
   });
 
@@ -59,5 +63,20 @@ describe("AI assist fallback revisions", () => {
     expect(prompt).toContain(selected);
     expect(prompt).toContain("This selected text is the source material. Transform this text only.");
     expect(prompt).toContain("Do not use the text before or after as the material to rewrite");
+    expect(prompt).toContain("Concrete source anchors to preserve when applicable");
+    expect(prompt).toContain("Rafi");
+    expect(prompt).toContain("lantern");
+    expect(prompt).toContain("Do not replace concrete selected details with vague phrases");
+  });
+
+  it("extracts concrete anchors from selected text for source-specific rewrites", () => {
+    const anchors = extractSourceAnchors(
+      "Rafi held the torn map against the lantern and realized the missing road had been scratched out by someone afraid of being followed.",
+    );
+
+    expect(anchors).toContain("Rafi");
+    expect(anchors).toContain("lantern");
+    expect(anchors).toContain("scratched");
+    expect(anchors).not.toContain("someone");
   });
 });

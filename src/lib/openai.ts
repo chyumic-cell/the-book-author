@@ -1787,7 +1787,10 @@ async function enforceSelectionSourceIfNeeded(options: {
   }
 
   const similarity = overlapScore(options.selectionText, options.content);
-  if (similarity >= 0.12) {
+  const coverage = sourceAnchorCoverage(options.selectionText, options.content);
+  const sourceAnchorsPresent = coverage.covered.length >= coverage.required;
+  const tooGeneric = looksTooGenericForSelection(options.content, options.selectionText);
+  if (similarity >= 0.16 && sourceAnchorsPresent && !tooGeneric) {
     return options.content;
   }
 
@@ -1799,7 +1802,9 @@ async function enforceSelectionSourceIfNeeded(options: {
       "The previous result appears to have drifted away from the selected text.",
       "Rewrite only the selected text below. The selected text is the source material.",
       "Preserve its core event, subject, speaker set, chronology, and meaning.",
+      buildSourceAnchorInstruction(options.selectionText),
       "Use surrounding project context only for continuity and style, not as replacement source material.",
+      "Do not answer with reusable filler. Do not rely on phrases like 'the moment,' 'the pressure,' 'the choice,' or 'the situation.'",
       options.actionType === "EXPAND"
         ? `The selected text has ${selectedWords} words. Return roughly ${selectedWords * 3} words, with a 10 percent tolerance.`
         : "",
@@ -1825,7 +1830,9 @@ async function enforceSelectionSourceIfNeeded(options: {
   }
 
   const repairedSimilarity = overlapScore(options.selectionText, repaired);
-  if (repairedSimilarity >= similarity || repairedSimilarity >= 0.12) {
+  const repairedCoverage = sourceAnchorCoverage(options.selectionText, repaired);
+  const repairedAnchorsPresent = repairedCoverage.covered.length >= repairedCoverage.required;
+  if ((repairedSimilarity >= 0.16 || repairedAnchorsPresent) && !looksTooGenericForSelection(repaired, options.selectionText)) {
     return repaired;
   }
 
@@ -2018,19 +2025,16 @@ function paragraphizeFallback(value: string) {
   return paragraphs.join("\n\n");
 }
 
-function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.1) {
+function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.1, fillerSentences?: string[]) {
   const shouldKeepParagraphs = /\n\s*\n/.test(value);
   const minWords = Math.max(1, Math.floor(targetWords * (1 - tolerance)));
   const maxWords = Math.max(minWords, Math.ceil(targetWords * (1 + tolerance)));
   let words = value.trim().split(/\s+/).filter(Boolean);
 
-  const expansionFiller = [
-    "The pause that followed made the choice feel less safe than it had a moment earlier.",
-    "A small reaction in the room gave the pressure a more personal edge.",
-    "What mattered now was not only what happened, but what it forced the character to notice.",
-    "The silence around the moment carried consequence, and the next move could not stay harmless.",
-    "By the end of the beat, the situation felt narrower, sharper, and harder to escape.",
-  ];
+  const expansionFiller =
+    fillerSentences && fillerSentences.length > 0
+      ? fillerSentences
+      : ["The concrete image stays close, physical, and tied to the same action instead of drifting into a new topic."];
   let fillerIndex = 0;
   while (words.length < minWords) {
     words = [...words, ...expansionFiller[fillerIndex % expansionFiller.length].split(/\s+/)];
@@ -2047,6 +2051,158 @@ function fitFallbackWordCount(value: string, targetWords: number, tolerance = 0.
 
 function splitFallbackSentences(value: string) {
   return value.match(/[^.!?]+[.!?]+(?:["']+)?/g)?.map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
+const sourceAnchorStopWords = new Set([
+  "about",
+  "above",
+  "after",
+  "again",
+  "against",
+  "along",
+  "also",
+  "another",
+  "away",
+  "because",
+  "before",
+  "being",
+  "between",
+  "could",
+  "every",
+  "felt",
+  "from",
+  "have",
+  "into",
+  "just",
+  "like",
+  "looked",
+  "made",
+  "moment",
+  "more",
+  "only",
+  "other",
+  "over",
+  "said",
+  "same",
+  "scene",
+  "should",
+  "someone",
+  "something",
+  "that",
+  "their",
+  "there",
+  "these",
+  "thing",
+  "those",
+  "through",
+  "under",
+  "very",
+  "what",
+  "when",
+  "where",
+  "while",
+  "with",
+  "would",
+]);
+
+function normalizeAnchorWord(value: string) {
+  return value.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
+}
+
+export function extractSourceAnchors(value: string, maxAnchors = 8) {
+  const matches = value.match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? [];
+  const seen = new Set<string>();
+  const scored: Array<{ word: string; score: number; order: number }> = [];
+
+  for (const [order, rawWord] of matches.entries()) {
+    const word = normalizeAnchorWord(rawWord);
+    const normalized = normalizeComparableText(word);
+    if (!word || normalized.length < 4 || sourceAnchorStopWords.has(normalized) || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    const isNameLike = /^[A-Z][a-z]/.test(word) || /^[\p{Lu}][\p{L}'-]+$/u.test(word);
+    const score = (isNameLike ? 5 : 0) + Math.min(normalized.length, 12) / 3 + (order < 8 ? 1 : 0);
+    scored.push({ word, score, order });
+  }
+
+  return scored
+    .sort((left, right) => right.score - left.score || left.order - right.order)
+    .slice(0, maxAnchors)
+    .map((entry) => entry.word);
+}
+
+function sourceAnchorRequirement(anchorCount: number, selectedWords: number) {
+  if (anchorCount === 0) {
+    return 0;
+  }
+
+  if (selectedWords <= 10) {
+    return 1;
+  }
+
+  return Math.min(3, Math.max(1, Math.ceil(anchorCount * 0.35)));
+}
+
+function sourceAnchorCoverage(selectionText: string, content: string) {
+  const anchors = extractSourceAnchors(selectionText, 8);
+  const normalizedContent = normalizeComparableText(content);
+  const covered = anchors.filter((anchor) => {
+    const normalizedAnchor = normalizeComparableText(anchor);
+    return normalizedAnchor && normalizedContent.includes(normalizedAnchor);
+  });
+
+  return {
+    anchors,
+    covered,
+    required: sourceAnchorRequirement(anchors.length, roughWordCount(selectionText)),
+  };
+}
+
+function buildSourceAnchorInstruction(selectionText: string) {
+  const { anchors, required } = sourceAnchorCoverage(selectionText, "");
+  if (anchors.length === 0) {
+    return "";
+  }
+
+  return [
+    `Concrete source anchors to preserve when applicable: ${anchors.join(", ")}.`,
+    `The replacement should visibly retain at least ${required} of those source anchors unless the writer's custom instruction directly removes them.`,
+    "Do not replace concrete selected details with vague phrases like 'the moment,' 'the pressure,' 'the choice,' or 'the situation.'",
+    "Every added sentence should grow out of a specific name, object, action, sensation, emotion, or conflict already present in the selected text.",
+  ].join(" ");
+}
+
+function genericAssistSentenceCount(value: string) {
+  return splitFallbackSentences(value).filter((sentence) =>
+    /\b(?:the moment|the pause|the character|the choice|the situation|the pressure|the scene|the beat|the detail|the answer changed|something to lose|more specific|more costly)\b/i.test(
+      sentence,
+    ),
+  ).length;
+}
+
+function looksTooGenericForSelection(content: string, selectionText: string) {
+  const coverage = sourceAnchorCoverage(selectionText, content);
+  const genericCount = genericAssistSentenceCount(content);
+  if (genericCount === 0) {
+    return false;
+  }
+
+  return coverage.required === 0 ? genericCount >= 2 : coverage.covered.length < coverage.required + 1;
+}
+
+function buildSourceAwareFiller(seed: string) {
+  const anchors = extractSourceAnchors(seed, 5);
+  const primary = anchors[0] ?? "the selected action";
+  const secondary = anchors[1] ?? primary;
+  const tertiary = anchors[2] ?? secondary;
+
+  return [
+    `${primary} catches on the senses first: weight, texture, and the small discomfort of noticing it too late.`,
+    `${secondary} makes the danger feel practical rather than abstract, something close enough to touch and too late to pretend away.`,
+    `${tertiary} presses the old fact into a new consequence, giving the next breath a reason to hurt.`,
+  ];
 }
 
 function getFallbackSeed(selectionText: string, instruction: string) {
@@ -2066,21 +2222,20 @@ function getFallbackSeed(selectionText: string, instruction: string) {
 function buildFallbackExpansion(seed: string, targetWords: number) {
   const balancedSeed = balanceFallbackFormatting(seed);
   const sentences = splitFallbackSentences(balancedSeed);
-  const expansionBeats = [
-    "The pause after it mattered because it gave the pressure time to settle.",
-    "A small physical detail made the moment feel less abstract and more dangerous.",
-    "The character had to register not only the event itself, but the cost hidden inside it.",
-    "That cost changed the shape of the next choice, making retreat feel harder than action.",
-  ];
+  const anchors = extractSourceAnchors(seed, 6);
+  const expansionBeats = buildSourceAwareFiller(seed);
 
   const expanded =
     sentences.length > 0
       ? sentences
-          .map((sentence, index) => `${sentence} ${expansionBeats[index % expansionBeats.length]}`)
+          .map((sentence, index) => {
+            const anchor = anchors[index % Math.max(anchors.length, 1)] ?? "that exact detail";
+            return `${sentence} ${anchor} catches on the senses, adding texture and consequence without changing what happened.`;
+          })
           .join(" ")
       : `${balancedSeed} ${expansionBeats.join(" ")}`;
 
-  return fitFallbackWordCount(expanded, targetWords);
+  return fitFallbackWordCount(expanded, targetWords, 0.1, expansionBeats);
 }
 
 function buildFallbackTighten(seed: string, targetWords: number) {
@@ -2096,9 +2251,11 @@ function buildFallbackDialogue(seed: string) {
   const sentences = splitFallbackSentences(balanceFallbackFormatting(seed));
   const first = sentences[0] ?? seed;
   const second = sentences[1] ?? "The answer made the room feel smaller.";
+  const anchors = extractSourceAnchors(seed, 2);
+  const subject = anchors[0] ?? "this";
 
   return [
-    `"Say it plainly," one character said.`,
+    `"Say it plainly," one character said, looking straight at ${subject}.`,
     "",
     `"Plainly?" The reply came too quickly. "Then here it is: ${first.replace(/^["']+|["']+$/g, "")}"`,
     "",
@@ -2108,10 +2265,12 @@ function buildFallbackDialogue(seed: string) {
 
 function buildFallbackTension(seed: string) {
   const source = balanceFallbackFormatting(seed);
+  const anchors = extractSourceAnchors(seed, 3);
+  const focus = anchors.join(", ") || "the action";
   return [
     source,
     "",
-    "The moment did not relax after that. It tightened, because someone in the scene now had something to lose and no clean way to protect it.",
+    `${focus} now carries a sharper cost, so the same action feels less safe, more immediate, and harder to pretend away.`,
   ].join("\n");
 }
 
@@ -2181,6 +2340,8 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
         "Internally break the selected passage into five micro-parts or beats, then rebuild all five with richer detail, stronger transitions, added texture, and clearer emotional movement.",
         "Increase the total length to approximately three times the original selected word count while preserving the same underlying event, chronology, and meaning.",
         "Keep the same dramatic center, speaker set, and local scene situation unless the selected text itself already changes them.",
+        "Keep the selected passage's concrete names, objects, images, actions, and emotions visible on the page.",
+        "Do not pad with universal filler. Every added line must make a specific detail from the selected passage more vivid, pressured, human, or consequential.",
         "Respect the project's dialogue-versus-description settings while expanding.",
       ].join(" ");
     case "IMPROVE_PROSE":
@@ -2259,6 +2420,7 @@ export function buildAssistScopedInstruction(
         selectionText.trim(),
         "</selected_text>",
         "This selected text is the source material. Transform this text only.",
+        buildSourceAnchorInstruction(selectionText),
         "Do not use the text before or after as the material to rewrite; use it only to keep continuity at the edges.",
       ].join("\n")
     : "";
