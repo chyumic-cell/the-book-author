@@ -222,12 +222,24 @@ export function CharacterMasterView({
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [suggestions, setSuggestions] = useState<CharacterInterpretationSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [pendingDeleteCharacterId, setPendingDeleteCharacterId] = useState<string | null>(null);
+  const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedCharacterId || !characters.some((character) => character.id === selectedCharacterId)) {
       setSelectedCharacterId(characters[0]?.id ?? null);
     }
   }, [characters, selectedCharacterId]);
+
+  useEffect(() => {
+    setPendingDeleteCharacterId(null);
+  }, [selectedCharacterId]);
+
+  useEffect(() => {
+    if (pendingDeleteCharacterId && !characters.some((character) => character.id === pendingDeleteCharacterId)) {
+      setPendingDeleteCharacterId(null);
+    }
+  }, [characters, pendingDeleteCharacterId]);
 
   const character = characters.find((entry) => entry.id === selectedCharacterId) ?? null;
   const draft = character ? drafts[character.id] ?? character : null;
@@ -277,30 +289,31 @@ export function CharacterMasterView({
     toast.success("Character dossier saved.");
   }
 
-  async function deleteCharacter() {
-    if (!character) {
+  async function deleteCharacter(characterToDelete: CharacterRecord) {
+    if (deletingCharacterId) {
       return;
     }
 
-    const confirmed =
-      typeof window === "undefined"
-        ? true
-        : window.confirm(`Delete character "${character.name}"? This cannot be undone.`);
-
-    if (!confirmed) {
-      return;
+    setDeletingCharacterId(characterToDelete.id);
+    try {
+      await mutateStoryBible("character", {}, characterToDelete.id, "DELETE");
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[characterToDelete.id];
+        return next;
+      });
+      setSuggestions([]);
+      setDetailsExpanded(false);
+      setPendingDeleteCharacterId(null);
+      if (selectedCharacterId === characterToDelete.id) {
+        setSelectedCharacterId(null);
+      }
+      toast.success(`Deleted ${characterToDelete.name}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete this character.");
+    } finally {
+      setDeletingCharacterId(null);
     }
-
-    await mutateStoryBible("character", {}, character.id, "DELETE");
-    setDrafts((current) => {
-      const next = { ...current };
-      delete next[character.id];
-      return next;
-    });
-    setSuggestions([]);
-    setDetailsExpanded(false);
-    setSelectedCharacterId(null);
-    toast.success("Character deleted.");
   }
 
   async function interpretNotes() {
@@ -341,6 +354,33 @@ export function CharacterMasterView({
       delete next[character.id];
       return next;
     });
+  }
+
+  function renderDeleteControls(characterToDelete: CharacterRecord) {
+    const confirmOpen = pendingDeleteCharacterId === characterToDelete.id;
+    const isDeleting = deletingCharacterId === characterToDelete.id;
+
+    if (!confirmOpen) {
+      return (
+        <Button onClick={() => setPendingDeleteCharacterId(characterToDelete.id)} variant="ghost">
+          Delete character
+        </Button>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2">
+        <span className="text-xs font-semibold text-rose-800">
+          Delete {characterToDelete.name}? This cannot be undone.
+        </span>
+        <Button disabled={isDeleting} onClick={() => void deleteCharacter(characterToDelete)} variant="danger">
+          {isDeleting ? "Deleting..." : "Approve delete"}
+        </Button>
+        <Button disabled={isDeleting} onClick={() => setPendingDeleteCharacterId(null)} variant="secondary">
+          Cancel
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -415,9 +455,7 @@ export function CharacterMasterView({
                   {character.quickProfile.profession || character.role || character.summary}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button onClick={() => void deleteCharacter()} variant="ghost">
-                    Delete character
-                  </Button>
+                  {renderDeleteControls(character)}
                 </div>
               </div>
             ) : null}
@@ -443,9 +481,7 @@ export function CharacterMasterView({
                   <Button disabled={loadingSuggestions} onClick={() => void interpretNotes()} variant="secondary">
                     {loadingSuggestions ? "Interpreting..." : "Interpret notes with AI"}
                   </Button>
-                  <Button onClick={() => void deleteCharacter()} variant="ghost">
-                    Delete character
-                  </Button>
+                  {renderDeleteControls(draft)}
                   <Button onClick={() => void saveCharacter()}>Save dossier</Button>
                 </div>
               </div>
