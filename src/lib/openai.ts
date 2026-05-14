@@ -1768,6 +1768,70 @@ async function enforceInlineTransformationIfNeeded(options: {
   return repairedSimilarity < similarity ? repaired : options.content;
 }
 
+function isSelectionRewriteAction(actionType: AssistActionType) {
+  return actionType !== "CONTINUE" && actionType !== "NEXT_BEATS" && actionType !== "COACH";
+}
+
+async function enforceSelectionSourceIfNeeded(options: {
+  project: ProjectWorkspace;
+  context: ContextPackage;
+  actionType: AssistActionType;
+  selectionText: string;
+  instruction: string;
+  content: string;
+}) {
+  const selectedWords = roughWordCount(options.selectionText);
+  const contentWords = roughWordCount(options.content);
+  if (!isSelectionRewriteAction(options.actionType) || selectedWords < 5 || contentWords < 4) {
+    return options.content;
+  }
+
+  const similarity = overlapScore(options.selectionText, options.content);
+  if (similarity >= 0.12) {
+    return options.content;
+  }
+
+  const repairPrompt = buildPromptEnvelope(
+    "Repair selected-text source drift",
+    options.project,
+    options.context,
+    [
+      "The previous result appears to have drifted away from the selected text.",
+      "Rewrite only the selected text below. The selected text is the source material.",
+      "Preserve its core event, subject, speaker set, chronology, and meaning.",
+      "Use surrounding project context only for continuity and style, not as replacement source material.",
+      options.actionType === "EXPAND"
+        ? `The selected text has ${selectedWords} words. Return roughly ${selectedWords * 3} words, with a 10 percent tolerance.`
+        : "",
+      options.actionType === "TIGHTEN"
+        ? `The selected text has ${selectedWords} words. Return roughly ${Math.max(Math.round(selectedWords / 3), 1)} words, with a 10 percent tolerance.`
+        : "",
+      options.instruction ? `Writer instruction: ${options.instruction}` : buildAssistActionInstruction(options.actionType),
+      "Selected text to transform:",
+      options.selectionText,
+      "Rejected result that drifted away:",
+      options.content,
+      "Return only the replacement prose.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+  const repairedRaw = await generateTextWithProvider(repairPrompt, {
+    maxOutputTokens: assistOutputTokenBudget(options.actionType, options.selectionText),
+  });
+  const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
+  if (!repaired.trim()) {
+    return createFallbackAssistRevision(options.actionType, options.selectionText, options.instruction);
+  }
+
+  const repairedSimilarity = overlapScore(options.selectionText, repaired);
+  if (repairedSimilarity >= similarity || repairedSimilarity >= 0.12) {
+    return repaired;
+  }
+
+  return createFallbackAssistRevision(options.actionType, options.selectionText, options.instruction);
+}
+
 function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: ContextPackage) {
   const protagonist = project.characters[0]?.name ?? "the protagonist";
   const opposition = project.characters[1]?.name ?? "the opponent";
@@ -2172,7 +2236,7 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
   }
 }
 
-function buildAssistScopedInstruction(
+export function buildAssistScopedInstruction(
   project: ProjectWorkspace,
   actionType: AssistActionType,
   instruction: string,
@@ -2188,6 +2252,16 @@ function buildAssistScopedInstruction(
       : actionType === "TIGHTEN" && selectedWordCount > 0
         ? `Measured length target: the selected text has ${selectedWordCount} words. Return roughly ${Math.max(Math.round(selectedWordCount / 3), 1)} words, with a 10 percent tolerance.`
         : "";
+  const selectedSourceInstruction = selectionText.trim()
+    ? [
+        "SELECTED TEXT TO REWRITE:",
+        "<selected_text>",
+        selectionText.trim(),
+        "</selected_text>",
+        "This selected text is the source material. Transform this text only.",
+        "Do not use the text before or after as the material to rewrite; use it only to keep continuity at the edges.",
+      ].join("\n")
+    : "";
   const boundaryInstruction =
     beforeSelection.trim() || afterSelection.trim()
       ? [
@@ -2223,6 +2297,7 @@ function buildAssistScopedInstruction(
   return [
     buildSelectionStyleInstruction(project, actionType),
     instruction || actionInstruction,
+    selectedSourceInstruction,
     measuredLengthInstruction,
     boundaryInstruction,
     actionType === "CUSTOM_EDIT"
@@ -2521,6 +2596,20 @@ export async function assistSelection(input: {
   } catch (error) {
     console.warn("[ai] inline transformation repair failed; using safe fallback", error);
     transformedContent = safeFallback() || tensionSafeContent;
+  }
+
+  try {
+    transformedContent = await enforceSelectionSourceIfNeeded({
+      project,
+      context,
+      actionType: input.actionType,
+      selectionText: input.selectionText,
+      instruction: input.instruction,
+      content: transformedContent,
+    });
+  } catch (error) {
+    console.warn("[ai] selected-text source repair failed; using safe fallback", error);
+    transformedContent = safeFallback() || transformedContent;
   }
 
   if (containsForeignDemoScaffold(transformedContent, allowedDemoContext)) {
