@@ -5332,7 +5332,6 @@ async function tryDirectStructuredAssistantAction(input: {
         ...(directIntent.wantsOutline ? ["outline" as AssistFieldKey] : []),
       ]),
     );
-    const generatedTitles: string[] = [];
     const isGenericChapterTitle = (value: string, chapterNumber: number) =>
       !value.trim() || value.trim().toLowerCase() === `chapter ${chapterNumber}`.toLowerCase();
     const splitOutlineLines = (value: string) =>
@@ -5340,8 +5339,10 @@ async function tryDirectStructuredAssistantAction(input: {
         .split(/\r?\n/)
         .map((entry) => entry.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
         .filter(Boolean);
+    const sortedChapters = [...input.project.chapters].sort((left, right) => left.number - right.number);
+    const allChapterTitles = input.project.chapters.map((entry) => entry.title).filter(Boolean);
 
-    for (const chapter of [...input.project.chapters].sort((left, right) => left.number - right.number)) {
+    const chapterPatches = await Promise.all(sortedChapters.map(async (chapter) => {
       const outlineResult = await generateChapterOutline(
         input.projectId,
         chapter.id,
@@ -5374,10 +5375,9 @@ async function tryDirectStructuredAssistantAction(input: {
             ...chapter,
             outline,
           },
-          blockedTitles: [...generatedTitles, ...input.project.chapters.map((entry) => entry.title).filter((entry) => entry !== chapter.title)],
+          blockedTitles: allChapterTitles.filter((entry) => entry !== chapter.title),
         });
       }
-      generatedTitles.push(nextTitle);
 
       const patch: Parameters<typeof updateChapter>[1] = {};
       if (requestedFields.includes("title")) patch.title = nextTitle;
@@ -5392,8 +5392,12 @@ async function tryDirectStructuredAssistantAction(input: {
       if (requestedFields.includes("requiredInclusions")) patch.requiredInclusions = requiredInclusions;
       if (requestedFields.includes("forbiddenElements")) patch.forbiddenElements = forbiddenElements;
 
+      return { chapterId: chapter.id, patch };
+    }));
+
+    for (const { chapterId, patch } of chapterPatches) {
       if (Object.keys(patch).length > 0) {
-        await updateChapter(chapter.id, patch);
+        await updateChapter(chapterId, patch);
       }
     }
 
