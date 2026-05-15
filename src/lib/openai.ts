@@ -75,14 +75,15 @@ type ProviderCallOptions = {
   maxOutputTokens?: number;
 };
 
-const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 12000);
+const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 60000);
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
-  "meta-llama/llama-3.2-3b-instruct:free",
+  "deepseek/deepseek-v4-flash:free",
   "openai/gpt-oss-20b:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "minimax/minimax-m2.5:free",
   "z-ai/glm-4.5-air:free",
   "openai/gpt-oss-120b:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
 ] as const;
 
 function shouldUseOpenRouterFallbackFirst(model: string) {
