@@ -18,7 +18,9 @@ describe("AI assist fallback revisions", () => {
     expect(expanded).toContain("road");
     expect(expanded).not.toMatch(/Malket|Prince Sarun|Witness Tithe|silver cup|oath feast/i);
     expect(expanded).not.toMatch(/\b(?:the moment|the pause|the pressure|the choice|the situation)\b/i);
-    expect(expanded).not.toMatch(/\b(?:selected text|selected passage|selected event|reader|on the page)\b/i);
+    expect(expanded).not.toMatch(
+      /\b(?:selected text|selected passage|selected event|reader|on the page|context|contextuali[sz]|textuali[sz]|source material|source anchor|replacement prose)\b/i,
+    );
     expect(wordCount(expanded)).toBeGreaterThanOrEqual(Math.floor(wordCount(selected) * 2.7));
   });
 
@@ -33,7 +35,7 @@ describe("AI assist fallback revisions", () => {
     expect(wordCount(tightened)).toBeLessThanOrEqual(Math.ceil(wordCount(selected) / 3) + 2);
   });
 
-  it("puts the exact selected text into the live assist prompt as the source material", () => {
+  it("puts the exact highlighted words into the live assist prompt without leaky source jargon", () => {
     const selected =
       "Rafi held the torn map against the lantern and realized the missing road had been scratched out by someone afraid of being followed.";
     const project = {
@@ -59,14 +61,17 @@ describe("AI assist fallback revisions", () => {
       "The lantern guttered in the wind.",
     );
 
-    expect(prompt).toContain("SELECTED TEXT TO REWRITE");
+    expect(prompt).toContain("HIGHLIGHTED WORDS TO REWRITE");
     expect(prompt).toContain(selected);
-    expect(prompt).toContain("This selected text is the source material. Transform this text only.");
-    expect(prompt).toContain("Do not use the text before or after as the material to rewrite");
-    expect(prompt).toContain("Concrete source anchors to preserve when applicable");
+    expect(prompt).toContain("Rewrite these highlighted words only.");
+    expect(prompt).toContain("The before/after text is only a border");
+    expect(prompt).toContain("Keep these exact concrete details visible");
     expect(prompt).toContain("Rafi");
     expect(prompt).toContain("lantern");
-    expect(prompt).toContain("Do not replace concrete selected details with vague phrases");
+    expect(prompt).toContain("Do not replace concrete details with vague phrases");
+    expect(prompt).not.toContain("source material");
+    expect(prompt).not.toContain("source anchors");
+    expect(prompt).not.toContain("SELECTED TEXT TO REWRITE");
   });
 
   it("extracts concrete anchors from selected text for source-specific rewrites", () => {

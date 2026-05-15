@@ -1559,15 +1559,15 @@ async function enforceInlineLengthIfNeeded(options: {
         options.project,
         options.context,
         [
-          "Rewrite only the selected text.",
+          "Rewrite only the highlighted words.",
           bestWords < minimumAcceptable ? "The previous result was too short." : "The previous result was too long.",
-          `Original selected text word count: ${sourceWords}.`,
-          `Target replacement word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
+          `Original highlight word count: ${sourceWords}.`,
+          `Target word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
           "Do not do the math in prose. Use the provided target number.",
-          "Do not append outside the selected moment. Rebuild the same selected passage at greater depth and with richer progression.",
+          "Do not append around the highlighted moment. Rebuild that same moment at greater depth and with richer progression.",
           "Preserve the same continuity, chronology, scene facts, and local speaker set.",
-          "Return only the replacement prose.",
-          "Selected text:",
+          "Return only the new story text.",
+          "Highlighted words:",
           options.selectionText,
           "Rejected previous result:",
           bestContent,
@@ -1610,14 +1610,14 @@ async function enforceInlineLengthIfNeeded(options: {
         options.project,
         options.context,
         [
-          "Rewrite only the selected text.",
+          "Rewrite only the highlighted words.",
           bestWords > maximumAcceptable ? "The previous result was too long." : "The previous result was too short and lost too much shape.",
-          `Original selected text word count: ${sourceWords}.`,
-          `Target replacement word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
+          `Original highlight word count: ${sourceWords}.`,
+          `Target word count: ${targetWords}. Acceptable range: ${minimumAcceptable} to ${maximumAcceptable} words.`,
           "Do not do the math in prose. Use the provided target number.",
           "Keep the core meaning, continuity, and scene logic, but compress hard.",
-          "Return only the replacement prose.",
-          "Selected text:",
+          "Return only the new story text.",
+          "Highlighted words:",
           options.selectionText,
           "Rejected previous result:",
           bestContent,
@@ -1666,13 +1666,13 @@ async function enforceTensionIfNeeded(options: {
     options.project,
     options.context,
     [
-      "Rewrite only the selected text so the scene pressure is materially stronger, not just cosmetically rephrased.",
+      "Rewrite only the highlighted words so the scene pressure is materially stronger, not just cosmetically rephrased.",
       "Follow Bell-style scene craft: clarify what the focal character wants right now, strengthen what pushes back, increase worry, sharpen the possibility of loss, and make the passage end in a more pressured state than it began.",
       "Add real friction through resistance, uncertainty, threat, time pressure, subtext, bad options, or emotionally loaded reaction beats.",
       "Do not simply restate the same beats with synonyms.",
-      "Preserve continuity, chronology, and scene facts, but make the pressure rise visibly on the page.",
-      "Return only the replacement prose.",
-      "Original selected text:",
+      "Preserve continuity, chronology, and scene facts, but make the pressure rise visibly in the story text.",
+      "Return only the new story text.",
+      "Original highlighted words:",
       options.selectionText,
     ].join("\n\n"),
   );
@@ -1714,23 +1714,23 @@ async function enforceInlineTransformationIfNeeded(options: {
     options.actionType === "IMPROVE_PROSE"
       ? [
           "The previous result stayed too close to the original text.",
-          "Rewrite the selected text again with materially stronger prose, sharper rhythm, clearer sensory detail, stronger subtext, and a more distinct novelist's touch.",
+          "Rewrite the highlighted words again with materially stronger prose, sharper rhythm, clearer sensory detail, stronger subtext, and a more distinct novelist's touch.",
           "Keep the same facts and continuity, but change enough of the wording and sentence movement that the improvement is obvious.",
         ]
       : options.actionType === "CUSTOM_EDIT"
         ? [
             "The previous result did not visibly follow the custom instruction strongly enough.",
-            `Custom instruction to honor exactly: ${options.instruction || "Rewrite the selected text."}`,
-            "Rewrite the selected text so the custom instruction is obvious on the page while preserving the same scene facts and continuity.",
+            `Custom instruction to honor exactly: ${options.instruction || "Rewrite the highlighted words."}`,
+            "Rewrite the highlighted words so the custom instruction is obvious in the new wording while preserving the same scene facts and continuity.",
           ]
         : options.actionType === "SHARPEN_VOICE"
           ? [
               "The previous result did not materially sharpen the voice.",
-              "Rewrite the selected text again so diction, rhythm, directness, and emotional leakage clearly feel more specific and character-driven.",
+              "Rewrite the highlighted words again so diction, rhythm, directness, and emotional leakage clearly feel more specific and character-driven.",
             ]
           : [
               "The previous result did not add enough real dialogue or remained too close to the original.",
-              "Rewrite the selected text again so dialogue carries the dramatic movement, with properly quoted speech and distinct human voices.",
+              "Rewrite the highlighted words again so dialogue carries the dramatic movement, with properly quoted speech and distinct human voices.",
             ];
 
   const repairPrompt = buildPromptEnvelope(
@@ -1738,11 +1738,11 @@ async function enforceInlineTransformationIfNeeded(options: {
     options.project,
     options.context,
     [
-      "Rewrite only the selected text.",
+      "Rewrite only the highlighted words.",
       ...repairLines,
       requiresDialogue ? "Return at least one properly quoted spoken line." : "",
-      "Return only the replacement prose.",
-      "Selected text:",
+      "Return only the new story text.",
+      "Highlighted words:",
       options.selectionText,
       "Rejected previous result:",
       options.content,
@@ -1799,24 +1799,25 @@ async function enforceSelectionSourceIfNeeded(options: {
     options.project,
     options.context,
     [
-      "The previous result appears to have drifted away from the selected text.",
-      "Rewrite only the selected text below. The selected text is the source material.",
+      "The previous result drifted away from the highlighted words.",
+      "Rewrite only the highlighted words below.",
       "Preserve its core event, subject, speaker set, chronology, and meaning.",
       buildSourceAnchorInstruction(options.selectionText),
-      "Use surrounding project context only for continuity and style, not as replacement source material.",
+      "Use the rest of the project only for edge continuity and style, not as material to copy or replace.",
       "Do not answer with reusable filler. Do not rely on phrases like 'the moment,' 'the pressure,' 'the choice,' or 'the situation.'",
+      "Do not use editor/planning/process vocabulary; write fictional story wording only.",
       options.actionType === "EXPAND"
-        ? `The selected text has ${selectedWords} words. Return roughly ${selectedWords * 3} words, with a 10 percent tolerance.`
+        ? `The highlight has ${selectedWords} words. Return roughly ${selectedWords * 3} words, with a 10 percent tolerance.`
         : "",
       options.actionType === "TIGHTEN"
-        ? `The selected text has ${selectedWords} words. Return roughly ${Math.max(Math.round(selectedWords / 3), 1)} words, with a 10 percent tolerance.`
+        ? `The highlight has ${selectedWords} words. Return roughly ${Math.max(Math.round(selectedWords / 3), 1)} words, with a 10 percent tolerance.`
         : "",
       options.instruction ? `Writer instruction: ${options.instruction}` : buildAssistActionInstruction(options.actionType),
-      "Selected text to transform:",
+      "Highlighted words to transform:",
       options.selectionText,
       "Rejected result that drifted away:",
       options.content,
-      "Return only the replacement prose.",
+      "Return only the new story text.",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -2167,22 +2168,33 @@ function buildSourceAnchorInstruction(selectionText: string) {
   }
 
   return [
-    `Concrete source anchors to preserve when applicable: ${anchors.join(", ")}.`,
-    `The replacement should visibly retain at least ${required} of those source anchors unless the writer's custom instruction directly removes them.`,
-    "Do not replace concrete selected details with vague phrases like 'the moment,' 'the pressure,' 'the choice,' or 'the situation.'",
-    "Every added sentence should grow out of a specific name, object, action, sensation, emotion, or conflict already present in the selected text.",
+    `Keep these exact concrete details visible when they still fit: ${anchors.join(", ")}.`,
+    `Use at least ${required} of those details unless the writer directly removes them.`,
+    "Do not replace concrete details with vague phrases like 'the moment,' 'the pressure,' 'the choice,' or 'the situation.'",
+    "Every added sentence should grow out of a specific name, object, action, sensation, emotion, or conflict already present in the highlighted words.",
   ].join(" ");
+}
+
+const assistProcessLeakPattern =
+  /\b(?:context|contextuali[sz]\w*|textuali[sz]\w*|source material|source anchors?|selected passage|selected event|selected span|replacement prose|rewrite process|style plan|continuity plan|the prompt|the instruction|on the page)\b/i;
+
+function hasAssistProcessLeak(value: string) {
+  return assistProcessLeakPattern.test(value);
 }
 
 function genericAssistSentenceCount(value: string) {
   return splitFallbackSentences(value).filter((sentence) =>
-    /\b(?:the moment|the pause|the character|the choice|the situation|the pressure|the scene|the beat|the detail|the answer changed|something to lose|more specific|more costly)\b/i.test(
+    /\b(?:the moment|the pause|the character|the choice|the situation|the pressure|the scene|the beat|the detail|the answer changed|something to lose|more specific|more costly|source material|source anchor|selected passage|replacement prose|contextuali[sz]\w*|textuali[sz]\w*)\b/i.test(
       sentence,
     ),
   ).length;
 }
 
 function looksTooGenericForSelection(content: string, selectionText: string) {
+  if (hasAssistProcessLeak(content)) {
+    return true;
+  }
+
   const coverage = sourceAnchorCoverage(selectionText, content);
   const genericCount = genericAssistSentenceCount(content);
   if (genericCount === 0) {
@@ -2328,32 +2340,32 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
   switch (actionType) {
     case "TIGHTEN":
       return [
-        "Rewrite only the selected text so the final result is approximately one third of the original word count.",
+        "Rewrite only the highlighted words so the final result is approximately one third of the original word count.",
         "Cut hard and decisively, not gently.",
         "Preserve the core meaning, continuity, scene logic, and voice, but strip everything nonessential.",
         "Do not summarize vaguely. Keep the surviving language vivid, precise, and readable.",
       ].join(" ");
     case "EXPAND":
       return [
-        "Rewrite and expand only the selected text.",
+        "Rewrite and expand only the highlighted words.",
         "Do not merely append a sentence to the end.",
-        "Internally break the selected passage into five micro-parts or beats, then rebuild all five with richer detail, stronger transitions, added texture, and clearer emotional movement.",
-        "Increase the total length to approximately three times the original selected word count while preserving the same underlying event, chronology, and meaning.",
-        "Keep the same dramatic center, speaker set, and local scene situation unless the selected text itself already changes them.",
-        "Keep the selected passage's concrete names, objects, images, actions, and emotions visible on the page.",
-        "Do not pad with universal filler. Every added line must make a specific detail from the selected passage more vivid, pressured, human, or consequential.",
+        "Privately break the highlighted moment into five micro-movements, then rebuild all five with richer detail, stronger transitions, added texture, and clearer emotional movement.",
+        "Increase the total length to approximately three times the original highlight word count while preserving the same underlying event, chronology, and meaning.",
+        "Keep the same dramatic center, speaker set, and local scene situation unless the highlight itself already changes them.",
+        "Keep the highlighted words' concrete names, objects, images, actions, and emotions visible in the new wording.",
+        "Do not pad with universal filler. Every added line must make a specific detail from the highlight more vivid, pressured, human, or consequential.",
         "Respect the project's dialogue-versus-description settings while expanding.",
       ].join(" ");
     case "IMPROVE_PROSE":
       return [
-        "Rewrite only the selected text with materially stronger prose, not a light polish.",
+        "Rewrite only the highlighted words with materially stronger prose, not a light polish.",
         "Increase specificity, sensory clarity, rhythm, subtext, and emotional precision.",
         "Prefer sharp concrete choices over generic phrasing, and make the passage feel written by a human novelist rather than a neutral assistant.",
         "Change enough of the wording and sentence movement that the improvement is plainly visible while preserving the same core facts.",
       ].join(" ");
     case "SHARPEN_VOICE":
       return [
-        "Rewrite only the selected text so the voice becomes unmistakably more specific and character-driven.",
+        "Rewrite only the highlighted words so the voice becomes unmistakably more specific and character-driven.",
         "Make larger changes than a light polish: shift diction, syntax, rhythm, directness, subtext, and verbal habits as needed.",
         "Preserve the scene facts and continuity, but make the voice clearly more distinctive.",
         "If multiple characters speak, pull them farther apart so they no longer sound like the same person with minor wording changes.",
@@ -2361,16 +2373,16 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
       ].join(" ");
     case "ADD_TENSION":
       return [
-        "Rewrite only the selected text so the pressure rises in a real Bell-style way, not as a light rewording.",
-        "Clarify what the focal character wants in this moment, what pushes back, and how the resistance gets worse on the page.",
+        "Rewrite only the highlighted words so the pressure rises in a real Bell-style way, not as a light rewording.",
+        "Clarify what the focal character wants in this moment, what pushes back, and how the resistance gets worse in the story text.",
         "Increase worry through opposition, uncertainty, subtext, bad options, time pressure, exposure, threat, or emotional consequence.",
-        "Make the end of the selected passage more pressured than the beginning.",
+        "Make the end of the highlighted moment more pressured than the beginning.",
         "Do not merely substitute sharper adjectives or slightly harsher wording.",
       ].join(" ");
     case "ADD_DIALOGUE":
       return [
-        "Rewrite only the selected text so it contains stronger on-page dialogue.",
-        "Use the chapter context, character dossiers, and current scene logic to decide who is most likely speaking.",
+        "Rewrite only the highlighted words so they contain stronger spoken dialogue.",
+        "Use the chapter so far, character dossiers, and current scene logic to decide who is most likely speaking.",
         "If a speaker lacks a full dossier, infer their voice from role, class, education, origin, and emotional pressure in the scene.",
         "Make the dialogue specific, dramatically useful, and natural for the characters involved.",
         "Each speaker should sound recognizably different in rhythm, directness, vocabulary, and emotional control.",
@@ -2382,18 +2394,18 @@ function buildAssistActionInstruction(actionType: AssistActionType) {
       return [
         "Convert the selected descriptive or expository passage into dialogue and brief action beats.",
         "Preserve the same information, emotional intent, and scene logic.",
-        "Use the most likely speaking characters based on the chapter context and their dossiers.",
+        "Use the most likely speaking characters based on the chapter so far and their dossiers.",
         "If a likely speaker lacks a full dossier, infer a plausible voice from role, class, education, origin, and emotional pressure in the scene.",
         "Make the exchange sound natural and in-character.",
         "Use standard double quotation marks for every spoken line and make sure each one closes correctly.",
         "Do not make everyone sound equally articulate, equally calm, or equally explanatory.",
       ].join(" ");
     case "CUSTOM_EDIT":
-      return "Follow the writer's instruction exactly on the selected text while preserving continuity, scene logic, and character-specific human voice. Make a decisive rewrite that visibly reflects the instruction rather than returning a near-copy of the original.";
+      return "Follow the writer's instruction exactly on the highlighted words while preserving continuity, scene logic, and character-specific human voice. Make a decisive rewrite that visibly reflects the instruction rather than returning a near-copy of the original.";
     case "REPHRASE":
-      return "Rephrase only the selected text without changing its meaning.";
+      return "Rephrase only the highlighted words without changing their meaning.";
     default:
-      return `Perform ${actionType.toLowerCase()} on the selected text.`;
+      return `Perform ${actionType.toLowerCase()} on the highlighted words.`;
   }
 }
 
@@ -2409,30 +2421,30 @@ export function buildAssistScopedInstruction(
   const selectedWordCount = roughWordCount(selectionText);
   const measuredLengthInstruction =
     actionType === "EXPAND" && selectedWordCount > 0
-      ? `Measured length target: the selected text has ${selectedWordCount} words. Return roughly ${selectedWordCount * 3} words, with a 10 percent tolerance.`
+      ? `Measured length target: the highlight has ${selectedWordCount} words. Return roughly ${selectedWordCount * 3} words, with a 10 percent tolerance.`
       : actionType === "TIGHTEN" && selectedWordCount > 0
-        ? `Measured length target: the selected text has ${selectedWordCount} words. Return roughly ${Math.max(Math.round(selectedWordCount / 3), 1)} words, with a 10 percent tolerance.`
+        ? `Measured length target: the highlight has ${selectedWordCount} words. Return roughly ${Math.max(Math.round(selectedWordCount / 3), 1)} words, with a 10 percent tolerance.`
         : "";
   const selectedSourceInstruction = selectionText.trim()
     ? [
-        "SELECTED TEXT TO REWRITE:",
-        "<selected_text>",
+        "HIGHLIGHTED WORDS TO REWRITE:",
+        "<highlighted_words>",
         selectionText.trim(),
-        "</selected_text>",
-        "This selected text is the source material. Transform this text only.",
+        "</highlighted_words>",
+        "Rewrite these highlighted words only.",
         buildSourceAnchorInstruction(selectionText),
-        "Do not use the text before or after as the material to rewrite; use it only to keep continuity at the edges.",
+        "The before/after text is only a border so the new wording joins smoothly; do not rewrite or repeat it.",
       ].join("\n")
     : "";
   const boundaryInstruction =
     beforeSelection.trim() || afterSelection.trim()
       ? [
-          "Use the text immediately before and after the selected span as continuity boundaries.",
+          "Use the text immediately before and after the highlight as edge boundaries.",
           "Understand what comes before and what comes after so the replacement fits naturally between them.",
-          "Do not repeat, restate, or paraphrase the adjacent sentences just because they appear in context.",
-          "Write only the replacement for the selected span itself.",
-          beforeSelection.trim() ? `Immediate text before selection: ${beforeSelection.trim().slice(-280)}` : "",
-          afterSelection.trim() ? `Immediate text after selection: ${afterSelection.trim().slice(0, 280)}` : "",
+          "Do not repeat, restate, or paraphrase the adjacent sentences just because they appear nearby.",
+          "Write only the new wording for the highlighted part itself.",
+          beforeSelection.trim() ? `Immediate text before highlight: ${beforeSelection.trim().slice(-280)}` : "",
+          afterSelection.trim() ? `Immediate text after highlight: ${afterSelection.trim().slice(0, 280)}` : "",
         ]
           .filter(Boolean)
           .join(" ")
@@ -2463,17 +2475,17 @@ export function buildAssistScopedInstruction(
     measuredLengthInstruction,
     boundaryInstruction,
     actionType === "CUSTOM_EDIT"
-      ? "Treat the writer's custom instruction as the top priority for the selected text."
+      ? "Treat the writer's custom instruction as the top priority for the highlighted words."
       : "",
     "Never describe what you are about to do.",
     "Never explain the style plan, continuity plan, or reasoning.",
-    "Never mention the selected text, the rewrite process, the prompt, the instruction, or the surrounding context.",
+    "Never mention the highlight, rewrite process, prompt, instruction, surrounding text, or internal plan.",
     "Do not say things like 'we need to rewrite', 'the rewrite should', 'we must apply style', or 'should we italicize'.",
-    "Return only the rewritten replacement text for the selected span.",
+    "Return only the new wording for the highlighted part.",
     "Do not repeat unchanged text from before or after the selection.",
     "Do not add commentary, labels, markdown, or wrapper quotation marks around the whole answer.",
     "Use normal dialogue quotation marks inside the prose whenever characters speak.",
-    "If the selected text contains internal thought, keep it clearly interior and italicized rather than spoken aloud.",
+    "If the highlight contains internal thought, keep it clearly interior and italicized rather than spoken aloud.",
     "Do not leave unmatched closing or opening quotation marks in the returned prose.",
   ]
     .filter(Boolean)

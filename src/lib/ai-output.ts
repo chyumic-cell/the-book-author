@@ -14,9 +14,9 @@ const editorialHeadingPattern =
 const editorialParagraphPattern =
   /(?:the chapter now|the chapter ends with|the chapter closes with|this chapter ends|this chapter closes|the scene ends with|the scene closes with|clear pov anchoring|concrete goal|active opposition|meaningful change|character moment|escalating stakes|storyforge|revision pass|coach note|why this works|editorial note|editorial assessment|architecture fix|revision plan|return only final revised chapter prose|we are scrubbing|okay,\s*i will|here is the revised chapter|here is the full revised chapter|i will rewrite|i will revise)/i;
 const inlineMetaLeadPattern =
-  /^(?:we need to|i need to|we should|i should|let(?:'s| us)|the rewrite should|the selected text|rewrite only|improve the selected text|add tension by|we must apply style|the original likely|should we|we'?ll italic|use the text immediately before|return only the replacement prose|follow Bell-style|keep internal thought italicized)(?:\b|:)/i;
+  /^(?:we need to|i need to|we should|i should|let(?:'s| us)|the rewrite should|the selected text|selected passage|selected span|rewrite only|improve the selected text|add tension by|we must apply style|the original likely|should we|we'?ll italic|use the text immediately before|return only the replacement prose|replacement prose|source material|source anchors?|context(?:uali[sz]\w*)?|textuali[sz]\w*|follow Bell-style|keep internal thought italicized)(?:\b|:)/i;
 const inlineMetaSentencePattern =
-  /(?:\bwe need to\b|\bi need to\b|\bwe should\b|\bthe rewrite should\b|\bthe selected text\b|\boriginal selected text\b|\breturn only the replacement prose\b|\bwe must apply style\b|\bshould we italicize\b|\bthe original likely\b|\bwe'?ll italic(?:ize)?\b|\buse the text immediately before\b|\bfollow Bell-style\b|\bkeep internal thought italicized\b)/i;
+  /(?:\bwe need to\b|\bi need to\b|\bwe should\b|\bthe rewrite should\b|\bthe selected text\b|\boriginal selected text\b|\bselected passage\b|\bselected event\b|\bselected span\b|\breturn only the replacement prose\b|\breplacement prose\b|\bsource material\b|\bsource anchors?\b|\bcontext\b|\bcontextuali[sz]\w*\b|\btextuali[sz]\w*\b|\brewrite process\b|\bstyle plan\b|\bcontinuity plan\b|\bthe prompt\b|\bthe instruction\b|\bon the page\b|\bwe must apply style\b|\bshould we italicize\b|\bthe original likely\b|\bwe'?ll italic(?:ize)?\b|\buse the text immediately before\b|\bfollow Bell-style\b|\bkeep internal thought italicized\b)/i;
 const editorialListPattern = /^(?:[-*]|\d+\.)\s+/;
 const playScriptDialoguePattern = /^([A-Z][\p{L}'’.-]*(?:\s+[A-Z][\p{L}'’.-]*){0,3})\s*:\s+(.+)$/u;
 const nonSpeakerLabels = new Set(["Chapter", "Scene", "Act", "Part", "Note"]);
@@ -108,7 +108,7 @@ function stripLeadingWrapper(value: unknown) {
 }
 
 const aiLeakagePattern =
-  /(?:\b(?:the user wants|the user asked|i need to|we need to|i should|we should|let'?s|return only|field path|requested field|target field|target area|current field value|rejected result|instruction says|do not output|json only|strict json|app-ready|canon-safe|the dossier|this field should|should remain specific)\b|(?:dossier|quickProfile|currentState|relationshipDynamics|personalityBehavior|speechLanguage|basicIdentity|lifePosition)\.)/i;
+  /(?:\b(?:the user wants|the user asked|i need to|we need to|i should|we should|let'?s|return only|field path|requested field|target field|target area|current field value|rejected result|instruction says|do not output|json only|strict json|app-ready|canon-safe|source material|source anchor|selected text|selected passage|contextuali[sz]\w*|textuali[sz]\w*|the dossier|this field should|should remain specific)\b|(?:dossier|quickProfile|currentState|relationshipDynamics|personalityBehavior|speechLanguage|basicIdentity|lifePosition)\.)/i;
 const aiLeakageLeadPattern =
   /^(?:okay|alright|sure|certainly|here(?:'s| is)|below is|first[, ]|wait[, ]|let(?:'s| us)|i(?:'ll| will| need to| should)|we(?: need to| should| must)|the user wants|the instruction says)\b/i;
 const repeatedTraitTripletPattern = /^(?:guarded|precise|grief[- ]driven)(?:\s*(?:[|,;]|\n)\s*(?:guarded|precise|grief[- ]driven)){1,4}$/i;
@@ -372,7 +372,16 @@ export function cleanInlineSuggestionText(value: unknown) {
     .filter(Boolean);
 
   const cleaned = normalizeQuoteSpacing(cleanedParagraphs.join("\n\n").trim());
-  return cleaned || cleanStructuredText(value);
+  if (cleaned) {
+    return cleaned;
+  }
+
+  const fallback = cleanStructuredText(value);
+  if (inlineMetaLeadPattern.test(fallback) || inlineMetaSentencePattern.test(fallback)) {
+    return "";
+  }
+
+  return fallback;
 }
 
 function trimRepeatedBoundaryOverlap(value: string, boundary: string, side: "start" | "end") {

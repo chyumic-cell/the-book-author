@@ -92,6 +92,27 @@ He looked at the road and said, "If they find us, we are finished.
     expect(cleaned).not.toContain("Here is the expanded passage");
   });
 
+  it("removes process-language leaks from inline rewrite suggestions", () => {
+    const raw = [
+      "Rafi held the torn map closer to the lantern and watched the missing road darken under his thumb.",
+      "This contextualizes the source material and textualizes the pressure from the selected passage.",
+      "The replacement prose should preserve the context and source anchors.",
+    ].join(" ");
+
+    const cleaned = cleanInlineSuggestionText(raw);
+
+    expect(cleaned).toContain("Rafi held the torn map");
+    expect(cleaned).not.toMatch(/\b(?:context|contextuali[sz]|textuali[sz]|source material|source anchor|selected passage|replacement prose)\b/i);
+  });
+
+  it("does not fall back to a wholly leaked inline answer", () => {
+    const cleaned = cleanInlineSuggestionText(
+      "Contextualise the selected passage by textualising the source material in replacement prose.",
+    );
+
+    expect(cleaned).toBe("");
+  });
+
   it("removes meta ending prose and trims broken final sentence fragments", () => {
     const raw = `
 Lucius watched the doorway until the last worshiper vanished into the alley. He told himself the sound in his chest was only fatigue.
