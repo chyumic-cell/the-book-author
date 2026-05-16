@@ -91,6 +91,15 @@ function shouldUseOpenRouterFallbackFirst(model: string) {
   return model === "openrouter/free" || model.includes("owl-alpha");
 }
 
+function openRouterFallbackAttemptLimit(model: string, options: ProviderCallOptions) {
+  if (!shouldUseOpenRouterFallbackFirst(model)) {
+    return 1;
+  }
+
+  // Long hosted chapter calls need one high-quality backup, not a chain that can outlive Vercel.
+  return (options.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS) >= 90000 ? 1 : 2;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1089,7 +1098,7 @@ async function callProvider(
         prompt,
         options,
         new Set([preferredModel]),
-        shouldUseOpenRouterFallbackFirst(provider.model) ? 2 : 1,
+        openRouterFallbackAttemptLimit(provider.model, options),
       );
       if (fallbackText) {
         return fallbackText;
@@ -1102,7 +1111,7 @@ async function callProvider(
           prompt,
           options,
           new Set([preferredModel]),
-          shouldUseOpenRouterFallbackFirst(provider.model) ? 2 : 1,
+          openRouterFallbackAttemptLimit(provider.model, options),
         );
         if (fallbackText) {
           return fallbackText;
@@ -2653,6 +2662,7 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
       ? buildHostedFastDraftInstruction(chapter, additionalInstruction)
       : withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
     maxOutputTokens: hostedFastMode ? hostedDraftOutputTokenBudget(chapter) : chapterOutputTokenBudget(chapter),
+    timeoutMs: hostedFastMode ? 120000 : undefined,
     mockContent: hostedFastMode ? undefined : mockDraft(project, context, chapter),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
