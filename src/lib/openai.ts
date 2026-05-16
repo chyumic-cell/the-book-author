@@ -80,11 +80,11 @@ const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS 
 
 const OPENROUTER_VISIBLE_TEXT_FALLBACK_MODELS = [
   "deepseek/deepseek-v4-flash:free",
-  "openai/gpt-oss-20b:free",
   "qwen/qwen3-next-80b-a3b-instruct:free",
+  "openai/gpt-oss-120b:free",
   "minimax/minimax-m2.5:free",
   "z-ai/glm-4.5-air:free",
-  "openai/gpt-oss-120b:free",
+  "openai/gpt-oss-20b:free",
 ] as const;
 
 function shouldUseOpenRouterFallbackFirst(model: string) {
@@ -251,6 +251,14 @@ function hostedDraftTargetWords(chapter: ChapterRecord) {
 function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
   const targetWords = hostedDraftTargetWords(chapter);
   return wordBudgetToTokens(targetWords + 160, 1100, 3200);
+}
+
+function hostedDraftMinimumWords(chapter: ChapterRecord) {
+  return Math.max(500, Math.floor(hostedDraftTargetWords(chapter) * 0.7));
+}
+
+function hostedAssistTimeoutMs(actionType: AssistActionType) {
+  return actionType === "CONTINUE" ? 120000 : 30000;
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -1042,7 +1050,7 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
     case "NEXT_BEATS":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.65, 90), 220), 180, 600);
     case "CONTINUE":
-      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 2.2, 350), 950), 520, 1800);
+      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 4.2, 900), 1600), 900, 2600);
     case "COACH":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.85, 140), 260), 220, 760);
     case "SHARPEN_VOICE":
@@ -1076,14 +1084,26 @@ async function callProvider(
       if (directChat) {
         return directChat;
       }
-      const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]), 1);
+      const fallbackText = await tryOpenRouterFallbackModels(
+        provider,
+        prompt,
+        options,
+        new Set([preferredModel]),
+        shouldUseOpenRouterFallbackFirst(provider.model) ? 2 : 1,
+      );
       if (fallbackText) {
         return fallbackText;
       }
       throw new Error(`The active OpenRouter model (${preferredModel}) returned no visible text.`);
     } catch (error) {
       if (isRetryableProviderError(error)) {
-        const fallbackText = await tryOpenRouterFallbackModels(provider, prompt, options, new Set([preferredModel]), 1);
+        const fallbackText = await tryOpenRouterFallbackModels(
+          provider,
+          prompt,
+          options,
+          new Set([preferredModel]),
+          shouldUseOpenRouterFallbackFirst(provider.model) ? 2 : 1,
+        );
         if (fallbackText) {
           return fallbackText;
         }
@@ -1782,6 +1802,54 @@ async function enforceInlineTransformationIfNeeded(options: {
   }
 
   return repairedSimilarity < similarity ? repaired : options.content;
+}
+
+async function expandHostedShortDraftIfNeeded(options: {
+  project: ProjectWorkspace;
+  chapter: ChapterRecord;
+  context: ContextPackage;
+  content: string;
+  additionalInstruction?: string;
+}) {
+  const words = roughWordCount(options.content);
+  const minimum = hostedDraftMinimumWords(options.chapter);
+  if (words >= minimum) {
+    return options.content;
+  }
+
+  const targetWords = hostedDraftTargetWords(options.chapter);
+  const expansionInstruction = [
+    `The current hosted chapter pass is only about ${words} words. That is too short for a usable manuscript page.`,
+    `Rewrite the full chapter pass to roughly ${targetWords} words, with an absolute minimum of ${minimum} words.`,
+    "Keep the same chapter title, POV, chronology, canon facts, emotional direction, and world rules.",
+    "Use the existing short pass only as seed material. Do not repeat the opening, do not summarize, and do not explain the task.",
+    "Add real scene development: quoted dialogue, opposition, choices, sensory pressure, transitions, and a concrete ending beat.",
+    "Return only manuscript prose. No labels, notes, markdown headings, app terms, or editorial commentary.",
+    options.additionalInstruction?.trim() ? `Additional writer direction:\n${options.additionalInstruction.trim()}` : "",
+    `Current short pass:\n${options.content}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const expansionPrompt = buildPromptEnvelope(
+    "Expand hosted short chapter pass",
+    options.project,
+    options.context,
+    expansionInstruction,
+    "You are repairing an under-length hosted chapter pass. Produce real finished prose, not advice.",
+  );
+  const expandedRaw = await generateTextWithProvider(expansionPrompt, {
+    maxOutputTokens: hostedDraftOutputTokenBudget(options.chapter),
+    timeoutMs: 120000,
+  });
+
+  if (!expandedRaw?.trim()) {
+    return options.content;
+  }
+
+  const expandedContent = sanitizeGeneratedChapterText(options.project, options.chapter, expandedRaw);
+  const expandedWords = roughWordCount(expandedContent);
+  return expandedWords > words ? expandedContent : options.content;
 }
 
 function isSelectionRewriteAction(actionType: AssistActionType) {
@@ -2585,7 +2653,7 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
       ? buildHostedFastDraftInstruction(chapter, additionalInstruction)
       : withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
     maxOutputTokens: hostedFastMode ? hostedDraftOutputTokenBudget(chapter) : chapterOutputTokenBudget(chapter),
-    mockContent: mockDraft(project, context, chapter),
+    mockContent: hostedFastMode ? undefined : mockDraft(project, context, chapter),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
     enforceChapterLength: !hostedFastMode,
@@ -2593,6 +2661,18 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
   });
 
   if (hostedFastMode && result.content.trim()) {
+    try {
+      result.content = await expandHostedShortDraftIfNeeded({
+        project,
+        chapter,
+        context,
+        content: result.content,
+        additionalInstruction,
+      });
+    } catch (error) {
+      console.warn("[ai] hosted short-draft repair failed; keeping generated draft", error);
+    }
+
     try {
       result.content = await repairDialogueHeavyChapterIfNeeded({
         project,
@@ -2712,8 +2792,11 @@ export async function assistSelection(input: {
     ),
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
-    timeoutMs: isHostedFastDraftMode() ? 30000 : undefined,
-    mockContent: createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
+    timeoutMs: isHostedFastDraftMode() ? hostedAssistTimeoutMs(input.actionType) : undefined,
+    mockContent:
+      isHostedFastDraftMode() && input.actionType === "CONTINUE"
+        ? undefined
+        : createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
     clean: (value) =>
       cleanInlineSuggestionAgainstContext(value, {
         beforeSelection: input.beforeSelection,
