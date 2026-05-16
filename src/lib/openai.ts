@@ -254,7 +254,7 @@ function isHostedFastDraftMode() {
 
 function hostedDraftTargetWords(chapter: ChapterRecord) {
   const target = chapter.targetWordCount || 1800;
-  return Math.min(Math.max(Math.round(target * 0.55), 700), 1800);
+  return Math.min(Math.max(Math.round(target * 0.35), 650), 1100);
 }
 
 function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
@@ -267,7 +267,7 @@ function hostedDraftMinimumWords(chapter: ChapterRecord) {
 }
 
 function hostedAssistTimeoutMs(actionType: AssistActionType) {
-  return actionType === "CONTINUE" ? 120000 : 30000;
+  return actionType === "CONTINUE" ? 90000 : 30000;
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -1059,7 +1059,7 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
     case "NEXT_BEATS":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.65, 90), 220), 180, 600);
     case "CONTINUE":
-      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 4.2, 900), 1600), 900, 2600);
+      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 3.2, 650), 1050), 760, 1700);
     case "COACH":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.85, 140), 260), 220, 760);
     case "SHARPEN_VOICE":
@@ -1849,7 +1849,7 @@ async function expandHostedShortDraftIfNeeded(options: {
   );
   const expandedRaw = await generateTextWithProvider(expansionPrompt, {
     maxOutputTokens: hostedDraftOutputTokenBudget(options.chapter),
-    timeoutMs: 120000,
+    timeoutMs: 90000,
   });
 
   if (!expandedRaw?.trim()) {
@@ -2662,7 +2662,7 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
       ? buildHostedFastDraftInstruction(chapter, additionalInstruction)
       : withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
     maxOutputTokens: hostedFastMode ? hostedDraftOutputTokenBudget(chapter) : chapterOutputTokenBudget(chapter),
-    timeoutMs: hostedFastMode ? 120000 : undefined,
+    timeoutMs: hostedFastMode ? 90000 : undefined,
     mockContent: hostedFastMode ? undefined : mockDraft(project, context, chapter),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
