@@ -73,6 +73,7 @@ async function getProviderClient() {
 
 type ProviderCallOptions = {
   maxOutputTokens?: number;
+  timeoutMs?: number;
 };
 
 const PROVIDER_CALL_TIMEOUT_MS = Number(process.env.AI_PROVIDER_CALL_TIMEOUT_MS ?? 60000);
@@ -1111,6 +1112,7 @@ async function callProvider(
             { signal },
           ),
         `${provider.label} responses call`,
+        options.timeoutMs,
       );
 
       const directText = extractTextFromResponsePayload(response);
@@ -1171,6 +1173,7 @@ async function callChatCompletion(
         { signal },
       ),
     `${provider.label} chat call (${model})`,
+    options.timeoutMs,
   );
 
   return extractTextFromResponsePayload(response);
@@ -1390,6 +1393,7 @@ async function runPromptTask(options: {
   enforceOutlineDepth?: boolean;
   enforceChapterLength?: boolean;
   repairChapterEnding?: boolean;
+  timeoutMs?: number;
 }) {
   const prompt = buildPromptEnvelope(
     options.task,
@@ -1402,6 +1406,7 @@ async function runPromptTask(options: {
   try {
     raw = await generateTextWithProvider(prompt, {
       maxOutputTokens: options.maxOutputTokens,
+      timeoutMs: options.timeoutMs,
     });
   } catch (error) {
     if (!options.mockContent || !isHostedFastDraftMode()) {
@@ -1582,6 +1587,7 @@ async function enforceInlineLengthIfNeeded(options: {
       );
       const repairedRaw = await generateTextWithProvider(repairPrompt, {
         maxOutputTokens: wordBudgetToTokens(maximumAcceptable, 420, 6200),
+        timeoutMs: 30000,
       });
       const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
       const repairedWords = roughWordCount(repaired);
@@ -1632,6 +1638,7 @@ async function enforceInlineLengthIfNeeded(options: {
       );
       const repairedRaw = await generateTextWithProvider(repairPrompt, {
         maxOutputTokens: wordBudgetToTokens(maximumAcceptable + 12, 120, 1400),
+        timeoutMs: 30000,
       });
       const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
       const repairedWords = roughWordCount(repaired);
@@ -1685,6 +1692,7 @@ async function enforceTensionIfNeeded(options: {
   );
   const repairedRaw = await generateTextWithProvider(repairPrompt, {
     maxOutputTokens: wordBudgetToTokens(Math.max(Math.ceil(selectedWords * 1.35), selectedWords + 24), 240, 2400),
+    timeoutMs: 30000,
   });
   const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
   return repaired.trim() && overlapScore(options.selectionText, repaired) < similarity ? repaired : options.content;
@@ -1760,6 +1768,7 @@ async function enforceInlineTransformationIfNeeded(options: {
 
   const repairedRaw = await generateTextWithProvider(repairPrompt, {
     maxOutputTokens: assistOutputTokenBudget(options.actionType, options.selectionText),
+    timeoutMs: 30000,
   });
   const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
   if (!repaired.trim()) {
@@ -1831,6 +1840,7 @@ async function enforceSelectionSourceIfNeeded(options: {
   );
   const repairedRaw = await generateTextWithProvider(repairPrompt, {
     maxOutputTokens: assistOutputTokenBudget(options.actionType, options.selectionText),
+    timeoutMs: 30000,
   });
   const repaired = repairedRaw ? cleanInlineSuggestionText(repairedRaw) : "";
   if (!repaired.trim()) {
@@ -2702,6 +2712,7 @@ export async function assistSelection(input: {
     ),
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
+    timeoutMs: isHostedFastDraftMode() ? 30000 : undefined,
     mockContent: createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
     clean: (value) =>
       cleanInlineSuggestionAgainstContext(value, {
