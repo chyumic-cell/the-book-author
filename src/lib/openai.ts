@@ -267,7 +267,7 @@ function hostedDraftMinimumWords(chapter: ChapterRecord) {
 }
 
 function hostedAssistTimeoutMs(actionType: AssistActionType) {
-  return actionType === "CONTINUE" ? 90000 : 30000;
+  return actionType === "CONTINUE" ? 60000 : 30000;
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -1059,7 +1059,7 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
     case "NEXT_BEATS":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.65, 90), 220), 180, 600);
     case "CONTINUE":
-      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 3.2, 650), 1050), 760, 1700);
+      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 2.4, 450), 720), 560, 1200);
     case "COACH":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.85, 140), 260), 220, 760);
     case "SHARPEN_VOICE":
