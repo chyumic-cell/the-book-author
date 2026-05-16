@@ -242,9 +242,14 @@ function isHostedFastDraftMode() {
   return process.env.VERCEL === "1" || isHostedBetaEnabled();
 }
 
+function hostedDraftTargetWords(chapter: ChapterRecord) {
+  const target = chapter.targetWordCount || 1800;
+  return Math.min(Math.max(Math.round(target * 0.55), 700), 1800);
+}
+
 function hostedDraftOutputTokenBudget(chapter: ChapterRecord) {
-  const targetWords = Math.min(Math.max(Math.round((chapter.targetWordCount || 1800) * 0.35), 450), 900);
-  return wordBudgetToTokens(targetWords + 120, 700, 1500);
+  const targetWords = hostedDraftTargetWords(chapter);
+  return wordBudgetToTokens(targetWords + 160, 1100, 3200);
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -253,9 +258,10 @@ function hostedOutlineOutputTokenBudget() {
 
 function buildHostedFastDraftInstruction(chapter: ChapterRecord, additionalInstruction = "") {
   const base = formatChapterInstruction(chapter, "draft");
+  const targetWords = hostedDraftTargetWords(chapter);
   const fastPass = [
-    "Hosted fast-draft mode: deliver a strong first-pass chapter section that is complete, scene-rich, and commercially readable without trying to hit the entire final chapter length in one response.",
-    "Aim for roughly 500 to 900 words in this first pass so the hosted AI can return quickly and the writer can expand in passes.",
+    "Hosted draft mode: deliver a strong chapter pass that is complete, scene-rich, and commercially readable while staying within hosted runtime limits.",
+    `Aim for roughly ${targetWords} words in this pass so the hosted AI can produce substantial manuscript pages without timing out.`,
     "Prioritize sharp scene progression, lots of dialogue, clear emotional turns, and a complete ending beat for this pass.",
     "Put quoted spoken dialogue on the page early and often. Let dialogue do most of the dramatic work unless a brief silence is itself the dramatic move.",
     "Use plain manuscript prose: no markdown bold, no markdown headings, no bullet labels. Use single-asterisk italics only for direct internal thought, and always close the italic span.",
@@ -1035,7 +1041,7 @@ function assistOutputTokenBudget(actionType: AssistActionType, selectionText: st
     case "NEXT_BEATS":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.65, 90), 220), 180, 600);
     case "CONTINUE":
-      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 1.4, 200), 420), 260, 900);
+      return wordBudgetToTokens(Math.min(Math.max(baselineWords * 2.2, 350), 950), 520, 1800);
     case "COACH":
       return wordBudgetToTokens(Math.min(Math.max(baselineWords * 0.85, 140), 260), 220, 760);
     case "SHARPEN_VOICE":
