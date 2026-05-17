@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_NAME } from "@/lib/brand";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -75,19 +76,19 @@ export function PwaDownloadActions() {
 
   const helperText = useMemo(() => {
     if (installed) {
-      return "This device already has the web app shell installed. You can keep using it from your home screen.";
+      return "This device already has the app shell installed. You can keep using it from your home screen.";
+    }
+
+    if (isAndroid) {
+      return "On Android, download the APK directly. After it downloads, Android may ask you to allow installs from this browser or file manager.";
     }
 
     if (installEvent) {
-      return "This browser supports the install flow. Tap Install app now and it should add The Book Author to your home screen.";
+      return `This browser supports the install flow. Tap Install app now and it should add ${APP_NAME} to your home screen.`;
     }
 
     if (isIos) {
       return "On iPhone or iPad, tap Share and then Add to Home Screen. Apple does not allow websites to force the install popup.";
-    }
-
-    if (isAndroid) {
-      return "On Android, open the browser menu and tap Install app or Add to Home screen if the browser does not show its own install banner.";
     }
 
     return "If this browser does not support installation, you can still use the full web app in the browser right away.";
@@ -115,7 +116,15 @@ export function PwaDownloadActions() {
         >
           Open the app now
         </Link>
-        {installEvent ? (
+        {isAndroid ? (
+          <a
+            className="inline-flex items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={APP_ANDROID_APK_DOWNLOAD_PATH}
+          >
+            Download Android APK
+          </a>
+        ) : installEvent ? (
           <Button onClick={() => void handleInstall()} type="button" variant="secondary">
             Install app now
           </Button>

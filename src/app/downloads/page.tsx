@@ -5,7 +5,7 @@ import { PwaDownloadActions } from "@/components/providers/pwa-download-actions"
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { requireBetaSession } from "@/lib/beta-auth";
-import { APP_INSTALLER_FILENAME, APP_NAME } from "@/lib/brand";
+import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_INSTALLER_FILENAME, APP_NAME } from "@/lib/brand";
 import { getDesktopInstallerDownloadUrl, getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export default async function DownloadsPage() {
 
   return (
       <BetaShell
-        intro={`Download ${APP_NAME} for desktop, or install the mobile web app to your home screen. Actual book data is intended to stay on the user's own computer or phone instead of inside a shared cloud manuscript database.`}
+        intro={`Download ${APP_NAME} for desktop, download the Android APK, or install the iPhone home-screen web app. Actual book data is intended to stay on the user's own computer or phone instead of inside a shared cloud manuscript database.`}
         session={session}
         title="Downloads and device setup"
       >
@@ -57,11 +57,22 @@ export default async function DownloadsPage() {
       <Card className="grid gap-4">
         <h2 className="text-2xl font-semibold">{APP_NAME} - Android</h2>
         <p className="text-sm leading-7 text-[var(--muted)]">
-          Open the {APP_NAME} site in Chrome on Android, then use the install banner or the browser menu to add it to your
-          home screen. If Chrome does not show the banner automatically, open the browser menu and tap <strong>Install app</strong> or{" "}
-          <strong>Add to Home screen</strong>.
+          Download the Android APK directly. This installs {APP_NAME} as a phone app that opens the live Vercel version,
+          so improvements can keep arriving without rebuilding the APK every time.
         </p>
-        <PwaDownloadActions />
+        <div className="grid gap-2">
+          <a
+            className="inline-flex w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={APP_ANDROID_APK_DOWNLOAD_PATH}
+          >
+            Download {APP_NAME} - Android APK
+          </a>
+          <p className="text-xs leading-6 text-[var(--muted)]">
+            Android may ask you to allow installs from your browser or file manager. That is normal for an APK downloaded
+            outside the Google Play Store.
+          </p>
+        </div>
       </Card>
 
       <Card className="grid gap-4">

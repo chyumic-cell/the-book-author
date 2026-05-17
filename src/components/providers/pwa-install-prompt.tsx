@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { APP_NAME } from "@/lib/brand";
+import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_NAME } from "@/lib/brand";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -132,23 +132,31 @@ export function PwaInstallPrompt() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-[var(--text)]">Download {APP_NAME}</p>
             <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-              Add {APP_NAME} to your home screen so it opens like an app with your logo and standalone layout.
+              Add {APP_NAME} to your phone so it opens like an app with your logo and standalone layout.
             </p>
             {isIos && !isInstallable ? (
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
                 On iPhone or iPad, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.
               </p>
             ) : null}
-            {isAndroid && !isInstallable ? (
+            {isAndroid ? (
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                On Android, open the browser menu and tap <strong>Install app</strong> or <strong>Add to Home screen</strong> if the install banner does not appear.
+                On Android, download the APK directly. Android may ask you to allow installs from this browser or file manager.
               </p>
             ) : null}
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {isInstallable ? (
+          {isAndroid ? (
+            <a
+              className="inline-flex items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+              download
+              href={APP_ANDROID_APK_DOWNLOAD_PATH}
+            >
+              Download APK
+            </a>
+          ) : isInstallable ? (
             <Button onClick={() => void handleInstall()} type="button">
               Download app
             </Button>
