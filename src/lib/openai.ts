@@ -1515,9 +1515,10 @@ async function runPromptTask(options: {
       timeoutMs: options.timeoutMs,
     });
   } catch (error) {
-    if (!options.mockContent || !isHostedFastDraftMode()) {
+    if (!options.mockContent?.trim()) {
       throw error;
     }
+    console.warn("[ai] provider failed; using safe fallback content", error);
   }
   const content = raw ?? options.mockContent ?? "";
   if (!content.trim()) {
