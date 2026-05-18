@@ -219,7 +219,7 @@ function looksLikePlaceholderValue(value: string) {
 async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string, timeoutMs = 6000) {
   if (
     (process.env.VERCEL === "1" || isHostedBetaEnabled()) &&
-    (process.env.STORYFORGE_DISABLE_LIVE_TARGETED_AI === "1" || process.env.STORYFORGE_LIVE_TARGETED_AI === "0")
+    (process.env.STORYFORGE_DISABLE_LIVE_TARGETED_AI === "1" || process.env.STORYFORGE_LIVE_TARGETED_AI !== "1")
   ) {
     return fallback;
   }
