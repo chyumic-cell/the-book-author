@@ -1,5 +1,5 @@
 import { CHAPTER_FIELD_SPECS, STORY_BIBLE_ENTITY_SPECS } from "@/lib/assistant-site-map";
-import { cleanAiFieldText, cleanGeneratedText, cleanStructuredText, cleanSummaryText, looksLikeAiLeakage } from "@/lib/ai-output";
+import { cleanAiFieldText, cleanGeneratedText, cleanSummaryText, looksLikeAiLeakage } from "@/lib/ai-output";
 import {
   normalizeCharacterDossier,
   normalizeCharacterQuickProfile,
@@ -181,7 +181,10 @@ function looksLikePlaceholderValue(value: string) {
 }
 
 async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string) {
-  if ((process.env.VERCEL === "1" || isHostedBetaEnabled()) && process.env.STORYFORGE_LIVE_TARGETED_AI !== "1") {
+  if (
+    (process.env.VERCEL === "1" || isHostedBetaEnabled()) &&
+    (process.env.STORYFORGE_DISABLE_LIVE_TARGETED_AI === "1" || process.env.STORYFORGE_LIVE_TARGETED_AI === "0")
+  ) {
     return fallback;
   }
 
@@ -219,7 +222,7 @@ function fallbackChapterFieldValue(options: {
   currentValue: string;
   instruction?: string;
 }) {
-  const { project, chapter, fieldKey, currentValue, instruction } = options;
+  const { project, fieldKey, currentValue, instruction } = options;
   if (currentValue.trim() && fieldKey !== "title" && !looksLikePlaceholderValue(currentValue)) {
     return currentValue;
   }
@@ -861,13 +864,6 @@ function compactCharacterCanon(
     .join("\n");
 }
 
-type CharacterSectionPrompt = {
-  label: string;
-  shape: Record<string, unknown>;
-  maxOutputTokens: number;
-  guidance: string;
-};
-
 const CHARACTER_LIST_FIELD_PATHS = new Set([
   "dossier.basicIdentity.nicknames",
   "dossier.personalityBehavior.coreTraits",
@@ -888,218 +884,6 @@ const CHARACTER_LIST_FIELD_PATHS = new Set([
   "dossier.relationshipDynamics.mentors",
   "dossier.relationshipDynamics.subordinatesSuperiors",
 ]);
-
-function isThinTextValue(value: unknown, minimum: number) {
-  return String(value ?? "").trim().length < minimum;
-}
-
-function isThinListValue(value: unknown, minimumItems: number) {
-  return !Array.isArray(value) || value.map((entry) => String(entry).trim()).filter(Boolean).length < minimumItems;
-}
-
-function buildCharacterSectionPrompts(character: CharacterRecord) {
-  const sections: CharacterSectionPrompt[] = [];
-  const includeAllFields = true;
-
-  const coreShape: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.summary, 80)) coreShape.summary = "";
-  if (includeAllFields || isThinTextValue(character.role, 4)) coreShape.role = "";
-  if (includeAllFields || isThinTextValue(character.archetype, 8)) coreShape.archetype = "";
-  if (includeAllFields || isThinTextValue(character.goal, 28)) coreShape.goal = "";
-  if (includeAllFields || isThinTextValue(character.fear, 18)) coreShape.fear = "";
-  if (includeAllFields || isThinTextValue(character.secret, 18)) coreShape.secret = "";
-  if (includeAllFields || isThinTextValue(character.wound, 18)) coreShape.wound = "";
-  if (includeAllFields || isThinTextValue(character.notes, 50)) coreShape.notes = "";
-  const quickProfile: Record<string, string> = {};
-  if (includeAllFields || isThinTextValue(character.quickProfile.age, 2)) quickProfile.age = "";
-  if (includeAllFields || isThinTextValue(character.quickProfile.profession, 4)) quickProfile.profession = "";
-  if (includeAllFields || isThinTextValue(character.quickProfile.placeOfLiving, 4)) quickProfile.placeOfLiving = "";
-  if (includeAllFields || isThinTextValue(character.quickProfile.accent, 3)) quickProfile.accent = "";
-  if (includeAllFields || isThinTextValue(character.quickProfile.speechPattern, 14)) quickProfile.speechPattern = "";
-  if (Object.keys(quickProfile).length > 0) {
-    coreShape.quickProfile = quickProfile;
-  }
-  const basicIdentity: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.fullName, 3)) basicIdentity.fullName = "";
-  if (includeAllFields || isThinListValue(character.dossier.basicIdentity.nicknames, 1)) basicIdentity.nicknames = [];
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.dateOfBirth, 3)) basicIdentity.dateOfBirth = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.gender, 3)) basicIdentity.gender = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.culturalBackground, 6)) basicIdentity.culturalBackground = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.nationality, 4)) basicIdentity.nationality = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.currentResidence, 4)) basicIdentity.currentResidence = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.placeOfOrigin, 4)) basicIdentity.placeOfOrigin = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.beliefSystem, 6)) basicIdentity.beliefSystem = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.maritalStatus, 4)) basicIdentity.maritalStatus = "";
-  if (includeAllFields || isThinTextValue(character.dossier.basicIdentity.familyStatus, 4)) basicIdentity.familyStatus = "";
-  const lifePosition: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.profession, 4)) lifePosition.profession = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.workplace, 4)) lifePosition.workplace = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.roleTitle, 4)) lifePosition.roleTitle = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.socialClass, 4)) lifePosition.socialClass = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.educationLevel, 4)) lifePosition.educationLevel = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.trainingBackground, 6)) lifePosition.trainingBackground = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.militaryBackground, 6)) lifePosition.militaryBackground = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.criminalRecord, 6)) lifePosition.criminalRecord = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.politicalOrientation, 6)) lifePosition.politicalOrientation = "";
-  if (includeAllFields || isThinTextValue(character.dossier.lifePosition.reputation, 6)) lifePosition.reputation = "";
-  if (Object.keys(coreShape).length > 0 || Object.keys(basicIdentity).length > 0 || Object.keys(lifePosition).length > 0) {
-    sections.push({
-      label: "identity and life position",
-      maxOutputTokens: 320,
-      guidance:
-        "Fill the requested top-level fields plus identity and social-position facts. Keep each value compact, vivid, and app-ready.",
-      shape: {
-        ...coreShape,
-        dossier: {
-          ...(Object.keys(basicIdentity).length > 0 ? { basicIdentity } : {}),
-          ...(Object.keys(lifePosition).length > 0 ? { lifePosition } : {}),
-        },
-      },
-    });
-  }
-
-  const personalityBehavior: Record<string, unknown> = {};
-  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.coreTraits, 3)) personalityBehavior.coreTraits = [];
-  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.virtues, 2)) personalityBehavior.virtues = [];
-  if (includeAllFields || isThinListValue(character.dossier.personalityBehavior.flaws, 2)) personalityBehavior.flaws = [];
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.emotionalTendencies, 12)) personalityBehavior.emotionalTendencies = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.socialConfidence, 8)) personalityBehavior.socialConfidence = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.introExtroStyle, 8)) personalityBehavior.introExtroStyle = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.conflictStyle, 12)) personalityBehavior.conflictStyle = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.decisionMaking, 12)) personalityBehavior.decisionMaking = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.projectedImage, 12)) personalityBehavior.projectedImage = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.trueNature, 12)) personalityBehavior.trueNature = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.hiddenSelf, 12)) personalityBehavior.hiddenSelf = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.embarrassmentTriggers, 10)) personalityBehavior.embarrassmentTriggers = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.angerTriggers, 10)) personalityBehavior.angerTriggers = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.comfortSources, 10)) personalityBehavior.comfortSources = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.fearTriggers, 10)) personalityBehavior.fearTriggers = "";
-  if (includeAllFields || isThinTextValue(character.dossier.personalityBehavior.coreValues, 12)) personalityBehavior.coreValues = "";
-  const motivationStory: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.shortTermGoal, 16)) motivationStory.shortTermGoal = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.longTermGoal, 16)) motivationStory.longTermGoal = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.needVsWant, 12)) motivationStory.needVsWant = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.internalConflict, 16)) motivationStory.internalConflict = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.externalConflict, 16)) motivationStory.externalConflict = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.wound, 12)) motivationStory.wound = "";
-  if (includeAllFields || isThinListValue(character.dossier.motivationStory.secrets, 1)) motivationStory.secrets = [];
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.stakesIfFail, 16)) motivationStory.stakesIfFail = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.arcDirection, 12)) motivationStory.arcDirection = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.storyRole, 10)) motivationStory.storyRole = "";
-  if (includeAllFields || isThinTextValue(character.dossier.motivationStory.relationshipToMainConflict, 16)) motivationStory.relationshipToMainConflict = "";
-  const currentState: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.currentState.currentKnowledge, 16)) currentState.currentKnowledge = "";
-  if (includeAllFields || isThinTextValue(character.currentState.unknowns, 12)) currentState.unknowns = "";
-  if (includeAllFields || isThinTextValue(character.currentState.emotionalState, 12)) currentState.emotionalState = "";
-  if (includeAllFields || isThinTextValue(character.currentState.physicalCondition, 10)) currentState.physicalCondition = "";
-  if (includeAllFields || isThinTextValue(character.currentState.loyalties, 12)) currentState.loyalties = "";
-  if (includeAllFields || isThinTextValue(character.currentState.recentChanges, 12)) currentState.recentChanges = "";
-  if (includeAllFields || isThinTextValue(character.currentState.continuityRisks, 16)) currentState.continuityRisks = "";
-  if (Object.keys(personalityBehavior).length > 0 || Object.keys(motivationStory).length > 0 || Object.keys(currentState).length > 0) {
-    sections.push({
-      label: "personality, motivation, and emotional state",
-      maxOutputTokens: 360,
-      guidance:
-        "Fill the requested psychological, motivational, and state fields with concise but specific values that match the existing canon and emotional pressure.",
-      shape: {
-        dossier: {
-          ...(Object.keys(personalityBehavior).length > 0 ? { personalityBehavior } : {}),
-          ...(Object.keys(motivationStory).length > 0 ? { motivationStory } : {}),
-        },
-        ...(Object.keys(currentState).length > 0 ? { currentState } : {}),
-      },
-    });
-  }
-
-  const speechLanguage: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.accent, 3)) speechLanguage.accent = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.dialect, 3)) speechLanguage.dialect = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.nativeLanguage, 3)) speechLanguage.nativeLanguage = "";
-  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.otherLanguages, 1)) speechLanguage.otherLanguages = [];
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.fluencyLevels, 10)) speechLanguage.fluencyLevels = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.formalityLevel, 8)) speechLanguage.formalityLevel = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.vocabularyLevel, 8)) speechLanguage.vocabularyLevel = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.educationInSpeech, 8)) speechLanguage.educationInSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.sentenceLength, 8)) speechLanguage.sentenceLength = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.directness, 8)) speechLanguage.directness = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.pointStyle, 8)) speechLanguage.pointStyle = "";
-  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.descriptors, 2)) speechLanguage.descriptors = [];
-  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.repeatedPhrases, 1)) speechLanguage.repeatedPhrases = [];
-  if (includeAllFields || isThinListValue(character.dossier.speechLanguage.favoriteExpressions, 1)) speechLanguage.favoriteExpressions = [];
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.swearingLevel, 8)) speechLanguage.swearingLevel = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.rhythm, 8)) speechLanguage.rhythm = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.emotionalShifts, 10)) speechLanguage.emotionalShifts = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.angrySpeech, 12)) speechLanguage.angrySpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.scaredSpeech, 12)) speechLanguage.scaredSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.lyingSpeech, 12)) speechLanguage.lyingSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.persuasiveSpeech, 12)) speechLanguage.persuasiveSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.superiorSpeech, 12)) speechLanguage.superiorSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.inferiorSpeech, 12)) speechLanguage.inferiorSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.lovedOnesSpeech, 12)) speechLanguage.lovedOnesSpeech = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.avoidedTopics, 10)) speechLanguage.avoidedTopics = "";
-  if (includeAllFields || isThinTextValue(character.dossier.speechLanguage.commonMisunderstandings, 10)) speechLanguage.commonMisunderstandings = "";
-  const bodyPresence: Record<string, unknown> = {};
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.physicalDescription, 12)) bodyPresence.physicalDescription = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.build, 6)) bodyPresence.build = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.clothingStyle, 8)) bodyPresence.clothingStyle = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.grooming, 8)) bodyPresence.grooming = "";
-  if (includeAllFields || isThinListValue(character.dossier.bodyPresence.distinguishingFeatures, 1)) bodyPresence.distinguishingFeatures = [];
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.posture, 8)) bodyPresence.posture = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.movementStyle, 8)) bodyPresence.movementStyle = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.eyeContact, 8)) bodyPresence.eyeContact = "";
-  if (includeAllFields || isThinListValue(character.dossier.bodyPresence.habitsTics, 1)) bodyPresence.habitsTics = [];
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.roomEntry, 10)) bodyPresence.roomEntry = "";
-  if (includeAllFields || isThinTextValue(character.dossier.bodyPresence.presenceFeel, 10)) bodyPresence.presenceFeel = "";
-  const relationshipDynamics: Record<string, unknown> = {};
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.friends, 1)) relationshipDynamics.friends = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.enemies, 1)) relationshipDynamics.enemies = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.rivals, 1)) relationshipDynamics.rivals = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.loversExes, 1)) relationshipDynamics.loversExes = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.family, 1)) relationshipDynamics.family = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.mentors, 1)) relationshipDynamics.mentors = [];
-  if (includeAllFields || isThinListValue(character.dossier.relationshipDynamics.subordinatesSuperiors, 1)) relationshipDynamics.subordinatesSuperiors = [];
-  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.trustLevels, 10)) relationshipDynamics.trustLevels = "";
-  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.hiddenLoyalties, 10)) relationshipDynamics.hiddenLoyalties = "";
-  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.unspokenTensions, 10)) relationshipDynamics.unspokenTensions = "";
-  if (includeAllFields || isThinTextValue(character.dossier.relationshipDynamics.powerDynamics, 10)) relationshipDynamics.powerDynamics = "";
-  const needsFreeTextCore = !includeAllFields && isThinTextValue(character.dossier.freeTextCore, 180);
-  if (
-    Object.keys(speechLanguage).length > 0 ||
-    Object.keys(bodyPresence).length > 0 ||
-    Object.keys(relationshipDynamics).length > 0 ||
-    needsFreeTextCore
-  ) {
-    sections.push({
-      label: "voice, body, and relationships",
-      maxOutputTokens: 420,
-      guidance:
-        "Fill the requested voice, dialect, body-language, and relationship fields. Distinguish the character's speech and emotional behavior clearly, and keep the values brief and concrete.",
-      shape: {
-        dossier: {
-          ...(Object.keys(speechLanguage).length > 0 ? { speechLanguage } : {}),
-          ...(Object.keys(bodyPresence).length > 0 ? { bodyPresence } : {}),
-          ...(Object.keys(relationshipDynamics).length > 0 ? { relationshipDynamics } : {}),
-          ...(needsFreeTextCore ? { freeTextCore: "" } : {}),
-        },
-      },
-    });
-  }
-
-  if (sections.length === 0) {
-    sections.push({
-      label: "dossier refresh",
-      maxOutputTokens: 280,
-      guidance: "Refresh the most useful parts of the dossier while preserving the strong existing canon.",
-      shape: {
-        summary: "",
-        dossier: { freeTextCore: "" },
-        currentState: { emotionalState: "" },
-      },
-    });
-  }
-
-  return sections;
-}
 
 function mergeCharacterDossierSections(baseDossier: CharacterRecord["dossier"], patch: Record<string, unknown>) {
   const patchDossier = patch.dossier && typeof patch.dossier === "object" ? (patch.dossier as Record<string, unknown>) : {};
@@ -1150,43 +934,6 @@ function collectCharacterFieldPaths(shape: Record<string, unknown>, prefix = "")
       return collectCharacterFieldPaths(value as Record<string, unknown>, nextPath);
     }
     return [nextPath];
-  });
-}
-
-function extractCharacterShapeValues(source: unknown, shape: Record<string, unknown>): Record<string, unknown> {
-  const sourceObject = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(shape)) {
-    const currentValue = sourceObject[key];
-    if (Array.isArray(value)) {
-      result[key] = Array.isArray(currentValue) ? currentValue : [];
-      continue;
-    }
-    if (value && typeof value === "object") {
-      result[key] = extractCharacterShapeValues(currentValue, value as Record<string, unknown>);
-      continue;
-    }
-    result[key] = currentValue ?? "";
-  }
-
-  return result;
-}
-
-function collectEmptyCharacterFieldPaths(source: unknown, shape: Record<string, unknown>, prefix = ""): string[] {
-  const sourceObject = source && typeof source === "object" ? (source as Record<string, unknown>) : {};
-  return Object.entries(shape).flatMap(([key, value]) => {
-    const nextPath = prefix ? `${prefix}.${key}` : key;
-    const currentValue = sourceObject[key];
-    if (Array.isArray(value)) {
-      return splitLines(String(Array.isArray(currentValue) ? currentValue.join("|") : currentValue ?? "")).length > 0
-        ? []
-        : [nextPath];
-    }
-    if (value && typeof value === "object") {
-      return collectEmptyCharacterFieldPaths(currentValue, value as Record<string, unknown>, nextPath);
-    }
-    return String(currentValue ?? "").trim() ? [] : [nextPath];
   });
 }
 
@@ -1481,6 +1228,532 @@ function mergeCharacterAiPayload(
   }
 
   return mergedPayload;
+}
+
+function extractJsonObject(raw: string) {
+  const stripped = raw.replace(/```(?:json)?|```/gi, "").trim();
+  const candidates = [stripped];
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    candidates.push(stripped.slice(start, end + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function blueprintSection(root: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = root[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
+function cleanBlueprintString(raw: unknown, fallback: string) {
+  const candidate = cleanAiFieldText(String(raw ?? ""), "");
+  if (candidate && !looksLikeMetaOutput(candidate)) {
+    return candidate;
+  }
+  const cleanedFallback = cleanAiFieldText(fallback, "");
+  return cleanedFallback && !looksLikeMetaOutput(cleanedFallback) ? cleanedFallback : "";
+}
+
+function currentOrFallback(current: unknown, fallback: string) {
+  const currentText = String(current ?? "").trim();
+  if (currentText && !looksLikePlaceholderValue(currentText) && !looksLikeMetaOutput(currentText)) {
+    return currentText;
+  }
+  return fallback;
+}
+
+function textFromBlueprint(
+  section: Record<string, unknown>,
+  key: string,
+  current: unknown,
+  fallback: string,
+) {
+  const raw = section[key];
+  const candidate = cleanBlueprintString(raw, "");
+  if (candidate) {
+    return candidate;
+  }
+  return cleanBlueprintString(currentOrFallback(current, fallback), fallback);
+}
+
+function listFromBlueprint(
+  section: Record<string, unknown>,
+  key: string,
+  current: unknown,
+  fallback: string,
+  path: string,
+  maxItems = 5,
+) {
+  const raw = section[key];
+  const candidateItems = Array.isArray(raw) ? raw : typeof raw === "string" ? splitLines(raw) : [];
+  const currentItems = Array.isArray(current) ? current : typeof current === "string" ? splitLines(current) : [];
+  const fallbackItems = splitLines(fallback);
+  const sourceItems = candidateItems.length ? candidateItems : currentItems.length ? currentItems : fallbackItems;
+  const unique = new Set<string>();
+  const cleaned: string[] = [];
+
+  for (const item of sourceItems) {
+    const value = cleanBlueprintString(item, "");
+    if (!value || looksLikeCharacterFieldGarbage(path, value)) {
+      continue;
+    }
+    const signature = value.toLowerCase();
+    if (unique.has(signature)) {
+      continue;
+    }
+    unique.add(signature);
+    cleaned.push(value);
+    if (cleaned.length >= maxItems) {
+      break;
+    }
+  }
+
+  return cleaned;
+}
+
+function characterFallback(character: CharacterRecord, project: ProjectWorkspace, path: string) {
+  return fallbackCharacterFieldValue(character, project, path);
+}
+
+function buildCharacterBlueprintPayload(
+  character: CharacterRecord,
+  project: ProjectWorkspace,
+  blueprint: Record<string, unknown>,
+) {
+  const root = blueprintSection(blueprint, "character", "payload", "dossierBlueprint");
+  const source = Object.keys(root).length ? root : blueprint;
+  const quick = blueprintSection(source, "quickProfile", "quick");
+  const identity = blueprintSection(source, "identity", "basicIdentity");
+  const life = blueprintSection(source, "life", "lifePosition", "socialPosition");
+  const personality = blueprintSection(source, "personality", "personalityBehavior");
+  const motivation = blueprintSection(source, "motivation", "motivationStory");
+  const speech = blueprintSection(source, "speech", "speechLanguage", "voice");
+  const body = blueprintSection(source, "body", "bodyPresence", "presence");
+  const relationships = blueprintSection(source, "relationships", "relationshipDynamics");
+  const state = blueprintSection(source, "currentState", "state");
+  const name = textFromBlueprint(source, "name", character.name, character.name || mainCharacterName(project, "Unnamed character"));
+
+  const nextQuickProfile = normalizeCharacterQuickProfile({
+    age: textFromBlueprint(quick, "age", character.quickProfile.age, characterFallback(character, project, "quickProfile.age")),
+    profession: textFromBlueprint(
+      quick,
+      "profession",
+      character.quickProfile.profession,
+      characterFallback(character, project, "quickProfile.profession"),
+    ),
+    placeOfLiving: textFromBlueprint(
+      quick,
+      "placeOfLiving",
+      character.quickProfile.placeOfLiving,
+      characterFallback(character, project, "quickProfile.placeOfLiving"),
+    ),
+    accent: textFromBlueprint(quick, "accent", character.quickProfile.accent, characterFallback(character, project, "quickProfile.accent")),
+    speechPattern: textFromBlueprint(
+      quick,
+      "speechPattern",
+      character.quickProfile.speechPattern,
+      characterFallback(character, project, "quickProfile.speechPattern"),
+    ),
+  });
+
+  const nextDossier = normalizeCharacterDossier(
+    {
+      basicIdentity: {
+        fullName: textFromBlueprint(identity, "fullName", character.dossier.basicIdentity.fullName, name),
+        nicknames: listFromBlueprint(
+          identity,
+          "nicknames",
+          character.dossier.basicIdentity.nicknames,
+          characterFallback(character, project, "dossier.basicIdentity.nicknames"),
+          "dossier.basicIdentity.nicknames",
+          4,
+        ),
+        age: textFromBlueprint(identity, "age", character.dossier.basicIdentity.age, nextQuickProfile.age),
+        dateOfBirth: textFromBlueprint(
+          identity,
+          "dateOfBirth",
+          character.dossier.basicIdentity.dateOfBirth,
+          characterFallback(character, project, "dossier.basicIdentity.dateOfBirth"),
+        ),
+        gender: textFromBlueprint(identity, "gender", character.dossier.basicIdentity.gender, characterFallback(character, project, "dossier.basicIdentity.gender")),
+        culturalBackground: textFromBlueprint(
+          identity,
+          "culturalBackground",
+          character.dossier.basicIdentity.culturalBackground,
+          characterFallback(character, project, "dossier.basicIdentity.culturalBackground"),
+        ),
+        nationality: textFromBlueprint(
+          identity,
+          "nationality",
+          character.dossier.basicIdentity.nationality,
+          characterFallback(character, project, "dossier.basicIdentity.nationality"),
+        ),
+        currentResidence: textFromBlueprint(
+          identity,
+          "currentResidence",
+          character.dossier.basicIdentity.currentResidence,
+          nextQuickProfile.placeOfLiving || characterFallback(character, project, "dossier.basicIdentity.currentResidence"),
+        ),
+        placeOfOrigin: textFromBlueprint(
+          identity,
+          "placeOfOrigin",
+          character.dossier.basicIdentity.placeOfOrigin,
+          characterFallback(character, project, "dossier.basicIdentity.placeOfOrigin"),
+        ),
+        beliefSystem: textFromBlueprint(
+          identity,
+          "beliefSystem",
+          character.dossier.basicIdentity.beliefSystem,
+          characterFallback(character, project, "dossier.basicIdentity.beliefSystem"),
+        ),
+        maritalStatus: textFromBlueprint(
+          identity,
+          "maritalStatus",
+          character.dossier.basicIdentity.maritalStatus,
+          characterFallback(character, project, "dossier.basicIdentity.maritalStatus"),
+        ),
+        familyStatus: textFromBlueprint(
+          identity,
+          "familyStatus",
+          character.dossier.basicIdentity.familyStatus,
+          characterFallback(character, project, "dossier.basicIdentity.familyStatus"),
+        ),
+      },
+      lifePosition: {
+        profession: textFromBlueprint(life, "profession", character.dossier.lifePosition.profession, nextQuickProfile.profession),
+        workplace: textFromBlueprint(life, "workplace", character.dossier.lifePosition.workplace, characterFallback(character, project, "dossier.lifePosition.workplace")),
+        roleTitle: textFromBlueprint(life, "roleTitle", character.dossier.lifePosition.roleTitle, character.role || nextQuickProfile.profession),
+        socialClass: textFromBlueprint(life, "socialClass", character.dossier.lifePosition.socialClass, characterFallback(character, project, "dossier.lifePosition.socialClass")),
+        educationLevel: textFromBlueprint(life, "educationLevel", character.dossier.lifePosition.educationLevel, characterFallback(character, project, "dossier.lifePosition.educationLevel")),
+        trainingBackground: textFromBlueprint(life, "trainingBackground", character.dossier.lifePosition.trainingBackground, characterFallback(character, project, "dossier.lifePosition.trainingBackground")),
+        militaryBackground: textFromBlueprint(life, "militaryBackground", character.dossier.lifePosition.militaryBackground, characterFallback(character, project, "dossier.lifePosition.militaryBackground")),
+        criminalRecord: textFromBlueprint(life, "criminalRecord", character.dossier.lifePosition.criminalRecord, characterFallback(character, project, "dossier.lifePosition.criminalRecord")),
+        politicalOrientation: textFromBlueprint(life, "politicalOrientation", character.dossier.lifePosition.politicalOrientation, characterFallback(character, project, "dossier.lifePosition.politicalOrientation")),
+        reputation: textFromBlueprint(life, "reputation", character.dossier.lifePosition.reputation, characterFallback(character, project, "dossier.lifePosition.reputation")),
+      },
+      personalityBehavior: {
+        coreTraits: listFromBlueprint(personality, "coreTraits", character.dossier.personalityBehavior.coreTraits, characterFallback(character, project, "dossier.personalityBehavior.coreTraits"), "dossier.personalityBehavior.coreTraits", 5),
+        virtues: listFromBlueprint(personality, "virtues", character.dossier.personalityBehavior.virtues, characterFallback(character, project, "dossier.personalityBehavior.virtues"), "dossier.personalityBehavior.virtues", 5),
+        flaws: listFromBlueprint(personality, "flaws", character.dossier.personalityBehavior.flaws, characterFallback(character, project, "dossier.personalityBehavior.flaws"), "dossier.personalityBehavior.flaws", 5),
+        emotionalTendencies: textFromBlueprint(personality, "emotionalTendencies", character.dossier.personalityBehavior.emotionalTendencies, characterFallback(character, project, "dossier.personalityBehavior.emotionalTendencies")),
+        socialConfidence: textFromBlueprint(personality, "socialConfidence", character.dossier.personalityBehavior.socialConfidence, characterFallback(character, project, "dossier.personalityBehavior.socialConfidence")),
+        introExtroStyle: textFromBlueprint(personality, "introExtroStyle", character.dossier.personalityBehavior.introExtroStyle, characterFallback(character, project, "dossier.personalityBehavior.introExtroStyle")),
+        conflictStyle: textFromBlueprint(personality, "conflictStyle", character.dossier.personalityBehavior.conflictStyle, characterFallback(character, project, "dossier.personalityBehavior.conflictStyle")),
+        decisionMaking: textFromBlueprint(personality, "decisionMaking", character.dossier.personalityBehavior.decisionMaking, characterFallback(character, project, "dossier.personalityBehavior.decisionMaking")),
+        projectedImage: textFromBlueprint(personality, "projectedImage", character.dossier.personalityBehavior.projectedImage, characterFallback(character, project, "dossier.personalityBehavior.projectedImage")),
+        trueNature: textFromBlueprint(personality, "trueNature", character.dossier.personalityBehavior.trueNature, characterFallback(character, project, "dossier.personalityBehavior.trueNature")),
+        hiddenSelf: textFromBlueprint(personality, "hiddenSelf", character.dossier.personalityBehavior.hiddenSelf, characterFallback(character, project, "dossier.personalityBehavior.hiddenSelf")),
+        embarrassmentTriggers: textFromBlueprint(personality, "embarrassmentTriggers", character.dossier.personalityBehavior.embarrassmentTriggers, characterFallback(character, project, "dossier.personalityBehavior.embarrassmentTriggers")),
+        angerTriggers: textFromBlueprint(personality, "angerTriggers", character.dossier.personalityBehavior.angerTriggers, characterFallback(character, project, "dossier.personalityBehavior.angerTriggers")),
+        comfortSources: textFromBlueprint(personality, "comfortSources", character.dossier.personalityBehavior.comfortSources, characterFallback(character, project, "dossier.personalityBehavior.comfortSources")),
+        fearTriggers: textFromBlueprint(personality, "fearTriggers", character.dossier.personalityBehavior.fearTriggers, character.fear || characterFallback(character, project, "dossier.personalityBehavior.fearTriggers")),
+        coreValues: textFromBlueprint(personality, "coreValues", character.dossier.personalityBehavior.coreValues, characterFallback(character, project, "dossier.personalityBehavior.coreValues")),
+      },
+      motivationStory: {
+        shortTermGoal: textFromBlueprint(motivation, "shortTermGoal", character.dossier.motivationStory.shortTermGoal, character.goal || characterFallback(character, project, "dossier.motivationStory.shortTermGoal")),
+        longTermGoal: textFromBlueprint(motivation, "longTermGoal", character.dossier.motivationStory.longTermGoal, characterFallback(character, project, "dossier.motivationStory.longTermGoal")),
+        needVsWant: textFromBlueprint(motivation, "needVsWant", character.dossier.motivationStory.needVsWant, characterFallback(character, project, "dossier.motivationStory.needVsWant")),
+        internalConflict: textFromBlueprint(motivation, "internalConflict", character.dossier.motivationStory.internalConflict, characterFallback(character, project, "dossier.motivationStory.internalConflict")),
+        externalConflict: textFromBlueprint(motivation, "externalConflict", character.dossier.motivationStory.externalConflict, characterFallback(character, project, "dossier.motivationStory.externalConflict")),
+        wound: textFromBlueprint(motivation, "wound", character.dossier.motivationStory.wound, character.wound || characterFallback(character, project, "dossier.motivationStory.wound")),
+        secrets: listFromBlueprint(motivation, "secrets", character.dossier.motivationStory.secrets, character.secret || characterFallback(character, project, "dossier.motivationStory.secrets"), "dossier.motivationStory.secrets", 4),
+        stakesIfFail: textFromBlueprint(motivation, "stakesIfFail", character.dossier.motivationStory.stakesIfFail, characterFallback(character, project, "dossier.motivationStory.stakesIfFail")),
+        arcDirection: textFromBlueprint(motivation, "arcDirection", character.dossier.motivationStory.arcDirection, characterFallback(character, project, "dossier.motivationStory.arcDirection")),
+        storyRole: textFromBlueprint(motivation, "storyRole", character.dossier.motivationStory.storyRole, character.role || characterFallback(character, project, "dossier.motivationStory.storyRole")),
+        relationshipToMainConflict: textFromBlueprint(motivation, "relationshipToMainConflict", character.dossier.motivationStory.relationshipToMainConflict, characterFallback(character, project, "dossier.motivationStory.relationshipToMainConflict")),
+      },
+      speechLanguage: {
+        accent: textFromBlueprint(speech, "accent", character.dossier.speechLanguage.accent, nextQuickProfile.accent),
+        dialect: textFromBlueprint(speech, "dialect", character.dossier.speechLanguage.dialect, characterFallback(character, project, "dossier.speechLanguage.dialect")),
+        nativeLanguage: textFromBlueprint(speech, "nativeLanguage", character.dossier.speechLanguage.nativeLanguage, characterFallback(character, project, "dossier.speechLanguage.nativeLanguage")),
+        otherLanguages: listFromBlueprint(speech, "otherLanguages", character.dossier.speechLanguage.otherLanguages, characterFallback(character, project, "dossier.speechLanguage.otherLanguages"), "dossier.speechLanguage.otherLanguages", 4),
+        fluencyLevels: textFromBlueprint(speech, "fluencyLevels", character.dossier.speechLanguage.fluencyLevels, characterFallback(character, project, "dossier.speechLanguage.fluencyLevels")),
+        formalityLevel: textFromBlueprint(speech, "formalityLevel", character.dossier.speechLanguage.formalityLevel, characterFallback(character, project, "dossier.speechLanguage.formalityLevel")),
+        vocabularyLevel: textFromBlueprint(speech, "vocabularyLevel", character.dossier.speechLanguage.vocabularyLevel, characterFallback(character, project, "dossier.speechLanguage.vocabularyLevel")),
+        educationInSpeech: textFromBlueprint(speech, "educationInSpeech", character.dossier.speechLanguage.educationInSpeech, characterFallback(character, project, "dossier.speechLanguage.educationInSpeech")),
+        sentenceLength: textFromBlueprint(speech, "sentenceLength", character.dossier.speechLanguage.sentenceLength, characterFallback(character, project, "dossier.speechLanguage.sentenceLength")),
+        directness: textFromBlueprint(speech, "directness", character.dossier.speechLanguage.directness, characterFallback(character, project, "dossier.speechLanguage.directness")),
+        pointStyle: textFromBlueprint(speech, "pointStyle", character.dossier.speechLanguage.pointStyle, characterFallback(character, project, "dossier.speechLanguage.pointStyle")),
+        descriptors: listFromBlueprint(speech, "descriptors", character.dossier.speechLanguage.descriptors, characterFallback(character, project, "dossier.speechLanguage.descriptors"), "dossier.speechLanguage.descriptors", 5),
+        repeatedPhrases: listFromBlueprint(speech, "repeatedPhrases", character.dossier.speechLanguage.repeatedPhrases, characterFallback(character, project, "dossier.speechLanguage.repeatedPhrases"), "dossier.speechLanguage.repeatedPhrases", 4),
+        favoriteExpressions: listFromBlueprint(speech, "favoriteExpressions", character.dossier.speechLanguage.favoriteExpressions, characterFallback(character, project, "dossier.speechLanguage.favoriteExpressions"), "dossier.speechLanguage.favoriteExpressions", 4),
+        swearingLevel: textFromBlueprint(speech, "swearingLevel", character.dossier.speechLanguage.swearingLevel, characterFallback(character, project, "dossier.speechLanguage.swearingLevel")),
+        rhythm: textFromBlueprint(speech, "rhythm", character.dossier.speechLanguage.rhythm, characterFallback(character, project, "dossier.speechLanguage.rhythm")),
+        emotionalShifts: textFromBlueprint(speech, "emotionalShifts", character.dossier.speechLanguage.emotionalShifts, characterFallback(character, project, "dossier.speechLanguage.emotionalShifts")),
+        angrySpeech: textFromBlueprint(speech, "angrySpeech", character.dossier.speechLanguage.angrySpeech, characterFallback(character, project, "dossier.speechLanguage.angrySpeech")),
+        scaredSpeech: textFromBlueprint(speech, "scaredSpeech", character.dossier.speechLanguage.scaredSpeech, characterFallback(character, project, "dossier.speechLanguage.scaredSpeech")),
+        lyingSpeech: textFromBlueprint(speech, "lyingSpeech", character.dossier.speechLanguage.lyingSpeech, characterFallback(character, project, "dossier.speechLanguage.lyingSpeech")),
+        persuasiveSpeech: textFromBlueprint(speech, "persuasiveSpeech", character.dossier.speechLanguage.persuasiveSpeech, characterFallback(character, project, "dossier.speechLanguage.persuasiveSpeech")),
+        superiorSpeech: textFromBlueprint(speech, "superiorSpeech", character.dossier.speechLanguage.superiorSpeech, characterFallback(character, project, "dossier.speechLanguage.superiorSpeech")),
+        inferiorSpeech: textFromBlueprint(speech, "inferiorSpeech", character.dossier.speechLanguage.inferiorSpeech, characterFallback(character, project, "dossier.speechLanguage.inferiorSpeech")),
+        lovedOnesSpeech: textFromBlueprint(speech, "lovedOnesSpeech", character.dossier.speechLanguage.lovedOnesSpeech, characterFallback(character, project, "dossier.speechLanguage.lovedOnesSpeech")),
+        avoidedTopics: textFromBlueprint(speech, "avoidedTopics", character.dossier.speechLanguage.avoidedTopics, characterFallback(character, project, "dossier.speechLanguage.avoidedTopics")),
+        commonMisunderstandings: textFromBlueprint(speech, "commonMisunderstandings", character.dossier.speechLanguage.commonMisunderstandings, characterFallback(character, project, "dossier.speechLanguage.commonMisunderstandings")),
+      },
+      bodyPresence: {
+        physicalDescription: textFromBlueprint(body, "physicalDescription", character.dossier.bodyPresence.physicalDescription, characterFallback(character, project, "dossier.bodyPresence.physicalDescription")),
+        build: textFromBlueprint(body, "build", character.dossier.bodyPresence.build, characterFallback(character, project, "dossier.bodyPresence.build")),
+        clothingStyle: textFromBlueprint(body, "clothingStyle", character.dossier.bodyPresence.clothingStyle, characterFallback(character, project, "dossier.bodyPresence.clothingStyle")),
+        grooming: textFromBlueprint(body, "grooming", character.dossier.bodyPresence.grooming, characterFallback(character, project, "dossier.bodyPresence.grooming")),
+        distinguishingFeatures: listFromBlueprint(body, "distinguishingFeatures", character.dossier.bodyPresence.distinguishingFeatures, characterFallback(character, project, "dossier.bodyPresence.distinguishingFeatures"), "dossier.bodyPresence.distinguishingFeatures", 4),
+        posture: textFromBlueprint(body, "posture", character.dossier.bodyPresence.posture, characterFallback(character, project, "dossier.bodyPresence.posture")),
+        movementStyle: textFromBlueprint(body, "movementStyle", character.dossier.bodyPresence.movementStyle, characterFallback(character, project, "dossier.bodyPresence.movementStyle")),
+        eyeContact: textFromBlueprint(body, "eyeContact", character.dossier.bodyPresence.eyeContact, characterFallback(character, project, "dossier.bodyPresence.eyeContact")),
+        habitsTics: listFromBlueprint(body, "habitsTics", character.dossier.bodyPresence.habitsTics, characterFallback(character, project, "dossier.bodyPresence.habitsTics"), "dossier.bodyPresence.habitsTics", 4),
+        roomEntry: textFromBlueprint(body, "roomEntry", character.dossier.bodyPresence.roomEntry, characterFallback(character, project, "dossier.bodyPresence.roomEntry")),
+        presenceFeel: textFromBlueprint(body, "presenceFeel", character.dossier.bodyPresence.presenceFeel, characterFallback(character, project, "dossier.bodyPresence.presenceFeel")),
+      },
+      relationshipDynamics: {
+        friends: listFromBlueprint(relationships, "friends", character.dossier.relationshipDynamics.friends, characterFallback(character, project, "dossier.relationshipDynamics.friends"), "dossier.relationshipDynamics.friends", 4),
+        enemies: listFromBlueprint(relationships, "enemies", character.dossier.relationshipDynamics.enemies, characterFallback(character, project, "dossier.relationshipDynamics.enemies"), "dossier.relationshipDynamics.enemies", 4),
+        rivals: listFromBlueprint(relationships, "rivals", character.dossier.relationshipDynamics.rivals, characterFallback(character, project, "dossier.relationshipDynamics.rivals"), "dossier.relationshipDynamics.rivals", 4),
+        loversExes: listFromBlueprint(relationships, "loversExes", character.dossier.relationshipDynamics.loversExes, characterFallback(character, project, "dossier.relationshipDynamics.loversExes"), "dossier.relationshipDynamics.loversExes", 4),
+        family: listFromBlueprint(relationships, "family", character.dossier.relationshipDynamics.family, characterFallback(character, project, "dossier.relationshipDynamics.family"), "dossier.relationshipDynamics.family", 4),
+        mentors: listFromBlueprint(relationships, "mentors", character.dossier.relationshipDynamics.mentors, characterFallback(character, project, "dossier.relationshipDynamics.mentors"), "dossier.relationshipDynamics.mentors", 4),
+        subordinatesSuperiors: listFromBlueprint(relationships, "subordinatesSuperiors", character.dossier.relationshipDynamics.subordinatesSuperiors, characterFallback(character, project, "dossier.relationshipDynamics.subordinatesSuperiors"), "dossier.relationshipDynamics.subordinatesSuperiors", 4),
+        trustLevels: textFromBlueprint(relationships, "trustLevels", character.dossier.relationshipDynamics.trustLevels, characterFallback(character, project, "dossier.relationshipDynamics.trustLevels")),
+        hiddenLoyalties: textFromBlueprint(relationships, "hiddenLoyalties", character.dossier.relationshipDynamics.hiddenLoyalties, characterFallback(character, project, "dossier.relationshipDynamics.hiddenLoyalties")),
+        unspokenTensions: textFromBlueprint(relationships, "unspokenTensions", character.dossier.relationshipDynamics.unspokenTensions, characterFallback(character, project, "dossier.relationshipDynamics.unspokenTensions")),
+        powerDynamics: textFromBlueprint(relationships, "powerDynamics", character.dossier.relationshipDynamics.powerDynamics, characterFallback(character, project, "dossier.relationshipDynamics.powerDynamics")),
+      },
+      freeTextCore: textFromBlueprint(
+        source,
+        "freeTextCore",
+        character.dossier.freeTextCore,
+        `${name}: ${textFromBlueprint(source, "summary", character.summary, characterFallback(character, project, "summary"))}\nVoice: ${nextQuickProfile.speechPattern}`,
+      ),
+    },
+    name,
+  );
+
+  const nextCurrentState = normalizeCharacterState({
+    currentKnowledge: textFromBlueprint(state, "currentKnowledge", character.currentState.currentKnowledge, characterFallback(character, project, "currentState.currentKnowledge")),
+    unknowns: textFromBlueprint(state, "unknowns", character.currentState.unknowns, characterFallback(character, project, "currentState.unknowns")),
+    emotionalState: textFromBlueprint(state, "emotionalState", character.currentState.emotionalState, characterFallback(character, project, "currentState.emotionalState")),
+    physicalCondition: textFromBlueprint(state, "physicalCondition", character.currentState.physicalCondition, characterFallback(character, project, "currentState.physicalCondition")),
+    loyalties: textFromBlueprint(state, "loyalties", character.currentState.loyalties, characterFallback(character, project, "currentState.loyalties")),
+    recentChanges: textFromBlueprint(state, "recentChanges", character.currentState.recentChanges, characterFallback(character, project, "currentState.recentChanges")),
+    continuityRisks: textFromBlueprint(state, "continuityRisks", character.currentState.continuityRisks, characterFallback(character, project, "currentState.continuityRisks")),
+    lastMeaningfulAppearance: character.currentState.lastMeaningfulAppearance,
+    lastMeaningfulAppearanceChapter: character.currentState.lastMeaningfulAppearanceChapter,
+  });
+
+  return mergeCharacterAiPayload(
+    character,
+    {
+      name,
+      role: textFromBlueprint(source, "role", character.role, nextDossier.motivationStory.storyRole || nextQuickProfile.profession),
+      archetype: textFromBlueprint(source, "archetype", character.archetype, characterFallback(character, project, "archetype")),
+      summary: textFromBlueprint(source, "summary", character.summary, characterFallback(character, project, "summary")),
+      goal: textFromBlueprint(source, "goal", character.goal, nextDossier.motivationStory.shortTermGoal),
+      fear: textFromBlueprint(source, "fear", character.fear, nextDossier.personalityBehavior.fearTriggers),
+      secret: textFromBlueprint(source, "secret", character.secret, nextDossier.motivationStory.secrets.join(" | ")),
+      wound: textFromBlueprint(source, "wound", character.wound, nextDossier.motivationStory.wound),
+      notes: textFromBlueprint(source, "notes", character.notes, characterFallback(character, project, "notes")),
+      quickProfile: nextQuickProfile,
+      dossier: nextDossier,
+      currentState: nextCurrentState,
+    },
+    null,
+    "",
+  );
+}
+
+async function generateCharacterDossierPayload(options: {
+  project: ProjectWorkspace;
+  contextChapterId: string;
+  character: CharacterRecord;
+  instruction?: string;
+}) {
+  const { project, contextChapterId, character, instruction } = options;
+  const prompt = [
+    "You are a novelist's character architect.",
+    "Create one coherent character blueprint for the app. Keep it specific, human, and usable for future dialogue and drafting.",
+    "Use the already-filled character textboxes as binding source material. Preserve useful existing facts and build around them.",
+    "Do not write app instructions, field names inside values, meta commentary, or generic repeated trait triplets.",
+    "Do not use words like canon-safe, requested field, target area, field path, dossier, contextualize, or textualize inside field values.",
+    "Return strict JSON only. No markdown. No explanation.",
+    "Use this shape:",
+    JSON.stringify(
+      {
+        name: "Full name",
+        role: "Story role or job",
+        archetype: "Narrative lane",
+        summary: "2-3 vivid sentences",
+        goal: "Concrete want",
+        fear: "Specific fear",
+        secret: "Hidden truth",
+        wound: "Formative hurt",
+        notes: "Useful drafting note",
+        quickProfile: {
+          age: "Age or age range",
+          profession: "Profession",
+          placeOfLiving: "Home or base",
+          accent: "Accent/register if known",
+          speechPattern: "Distinct speech pattern",
+        },
+        identity: {
+          fullName: "Full name",
+          nicknames: ["Nickname"],
+          gender: "Gender if known",
+          culturalBackground: "Culture/class/religious background",
+          nationality: "Nationality or people",
+          currentResidence: "Current residence",
+          placeOfOrigin: "Origin",
+          beliefSystem: "Belief system",
+          familyStatus: "Family status",
+        },
+        life: {
+          workplace: "Workplace",
+          roleTitle: "Role/title",
+          socialClass: "Class/status",
+          educationLevel: "Education",
+          reputation: "Public reputation",
+        },
+        personality: {
+          coreTraits: ["trait"],
+          virtues: ["virtue"],
+          flaws: ["flaw"],
+          emotionalTendencies: "Emotional baseline",
+          conflictStyle: "How they fight or argue",
+          projectedImage: "Public mask",
+          trueNature: "Private truth",
+          hiddenSelf: "What they hide",
+          angerTriggers: "What angers them",
+          fearTriggers: "What frightens them",
+          coreValues: "Values",
+        },
+        motivation: {
+          shortTermGoal: "Immediate goal",
+          longTermGoal: "Long-term desire",
+          needVsWant: "Need versus want",
+          internalConflict: "Inner conflict",
+          externalConflict: "External pressure",
+          secrets: ["secret"],
+          stakesIfFail: "Stakes",
+          arcDirection: "Arc direction",
+          relationshipToMainConflict: "How they connect to the main conflict",
+        },
+        speech: {
+          accent: "Accent/register",
+          dialect: "Dialect if known",
+          nativeLanguage: "Native language",
+          otherLanguages: ["Other language"],
+          formalityLevel: "Formality",
+          vocabularyLevel: "Vocabulary",
+          educationInSpeech: "Education shown in speech",
+          sentenceLength: "Sentence length",
+          directness: "Directness",
+          descriptors: ["voice descriptor"],
+          repeatedPhrases: ["phrase"],
+          favoriteExpressions: ["expression"],
+          rhythm: "Rhythm",
+          emotionalShifts: "How emotion changes speech",
+          angrySpeech: "How they sound angry",
+          scaredSpeech: "How they sound scared",
+          lyingSpeech: "How they lie",
+          persuasiveSpeech: "How they persuade",
+          superiorSpeech: "How they speak upward",
+          inferiorSpeech: "How they speak downward",
+          lovedOnesSpeech: "How they speak privately",
+          avoidedTopics: "What they avoid saying",
+          commonMisunderstandings: "How others misread them",
+        },
+        body: {
+          physicalDescription: "Physical description",
+          build: "Build",
+          clothingStyle: "Clothing",
+          grooming: "Grooming",
+          distinguishingFeatures: ["feature"],
+          posture: "Posture",
+          movementStyle: "Movement",
+          eyeContact: "Eye contact",
+          habitsTics: ["habit"],
+          roomEntry: "How they enter",
+          presenceFeel: "How they feel in a room",
+        },
+        relationships: {
+          friends: ["friend/dynamic"],
+          enemies: ["enemy/dynamic"],
+          rivals: ["rival/dynamic"],
+          loversExes: ["lover/ex dynamic"],
+          family: ["family dynamic"],
+          mentors: ["mentor dynamic"],
+          subordinatesSuperiors: ["hierarchy dynamic"],
+          trustLevels: "Who they trust",
+          hiddenLoyalties: "Hidden loyalties",
+          unspokenTensions: "Unspoken tensions",
+          powerDynamics: "Power dynamics",
+        },
+        currentState: {
+          currentKnowledge: "What they know now",
+          unknowns: "What they do not know",
+          emotionalState: "Current emotion",
+          physicalCondition: "Current condition",
+          loyalties: "Current loyalties",
+          recentChanges: "Recent change",
+          continuityRisks: "Continuity warning",
+        },
+        freeTextCore: "Short reusable portrait for drafting",
+      },
+      null,
+      2,
+    ),
+    "Project and character context:",
+    compactCharacterCanon(project, contextChapterId, character),
+    "Existing character snapshot:",
+    JSON.stringify(
+      {
+        name: character.name,
+        role: character.role,
+        archetype: character.archetype,
+        summary: character.summary,
+        goal: character.goal,
+        fear: character.fear,
+        secret: character.secret,
+        wound: character.wound,
+        notes: character.notes,
+        quickProfile: character.quickProfile,
+        currentState: character.currentState,
+        usefulDossier: {
+          basicIdentity: character.dossier.basicIdentity,
+          lifePosition: character.dossier.lifePosition,
+          personalityBehavior: character.dossier.personalityBehavior,
+          motivationStory: character.dossier.motivationStory,
+          speechLanguage: character.dossier.speechLanguage,
+          relationshipDynamics: character.dossier.relationshipDynamics,
+          freeTextCore: character.dossier.freeTextCore,
+        },
+      },
+      null,
+      2,
+    ),
+    instruction ? `Writer request:\n${instruction}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const raw = await generateTextOrFallback(prompt, 2600, "");
+  const parsed = raw?.trim() ? extractJsonObject(raw) : null;
+  return buildCharacterBlueprintPayload(character, project, parsed ?? {});
 }
 
 async function generateSinglePlanningFieldValue(options: {
@@ -1944,153 +2217,12 @@ export async function runTargetedCharacterAi(input: {
       summary: cleanFieldText("summary", summary, workingCharacter.summary),
     });
   } else {
-    const sectionPrompts = buildCharacterSectionPrompts(workingCharacter);
-    let aggregatePayload: Record<string, unknown> = { ...draftCharacterPayload };
-    let fallbackDossier = "";
-    const sectionResults = await Promise.all(
-      sectionPrompts.map(async (section) => {
-        const fieldPaths = collectCharacterFieldPaths(section.shape);
-        const sectionCharacter = applyCharacterPatch(workingCharacter, aggregatePayload);
-        const sectionSnapshot = {
-          name: sectionCharacter.name,
-          ...extractCharacterShapeValues(sectionCharacter, section.shape),
-        };
-        const prompt = [
-          "You are a fast character architect.",
-          compactCanon,
-          `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> ${section.label}.`,
-          "Respect what is already written in the visible character textboxes. Treat those entries as primary canon.",
-          "Fill every requested field for this section. When a field already has useful text, preserve its core idea and sharpen it instead of changing it arbitrarily.",
-          "Keep values compact, concrete, and immediately usable inside the app.",
-          "Use short lists for array fields and short, vivid phrases for string fields.",
-          "Do not output commentary.",
-          "Do not describe what the field should do. Put the actual character fact, behavior, speech rule, or relationship in the field.",
-          "Do not reuse the same three generic traits across unrelated fields.",
-          "Do not include field names, JSON keys, app instructions, or words like dossier, canon-safe, requested field, or should remain specific inside field values.",
-          "Every requested field path must appear exactly once in your answer, even if the value is short.",
-          "Do not collapse multiple requested fields into one paragraph. Emit one path line per field.",
-          "Return exactly one line per requested field using this format: path :: value",
-          "For list fields, separate items with | on the same line.",
-          input.instruction ? `Additional request context:\n${input.instruction}` : "",
-          section.guidance,
-          `Requested field paths:\n- ${fieldPaths.join("\n- ")}`,
-          `Current values for these fields:\n${JSON.stringify(sectionSnapshot, null, 2)}`,
-        ]
-          .filter(Boolean)
-          .join("\n\n");
-        const sectionFallback = fallbackCharacterFieldLines(sectionCharacter, project, fieldPaths);
-        const raw = await generateTextOrFallback(prompt, section.maxOutputTokens, sectionFallback);
-        let parsed = raw ? parseCharacterFieldLines(raw, fieldPaths) : null;
-        if (!parsed || Object.keys(parsed).length === 0) {
-          const repairPrompt = [
-            "Repair the character field lines.",
-            compactCanon,
-            `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> ${section.label}.`,
-            "Return exactly one line per requested field using the format path :: value.",
-            "For list fields, separate items with |.",
-            "Write the final field values only. Do not talk about the request, the app, field paths, or what the values should accomplish.",
-            "Every field must receive a different, field-appropriate answer.",
-            `Requested field paths:\n- ${fieldPaths.join("\n- ")}`,
-            input.instruction ? `Additional request context:\n${input.instruction}` : "",
-            `Rejected answer:\n${raw ?? ""}`,
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-          const repaired = await generateTextOrFallback(repairPrompt, section.maxOutputTokens, sectionFallback);
-          parsed = repaired ? parseCharacterFieldLines(repaired, fieldPaths) : null;
-          return { parsed, raw: repaired ?? raw ?? "" };
-        }
-        return { parsed, raw: raw ?? "" };
-      }),
-    );
-
-    let parsedLeafCount = 0;
-    for (const result of sectionResults) {
-      const resultRaw = cleanGeneratedText(result.raw ?? "").trim();
-      const resultLeafCount = characterPayloadLeafCount(result.parsed);
-      parsedLeafCount += resultLeafCount;
-      if (resultLeafCount === 0 && resultRaw.length > fallbackDossier.length) {
-        fallbackDossier = resultRaw;
-      }
-      aggregatePayload = mergeCharacterAiPayload(
-        applyCharacterPatch(workingCharacter, aggregatePayload),
-        aggregatePayload,
-        result.parsed,
-        "",
-      );
-    }
-
-    const mergedPayload = mergeCharacterAiPayload(
-      workingCharacter,
-      aggregatePayload,
-      null,
-      parsedLeafCount === 0 ? fallbackDossier : "",
-    );
-    const previewCharacter = applyCharacterPatch(workingCharacter, mergedPayload);
-    const missingPaths = sectionPrompts.flatMap((section) =>
-      collectEmptyCharacterFieldPaths(
-        {
-          summary: previewCharacter.summary,
-          role: previewCharacter.role,
-          archetype: previewCharacter.archetype,
-          goal: previewCharacter.goal,
-          fear: previewCharacter.fear,
-          secret: previewCharacter.secret,
-          wound: previewCharacter.wound,
-          notes: previewCharacter.notes,
-          quickProfile: previewCharacter.quickProfile,
-          dossier: previewCharacter.dossier,
-          currentState: previewCharacter.currentState,
-        },
-        section.shape,
-      ),
-    );
-    if (missingPaths.length > 0) {
-      const repairPrompt = [
-        "You are repairing a character dossier.",
-        compactCanon,
-        `Target area: Story Bible -> Character Master -> ${workingCharacter.name || "Unnamed character"} -> missing fields.`,
-        "Return exactly one line per requested field using this format: path :: value",
-        "For list fields, separate items with | on the same line.",
-        "Do not output commentary.",
-        "Write actual field values. Do not write field names, app instructions, or generic repeated trait triplets as values.",
-        "Fill only the missing fields listed below. Keep everything consistent with the current saved character values.",
-        input.instruction ? `Additional request context:\n${input.instruction}` : "",
-        `Missing field paths:\n- ${missingPaths.join("\n- ")}`,
-        `Current character values:\n${JSON.stringify(
-          {
-            name: previewCharacter.name,
-            summary: previewCharacter.summary,
-            role: previewCharacter.role,
-            archetype: previewCharacter.archetype,
-            goal: previewCharacter.goal,
-            fear: previewCharacter.fear,
-            secret: previewCharacter.secret,
-            wound: previewCharacter.wound,
-            notes: previewCharacter.notes,
-            quickProfile: previewCharacter.quickProfile,
-            dossier: previewCharacter.dossier,
-            currentState: previewCharacter.currentState,
-          },
-          null,
-          2,
-        )}`,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-      const repairRaw = await generateTextOrFallback(
-        repairPrompt,
-        280,
-        fallbackCharacterFieldLines(previewCharacter, project, missingPaths),
-      );
-      const repairParsed = repairRaw ? parseCharacterFieldLines(repairRaw, missingPaths) : null;
-      if (repairParsed && Object.keys(repairParsed).length > 0) {
-        Object.assign(
-          mergedPayload,
-          mergeCharacterAiPayload(previewCharacter, mergedPayload, repairParsed, ""),
-        );
-      }
-    }
+    const mergedPayload = await generateCharacterDossierPayload({
+      project,
+      contextChapterId,
+      character: workingCharacter,
+      instruction: input.instruction,
+    });
     if (Object.keys(mergedPayload).length === 0) {
       throw new Error("AI did not return usable character dossier content.");
     }

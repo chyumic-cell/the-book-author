@@ -76,6 +76,17 @@ function classifyPromptFlavor(task: string): PromptFlavor {
     return "coaching";
   }
 
+  if (
+    lowerTask.startsWith("update ") ||
+    lowerTask.startsWith("fill ") ||
+    lowerTask.includes(" field") ||
+    lowerTask.includes("story bible") ||
+    lowerTask.includes("structure engine") ||
+    lowerTask.includes("book setup")
+  ) {
+    return "planning";
+  }
+
   if (lowerTask.includes("selected text")) {
     return "selection";
   }
@@ -283,7 +294,7 @@ function buildCanonicalAnchors(context: ContextPackage) {
   ].join("\n");
 }
 
-function buildChapterDistinctnessGuidance(context: ContextPackage) {
+function buildChapterDistinctnessGuidance() {
   return [
     "Chapter distinctness guard:",
     "Do not merely rewrite the same chapter shape with different words.",
@@ -303,6 +314,7 @@ export function buildPromptEnvelope(
 ) {
   const flavor = classifyPromptFlavor(task);
   const budget = PROMPT_BUDGETS[flavor];
+  const includeBellReference = flavor === "drafting" || flavor === "revision" || flavor === "coaching";
 
   const sections = [
     `Task: ${task}`,
@@ -316,7 +328,7 @@ export function buildPromptEnvelope(
       ? `Previous chapter summary: ${compactText(context.previousChapterSummary, flavor === "drafting" ? 260 : 180)}`
       : "",
     section("Adjacent chapter shapes to avoid duplicating", formatBullets(context.adjacentChapterDistinctness, 2, 260)),
-    section("Distinctness requirement", buildChapterDistinctnessGuidance(context)),
+    section("Distinctness requirement", buildChapterDistinctnessGuidance()),
     context.localExcerpt
       ? section("Local excerpt", compactText(context.localExcerpt, budget.excerptChars))
       : "",
@@ -329,7 +341,7 @@ export function buildPromptEnvelope(
     section("Continuity constraints", formatContinuity(context.continuityConstraints, budget.continuity)),
     section("Writing guidance", buildSystemGuidance(project)),
     section("Dialogue individuality", buildDialogueVoiceContract()),
-    section("James Scott Bell guide reference from the user's PDF", buildBellCraftReference(task)),
+    includeBellReference ? section("James Scott Bell guide reference from the user's PDF", buildBellCraftReference(task)) : "",
     `Instruction: ${instruction}`,
   ];
 

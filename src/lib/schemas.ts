@@ -197,6 +197,7 @@ export const targetedCharacterAiSchema = z.object({
   characterId: z.string().min(1),
   action: z.enum(["develop-dossier", "expand-summary", "tighten-summary"]),
   draftCharacter: z.record(z.string(), z.unknown()).optional(),
+  instruction: z.string().optional().default(""),
 });
 
 export const autopilotRequestSchema = z.object({

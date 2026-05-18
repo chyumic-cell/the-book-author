@@ -25,6 +25,7 @@ export async function POST(
         characterId: input.characterId,
         action: input.action,
         draftCharacter: input.draftCharacter,
+        instruction: input.instruction,
       });
       return ok(result);
     }

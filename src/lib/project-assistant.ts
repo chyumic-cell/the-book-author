@@ -5016,14 +5016,10 @@ async function tryDirectStructuredAssistantAction(input: {
   }
 
   const lower = input.message.toLowerCase();
-  const allowBibleDirect =
-    input.scope === "STORY_BIBLE" ||
-    input.scope === "AUTO" ||
-    input.scope === "PROJECT";
-  const allowSkeletonDirect =
-    input.scope === "SKELETON" ||
-    input.scope === "AUTO" ||
-    input.scope === "PROJECT";
+  // The bottom AI bar should decide the right app layer from the request,
+  // instead of being trapped by whichever tab/scope was last selected.
+  const allowBibleDirect = true;
+  const allowSkeletonDirect = true;
   const directIntent = inferAssistantIntent(input.message, input.scope);
   const characterLabel = extractEntityLabelFromMessage(input.message, "character") || extractNamedEntityLabel(input.message);
   if (
