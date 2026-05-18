@@ -744,7 +744,7 @@ async function generateSingleSkeletonFieldValue(options: {
 
   const raw = await generateTextOrFallback(
     prompt,
-    700,
+    fieldKey === "description" || fieldKey === "notes" ? 560 : 320,
     fallbackSkeletonFieldValue(project, targetEntityType, fieldKey, itemTitle, currentValue, instruction),
   );
   let generated = raw?.trim();
@@ -759,7 +759,7 @@ async function generateSingleSkeletonFieldValue(options: {
       instruction: `Return only the corrected value for ${fieldLabel || fieldKey}.`,
       badOutput: generated,
       roleInstruction: "Return only the corrected Story Skeleton field value.",
-      maxOutputTokens: 700,
+      maxOutputTokens: fieldKey === "description" || fieldKey === "notes" ? 560 : 320,
     });
   }
   return generated;
@@ -1342,10 +1342,11 @@ function textFromBlueprint(
 ) {
   const raw = section[key];
   const candidate = cleanBlueprintString(raw, "");
-  if (candidate) {
+  if (candidate && !looksLikeCharacterFieldGarbage(key, candidate)) {
     return candidate;
   }
-  return cleanBlueprintString(currentOrFallback(current, fallback), fallback);
+  const fallbackCandidate = cleanBlueprintString(currentOrFallback(current, fallback), fallback);
+  return fallbackCandidate && !looksLikeCharacterFieldGarbage(key, fallbackCandidate) ? fallbackCandidate : "";
 }
 
 function listFromBlueprint(
@@ -1768,8 +1769,6 @@ async function generateCharacterDossierPayload(options: {
         },
         freeTextCore: "Short reusable portrait for drafting",
       },
-      null,
-      2,
     ),
     "Project and character context:",
     compactCharacterCanon(project, contextChapterId, character),
@@ -1797,15 +1796,13 @@ async function generateCharacterDossierPayload(options: {
           freeTextCore: character.dossier.freeTextCore,
         },
       },
-      null,
-      2,
     ),
     instruction ? `Writer request:\n${instruction}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
 
-  const raw = await generateTextOrFallback(prompt, 2600, "");
+  const raw = await generateTextOrFallback(prompt, 1800, "");
   const parsed = raw?.trim() ? extractJsonObject(raw) : null;
   return buildCharacterBlueprintPayload(character, project, parsed ?? {});
 }
@@ -1843,6 +1840,12 @@ async function generateSinglePlanningFieldValue(options: {
         : "Keep the useful core of the current field value, but make it stronger and more specific.",
       instruction ? `Additional request context:\n${instruction}` : "",
       chapterFieldInstruction(fieldKey, action),
+      fieldKey === "currentBeat"
+        ? "If the request names a concrete structural event, scene, or rule, name that canon anchor in the beat sentence."
+        : "",
+      fieldKey === "purpose" || fieldKey === "outline"
+        ? "Carry the important character, rule, place, and conflict nouns from the request into the result when they are relevant."
+        : "",
       fieldSpec ? `Field purpose: ${fieldSpec.description}\nExample shape: ${fieldSpec.example}` : "",
       previousChapter
         ? `Previous chapter context: Chapter ${previousChapter.number} - ${previousChapter.title}. Purpose: ${previousChapter.purpose}`
@@ -1860,7 +1863,7 @@ async function generateSinglePlanningFieldValue(options: {
 
   const raw = await generateTextOrFallback(
     prompt,
-    fieldKey === "outline" ? 1400 : 900,
+    fieldKey === "outline" ? 1100 : 420,
     fallbackChapterFieldValue({ project, chapter, fieldKey, currentValue, instruction }),
   );
   let generated = raw?.trim();
@@ -1875,7 +1878,7 @@ async function generateSinglePlanningFieldValue(options: {
       instruction: chapterFieldInstruction(fieldKey, action),
       badOutput: generated,
       roleInstruction: "Return only the corrected field content.",
-      maxOutputTokens: fieldKey === "outline" ? 1400 : 900,
+      maxOutputTokens: fieldKey === "outline" ? 1100 : 420,
     });
   }
   if (fieldKey === "title") {
@@ -1959,7 +1962,7 @@ async function generateSingleStoryBibleFieldValue(options: {
 
   const raw = await generateTextOrFallback(
     prompt,
-    900,
+    fieldKey === "content" || fieldKey === "description" || fieldKey === "summary" || fieldKey === "notes" ? 620 : 320,
     fallbackStoryBibleFieldValue(project, fieldKey, itemTitle, currentValue, instruction),
   );
   let generated = raw?.trim();
@@ -1983,7 +1986,8 @@ async function generateSingleStoryBibleFieldValue(options: {
       ].join("\n\n"),
       badOutput: generated,
       roleInstruction: "Return only the corrected Story Bible field value.",
-      maxOutputTokens: 900,
+      maxOutputTokens:
+        fieldKey === "content" || fieldKey === "description" || fieldKey === "summary" || fieldKey === "notes" ? 620 : 320,
     });
   }
   return generated;

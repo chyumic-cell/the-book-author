@@ -92,13 +92,13 @@ function shouldUseOpenRouterFallbackFirst(model: string) {
   return model === "openrouter/free" || model.includes("owl-alpha");
 }
 
-function openRouterFallbackAttemptLimit(model: string, options: ProviderCallOptions) {
+function openRouterFallbackAttemptLimit(model: string) {
   if (!shouldUseOpenRouterFallbackFirst(model)) {
     return 1;
   }
 
-  // Long hosted chapter calls need one high-quality backup, not a chain that can outlive Vercel.
-  return (options.timeoutMs ?? PROVIDER_CALL_TIMEOUT_MS) >= 90000 ? 1 : 2;
+  // Keep hosted free-model usage predictable: one visible-text backup is enough.
+  return 1;
 }
 
 function sleep(ms: number) {
@@ -1099,7 +1099,7 @@ async function callProvider(
         prompt,
         options,
         new Set([preferredModel]),
-        openRouterFallbackAttemptLimit(provider.model, options),
+        openRouterFallbackAttemptLimit(provider.model),
       );
       if (fallbackText) {
         return fallbackText;
@@ -1112,7 +1112,7 @@ async function callProvider(
           prompt,
           options,
           new Set([preferredModel]),
-          openRouterFallbackAttemptLimit(provider.model, options),
+          openRouterFallbackAttemptLimit(provider.model),
         );
         if (fallbackText) {
           return fallbackText;
