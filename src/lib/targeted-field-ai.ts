@@ -216,7 +216,7 @@ function looksLikePlaceholderValue(value: string) {
   );
 }
 
-async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string) {
+async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string, timeoutMs = 25000) {
   if (
     (process.env.VERCEL === "1" || isHostedBetaEnabled()) &&
     (process.env.STORYFORGE_DISABLE_LIVE_TARGETED_AI === "1" || process.env.STORYFORGE_LIVE_TARGETED_AI === "0")
@@ -225,7 +225,7 @@ async function generateTextOrFallback(prompt: string, maxOutputTokens: number, f
   }
 
   try {
-    const raw = await generateTextWithProvider(prompt, { maxOutputTokens });
+    const raw = await generateTextWithProvider(prompt, { maxOutputTokens, timeoutMs });
     const generated = raw?.trim() ?? "";
     if (generated && !looksLikeMetaOutput(generated)) {
       return generated;
@@ -238,7 +238,7 @@ async function generateTextOrFallback(prompt: string, maxOutputTokens: number, f
         "Ignore that previous response completely.",
         "Return clean, book-specific field content only. No code. No random languages. No symbols. No commentary.",
       ].join("\n\n");
-      const retryRaw = await generateTextWithProvider(retryPrompt, { maxOutputTokens });
+      const retryRaw = await generateTextWithProvider(retryPrompt, { maxOutputTokens, timeoutMs });
       const retry = retryRaw?.trim() ?? "";
       if (retry && !looksLikeMetaOutput(retry)) {
         return retry;
@@ -1802,7 +1802,7 @@ async function generateCharacterDossierPayload(options: {
     .filter(Boolean)
     .join("\n\n");
 
-  const raw = await generateTextOrFallback(prompt, 1800, "");
+  const raw = await generateTextOrFallback(prompt, 1800, "", 35000);
   const parsed = raw?.trim() ? extractJsonObject(raw) : null;
   return buildCharacterBlueprintPayload(character, project, parsed ?? {});
 }

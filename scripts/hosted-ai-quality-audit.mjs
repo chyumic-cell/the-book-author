@@ -177,7 +177,10 @@ function leakageReasons(text) {
   return leakPatterns.filter((pattern) => pattern.test(String(text ?? ""))).map((pattern) => pattern.toString());
 }
 
-function qualityReasons(text, { minWords = 8, requireDialogue = false, requiredTerms = [], literary = false } = {}) {
+function qualityReasons(
+  text,
+  { minWords = 8, requireDialogue = false, requiredTerms = [], requiredAnyTerms = [], requiredAnyCount = 1, literary = false } = {},
+) {
   const reasons = [];
   const words = wc(text);
   const normalized = clean(text);
@@ -192,6 +195,14 @@ function qualityReasons(text, { minWords = 8, requireDialogue = false, requiredT
   if (requireDialogue && !/"[^"\n]{2,}"/.test(String(text))) reasons.push("expected dialogue but found no quoted speech");
   for (const term of requiredTerms) {
     if (!includesLoose(text, term)) reasons.push(`missing expected story term "${term}"`);
+  }
+  if (requiredAnyTerms.length) {
+    const hits = requiredAnyTerms.filter((term) => includesLoose(text, term));
+    if (hits.length < requiredAnyCount) {
+      reasons.push(
+        `not visibly tied to enough book canon terms (${hits.length}/${requiredAnyCount}; expected some of: ${requiredAnyTerms.join(", ")})`,
+      );
+    }
   }
   if (literary) {
     const sentenceCount = normalized.split(/[.!?]+/).map((entry) => entry.trim()).filter(Boolean).length;
@@ -343,6 +354,10 @@ async function targetedAi(projectId, body) {
   return { elapsedMs: response.elapsedMs, data: response.data.data };
 }
 
+function logTiming(label, result) {
+  console.log(`QUALITY_TIMING ${label} ${Math.round(result.elapsedMs / 1000)}s`);
+}
+
 async function assist(chapterId, body) {
   const response = await request(`/api/chapters/${chapterId}/assist`, {
     method: "POST",
@@ -467,12 +482,13 @@ async function runAudit() {
       action: "develop-dossier",
       draftCharacter: character,
     });
+    logTiming("character dossier", characterResult);
     project = characterResult.data.project;
     const developedCharacter = project.characters.find((entry) => entry.id === character.id);
     const dossierSummary = assertDossier(developedCharacter);
 
     console.log("QUALITY_STEP book rule");
-    await targetedAi(projectId, {
+    const bookRuleResult = await targetedAi(projectId, {
       scope: "STORY_BIBLE",
       itemId: rule.id,
       itemTitle: rule.title,
@@ -483,6 +499,7 @@ async function runAudit() {
       draftItem: rule,
       instruction: "Explain the magic law clearly enough that chapter drafting can obey it without exposition dumps.",
     });
+    logTiming("book rule", bookRuleResult);
     project = await getProject(projectId);
     const developedRule = project.workingNotes.find((entry) => entry.id === rule.id);
     assertQuality("book rule", developedRule.content, { minWords: 30, requiredTerms: ["Witness", "memory"] });
@@ -493,7 +510,7 @@ async function runAudit() {
       ["notes", "Notes"],
     ]) {
       const currentBeat = (await getProject(projectId)).structureBeats.find((entry) => entry.id === beat.id);
-      await targetedAi(projectId, {
+      const structureResult = await targetedAi(projectId, {
         scope: "SKELETON",
         targetEntityType: "structureBeat",
         itemId: beat.id,
@@ -505,11 +522,17 @@ async function runAudit() {
         draftItem: currentBeat,
         instruction: "Make it usable for drafting the oath feast scene and include Malket's opposition.",
       });
+      logTiming(`structure ${fieldKey}`, structureResult);
     }
     project = await getProject(projectId);
     const developedBeat = project.structureBeats.find((entry) => entry.id === beat.id);
     assertQuality("structure beat description", developedBeat.description, { minWords: 20, requiredTerms: ["Malket"] });
-    assertQuality("structure beat notes", developedBeat.notes, { minWords: 15, requiredTerms: ["Oath"] });
+    assertQuality("structure beat notes", developedBeat.notes, {
+      minWords: 15,
+      requiredTerms: ["Malket"],
+      requiredAnyTerms: ["Oath", "Witness", "Tithe", "Sarun", "feast", "court"],
+      requiredAnyCount: 2,
+    });
 
     console.log("QUALITY_STEP chapter runway fields");
     for (const [fieldKey, fieldLabel] of [
@@ -521,7 +544,7 @@ async function runAudit() {
     ]) {
       project = await getProject(projectId);
       chapter = project.chapters.find((entry) => entry.id === chapter.id);
-      await targetedAi(projectId, {
+      const runwayResult = await targetedAi(projectId, {
         scope: "SKELETON",
         targetEntityType: "chapter",
         itemId: chapter.id,
@@ -534,12 +557,18 @@ async function runAudit() {
         instruction:
           "Use Malket, the Witness Tithe, and the Oath Feast Disturbance. Make it specific, useful, and dialogue-heavy.",
       });
+      logTiming(`chapter field ${fieldKey}`, runwayResult);
     }
     project = await getProject(projectId);
     chapter = project.chapters.find((entry) => entry.id === chapter.id);
     assertQuality("chapter title", chapter.title, { minWords: 2 });
     assertQuality("chapter purpose", chapter.purpose, { minWords: 12, requiredTerms: ["Malket"] });
-    assertQuality("chapter current beat", chapter.currentBeat, { minWords: 10, requiredTerms: ["Oath"] });
+    assertQuality("chapter current beat", chapter.currentBeat, {
+      minWords: 10,
+      requiredTerms: ["Malket"],
+      requiredAnyTerms: ["Oath", "Witness", "Tithe", "Sarun", "feast", "court"],
+      requiredAnyCount: 2,
+    });
     assertQuality("chapter desired mood", chapter.desiredMood, { minWords: 3 });
     assertQuality("chapter outline", chapter.outline, { minWords: 90, requiredTerms: ["Malket", "Witness"], literary: false });
 

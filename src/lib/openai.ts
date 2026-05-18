@@ -1428,8 +1428,12 @@ function looksLikeCorruptGeneratedOutput(value: string) {
     return false;
   }
 
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) {
+    return true;
+  }
+
   const cjkCount = text.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g)?.length ?? 0;
-  if (cjkCount > Math.max(4, Math.floor(text.length * 0.02))) {
+  if (cjkCount > Math.max(8, Math.floor(text.length * 0.01))) {
     return true;
   }
 
@@ -1439,7 +1443,7 @@ function looksLikeCorruptGeneratedOutput(value: string) {
 
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|```|\\hat|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
@@ -1460,6 +1464,9 @@ function trimCorruptGeneratedTail(value: string) {
     /\bglobal ai assistant\b/i,
     /\bi cannot fulfill\b/i,
     /\blet'?s restart\b/i,
+    /\bds_safety_content\b/i,
+    /\]\]Output:/i,
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/,
     /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]{2,}/,
   ];
   let cutIndex = text.length;
@@ -2742,7 +2749,7 @@ export async function generateChapterDraft(projectId: string, chapterId: string,
       : withAdditionalInstruction(formatChapterInstruction(chapter, "draft"), additionalInstruction),
     maxOutputTokens: hostedFastMode ? hostedDraftOutputTokenBudget(chapter) : chapterOutputTokenBudget(chapter),
     timeoutMs: hostedFastMode ? 90000 : undefined,
-    mockContent: hostedFastMode ? undefined : mockDraft(project, context, chapter),
+    mockContent: mockDraft(project, context, chapter),
     clean: (value) => sanitizeGeneratedChapterText(project, chapter, value),
     chapter,
     enforceChapterLength: !hostedFastMode,
