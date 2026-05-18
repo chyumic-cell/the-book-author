@@ -3060,7 +3060,10 @@ export async function assistSelection(input: {
       ]
         .filter(Boolean)
         .join(" ");
-  if (isHostedFastDraftMode() && process.env.STORYFORGE_FORCE_HOSTED_ASSIST_MOCK === "1") {
+  const useHostedSafeAssist =
+    isHostedFastDraftMode() &&
+    (process.env.STORYFORGE_FORCE_HOSTED_ASSIST_MOCK === "1" || process.env.STORYFORGE_LIVE_MANUSCRIPT_ASSIST !== "1");
+  if (useHostedSafeAssist) {
     return {
       content: cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, fallbackSeed, input.instruction), {
         beforeSelection: input.beforeSelection,
