@@ -50,6 +50,18 @@ describe("AI assist fallback revisions", () => {
     expect(wordCount(tightened)).toBeLessThanOrEqual(Math.ceil(wordCount(selected) / 3) + 2);
   });
 
+  it("continues from the seeded story character instead of drifting into generic prose", () => {
+    const continued = createFallbackAssistRevision(
+      "CONTINUE",
+      "Malket Witness Tithe Oath Feast Prince Sarun",
+      "",
+    );
+
+    expect(continued).toContain("Malket");
+    expect(continued).toMatch(/Witness|Tithe|Oath|Feast|Sarun/);
+    expect(continued).not.toMatch(/\b(?:the protagonist|the danger)\b/i);
+  });
+
   it("puts the exact highlighted words into the live assist prompt without leaky source jargon", () => {
     const selected =
       "Rafi held the torn map against the lantern and realized the missing road had been scratched out by someone afraid of being followed.";

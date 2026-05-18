@@ -365,8 +365,11 @@ async function targetedAi(projectId, body) {
   return { elapsedMs: response.elapsedMs, data: response.data.data };
 }
 
-function logTiming(label, result) {
+function logTiming(label, result, maxMs = null) {
   console.log(`QUALITY_TIMING ${label} ${Math.round(result.elapsedMs / 1000)}s`);
+  if (maxMs && result.elapsedMs > maxMs) {
+    throw new Error(`${label} took too long (${Math.round(result.elapsedMs / 1000)}s; expected under ${Math.round(maxMs / 1000)}s).`);
+  }
 }
 
 async function assist(chapterId, body) {
@@ -493,7 +496,7 @@ async function runAudit() {
       action: "develop-dossier",
       draftCharacter: character,
     });
-    logTiming("character dossier", characterResult);
+    logTiming("character dossier", characterResult, 18000);
     project = characterResult.data.project;
     const developedCharacter = project.characters.find((entry) => entry.id === character.id);
     const dossierSummary = assertDossier(developedCharacter);
@@ -510,7 +513,7 @@ async function runAudit() {
       draftItem: rule,
       instruction: "Explain the magic law clearly enough that chapter drafting can obey it without exposition dumps.",
     });
-    logTiming("book rule", bookRuleResult);
+    logTiming("book rule", bookRuleResult, 15000);
     project = await getProject(projectId);
     const developedRule = project.workingNotes.find((entry) => entry.id === rule.id);
     assertQuality("book rule", developedRule.content, { minWords: 30, requiredTerms: ["Witness", "memory"] });
@@ -533,7 +536,7 @@ async function runAudit() {
         draftItem: currentBeat,
         instruction: "Make it usable for drafting the oath feast scene and include Malket's opposition.",
       });
-      logTiming(`structure ${fieldKey}`, structureResult);
+      logTiming(`structure ${fieldKey}`, structureResult, 15000);
     }
     project = await getProject(projectId);
     const developedBeat = project.structureBeats.find((entry) => entry.id === beat.id);
@@ -568,7 +571,7 @@ async function runAudit() {
         instruction:
           "Use Malket, the Witness Tithe, and the Oath Feast Disturbance. Make it specific, useful, and dialogue-heavy.",
       });
-      logTiming(`chapter field ${fieldKey}`, runwayResult);
+      logTiming(`chapter field ${fieldKey}`, runwayResult, 15000);
     }
     project = await getProject(projectId);
     chapter = project.chapters.find((entry) => entry.id === chapter.id);

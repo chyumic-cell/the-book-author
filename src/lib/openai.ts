@@ -1124,7 +1124,12 @@ async function callProvider(
     }
   }
 
-  const retryDelaysMs = [0, 1800, 4200, 8500];
+  const retryDelaysMs =
+    options.timeoutMs && options.timeoutMs <= 10000
+      ? [0]
+      : options.timeoutMs && options.timeoutMs <= 30000
+        ? [0, 1200]
+        : [0, 1800, 4200, 8500];
   let lastError: unknown = null;
 
   for (const [index, delay] of retryDelaysMs.entries()) {
@@ -2891,10 +2896,12 @@ export async function assistSelection(input: {
   const fallbackSeed = input.selectionText.trim()
     ? input.selectionText
     : [
-        input.localExcerpt,
         project.characters[0]?.name,
-        project.workingNotes[0]?.title,
         context.chapterGoal,
+        project.workingNotes[0]?.title,
+        input.beforeSelection,
+        input.afterSelection,
+        input.localExcerpt,
       ]
         .filter(Boolean)
         .join(" ");
