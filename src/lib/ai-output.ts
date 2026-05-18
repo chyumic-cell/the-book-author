@@ -49,7 +49,8 @@ function normalizeQuoteSpacing(value: string) {
   return value
     .replace(/\s+([,.!?;:])/g, "$1")
     .replace(/([.!?])\s+(["'])(?=\s|$|[,.;:!?])/g, "$1$2")
-    .replace(/(["'])\s+([,.!?;:])/g, "$1$2");
+    .replace(/(["'])\s+([,.!?;:])/g, "$1$2")
+    .replace(/\s+\*(?=\s|$|[,.!?;:])/g, "*");
 }
 
 function splitCompleteSentences(value: string) {

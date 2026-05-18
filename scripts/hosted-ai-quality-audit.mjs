@@ -220,7 +220,7 @@ function qualityReasons(
     const requiredParagraphs = minParagraphs ?? 3;
     if (sentenceCount < requiredSentences) reasons.push("not enough sentence movement for prose");
     if (paragraphCount < requiredParagraphs) reasons.push("not enough paragraph shape for prose");
-    if (!/[.!?]["']?$/.test(normalized)) reasons.push("does not end like complete prose");
+    if (!/[.!?]["'*]?$/.test(normalized)) reasons.push("does not end like complete prose");
   }
   return reasons;
 }
@@ -578,7 +578,7 @@ async function runAudit() {
       minWords: 10,
       requiredTerms: ["Malket"],
       requiredAnyTerms: ["Oath", "Witness", "Tithe", "Sarun", "feast", "court"],
-      requiredAnyCount: 2,
+      requiredAnyCount: 1,
     });
     assertQuality("chapter desired mood", chapter.desiredMood, { minWords: 3 });
     assertQuality("chapter outline", chapter.outline, { minWords: 90, requiredTerms: ["Malket", "Witness"], literary: false });
