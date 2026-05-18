@@ -2398,11 +2398,18 @@ function buildSourceAwareFiller(seed: string) {
   const primary = anchors[0] ?? "the selected action";
   const secondary = anchors[1] ?? primary;
   const tertiary = anchors[2] ?? secondary;
+  const fourth = anchors[3] ?? tertiary;
+  const fifth = anchors[4] ?? fourth;
 
   return [
-    `${primary} catches on the senses first: weight, texture, and the small discomfort of noticing it too late.`,
-    `${secondary} makes the danger feel practical rather than abstract, something close enough to touch and too late to pretend away.`,
-    `${tertiary} presses the old fact into a new consequence, giving the next breath a reason to hurt.`,
+    `${primary} sharpens into a physical fact, close enough to change how the next breath feels.`,
+    `Around ${secondary}, the room seems to listen harder, as if one careless movement could make the danger official.`,
+    `${tertiary} stops being background detail and becomes leverage, something a powerful person could use and a frightened person could lose.`,
+    `The silence around ${fourth} grows more deliberate, giving the scene a cost that no one has yet dared to name.`,
+    `${fifth} carries the emotional weight of the exchange, turning observation into pressure rather than decoration.`,
+    `A smaller reaction follows: a glance held too long, a hand tightening, a voice choosing politeness because honesty would be unsafe.`,
+    `That detail changes the balance of the scene, making the next line of dialogue feel less like conversation and more like a wager.`,
+    `By the time the beat lands, the original fact has become harder to ignore and more dangerous to leave unanswered.`,
   ];
 }
 
@@ -2423,20 +2430,16 @@ function getFallbackSeed(selectionText: string, instruction: string) {
 function buildFallbackExpansion(seed: string, targetWords: number) {
   const balancedSeed = balanceFallbackFormatting(seed);
   const sentences = splitFallbackSentences(balancedSeed);
-  const anchors = extractSourceAnchors(seed, 6);
   const expansionBeats = buildSourceAwareFiller(seed);
+  let beatIndex = 0;
 
-  const expanded =
-    sentences.length > 0
-      ? sentences
-          .map((sentence, index) => {
-            const anchor = anchors[index % Math.max(anchors.length, 1)] ?? "that exact detail";
-            return `${sentence} ${anchor} catches on the senses, adding texture and consequence without changing what happened.`;
-          })
-          .join(" ")
-      : `${balancedSeed} ${expansionBeats.join(" ")}`;
+  const expandedParts = sentences.length > 0 ? [...sentences] : [balancedSeed];
+  while (roughWordCount(expandedParts.join(" ")) < Math.floor(targetWords * 0.9) && beatIndex < expansionBeats.length) {
+    expandedParts.push(expansionBeats[beatIndex]);
+    beatIndex += 1;
+  }
 
-  return fitFallbackWordCount(expanded, targetWords, 0.1, expansionBeats);
+  return fitFallbackWordCount(expandedParts.join(" "), targetWords, 0.1, expansionBeats.slice(beatIndex));
 }
 
 function buildFallbackTighten(seed: string, targetWords: number) {

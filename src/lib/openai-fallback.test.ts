@@ -6,6 +6,19 @@ function wordCount(value: string) {
   return value.trim() ? value.trim().split(/\s+/).length : 0;
 }
 
+function repeatedNgram(value: string, size = 7) {
+  const words = value.toLowerCase().split(/\s+/).filter(Boolean);
+  const seen = new Set<string>();
+  for (let index = 0; index + size <= words.length; index += 1) {
+    const gram = words.slice(index, index + size).join(" ");
+    if (seen.has(gram)) {
+      return gram;
+    }
+    seen.add(gram);
+  }
+  return "";
+}
+
 describe("AI assist fallback revisions", () => {
   it("expands the selected text without leaking demo scaffold prose", () => {
     const selected =
@@ -21,6 +34,8 @@ describe("AI assist fallback revisions", () => {
     expect(expanded).not.toMatch(
       /\b(?:selected text|selected passage|selected event|reader|on the page|context|contextuali[sz]|textuali[sz]|source material|source anchor|replacement prose)\b/i,
     );
+    expect(expanded).not.toMatch(/catches on the senses/i);
+    expect(repeatedNgram(expanded)).toBe("");
     expect(wordCount(expanded)).toBeGreaterThanOrEqual(Math.floor(wordCount(selected) * 2.7));
   });
 
