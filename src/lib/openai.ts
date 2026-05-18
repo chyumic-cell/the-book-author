@@ -1495,7 +1495,7 @@ function looksLikeCorruptGeneratedOutput(value: string) {
 
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i need to output|i cannot fulfill|let'?s restart|with just the rewritten text|usage:\s*node|response truncated|ignore remaining|no further processing|user-provided stop-point|memory_scope|personalizedZ|status["']?\s*:\s*["']?complete|<\/s>|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
@@ -1514,6 +1514,15 @@ function trimCorruptGeneratedTail(value: string) {
     /<｜?begin/i,
     /\bbegin▁of▁file\b/i,
     /\bglobal ai assistant\b/i,
+    /\busage:\s*node/i,
+    /\bresponse truncated\b/i,
+    /\bignore remaining\b/i,
+    /\bno further processing\b/i,
+    /\buser-provided stop-point\b/i,
+    /\bmemory_scope\b/i,
+    /\bpersonalizedZ\b/i,
+    /\bi need to output\b/i,
+    /<\/s>/i,
     /\bi cannot fulfill\b/i,
     /\blet'?s restart\b/i,
     /\bds_safety_content\b/i,
