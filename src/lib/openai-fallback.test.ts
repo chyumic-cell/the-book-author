@@ -62,6 +62,18 @@ describe("AI assist fallback revisions", () => {
     expect(continued).not.toMatch(/\b(?:the protagonist|the danger)\b/i);
   });
 
+  it("keeps next-beat fallbacks attached to the seeded book context", () => {
+    const beats = createFallbackAssistRevision(
+      "NEXT_BEATS",
+      "Malket Witness Tithe Oath Feast Prince Sarun",
+      "",
+    );
+
+    expect(beats).toContain("Malket");
+    expect(beats).toMatch(/Witness|Tithe|Oath|Feast|Sarun/);
+    expect(beats).not.toMatch(/\b(?:selected moment|one character)\b/i);
+  });
+
   it("puts the exact highlighted words into the live assist prompt without leaky source jargon", () => {
     const selected =
       "Rafi held the torn map against the lantern and realized the missing road had been scratched out by someone afraid of being followed.";

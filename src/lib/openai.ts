@@ -1499,6 +1499,10 @@ function looksLikeCorruptGeneratedOutput(value: string) {
     return true;
   }
 
+  if (/\b(?:wait[, ]+no|no[, ]+that'?s not right|not right approach|scratch that)\b|\bsimpler:\s*(?:he|she|they|it|the|we)\b/i.test(text)) {
+    return true;
+  }
+
   return (
     looksLikeAiLeakage(text) ||
     /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i need to output|i cannot fulfill|let'?s restart|with just the rewritten text|usage:\s*node|response truncated|ignore remaining|no further processing|user-provided stop-point|memory_scope|personalizedZ|information extracted successfully|#{3,}\w+#{3,}|status["']?\s*:\s*["']?complete|<\/s>|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|、|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
@@ -1530,6 +1534,10 @@ function trimCorruptGeneratedTail(value: string) {
     /\binformation extracted successfully\b/i,
     /#{3,}\w+#{3,}/i,
     /\bi need to output\b/i,
+    /\bwait[, ]+no\b/i,
+    /\bno[, ]+that'?s not right\b/i,
+    /\bnot right approach\b/i,
+    /\bscratch that\b/i,
     /<\/s>/i,
     /\bi cannot fulfill\b/i,
     /\blet'?s restart\b/i,
@@ -2601,11 +2609,17 @@ export function createFallbackAssistRevision(actionType: AssistActionType, selec
         ].join("\n");
       }
     case "NEXT_BEATS":
-      return [
-        "1. Continue from the immediate consequence of the selected moment instead of reopening the scene.",
-        "2. Let one character press for what they want while another blocks, evades, or raises the cost.",
-        "3. End the next movement with a concrete discovery, refusal, threat, or choice that pushes the chapter forward.",
-      ].join("\n");
+      {
+        const anchors = extractSourceAnchors(seed, 4);
+        const subject = anchors[0] ?? "the focal character";
+        const pressure = anchors[1] ?? "the present danger";
+        const leverage = anchors[2] ?? "the hidden cost";
+        return [
+          `1. Let ${subject} respond to the immediate consequence of ${pressure} instead of reopening the scene.`,
+          `2. Force another character to use ${leverage} as leverage, resistance, or threat so the next beat changes the power balance.`,
+          `3. End the next movement with a concrete discovery, refusal, threat, or choice tied to ${anchors[3] ?? subject} that pushes the chapter forward.`,
+        ].join("\n");
+      }
     default:
       return [
         balanceFallbackFormatting(seed),
@@ -2620,6 +2634,21 @@ function hostedAssistNeedsFallback(actionType: AssistActionType, selectionText: 
   const contentWords = roughWordCount(content);
   if (!content.trim() || looksLikeCorruptGeneratedOutput(content)) {
     return true;
+  }
+
+  if ((actionType === "CONTINUE" || actionType === "NEXT_BEATS") && selectedWords) {
+    const coverage = sourceAnchorCoverage(selectionText, content);
+    if (coverage.anchors.length > 0 && coverage.covered.length === 0) {
+      return true;
+    }
+
+    if (actionType === "CONTINUE" && contentWords < 35) {
+      return true;
+    }
+
+    if (actionType === "NEXT_BEATS" && contentWords < 18) {
+      return true;
+    }
   }
 
   if (
@@ -3091,7 +3120,9 @@ export async function assistSelection(input: {
     .join("\n");
   let transformedContent = result.content;
   if (isHostedFastDraftMode()) {
-    if (hostedAssistNeedsFallback(input.actionType, input.selectionText, transformedContent)) {
+    const hostedFallbackContext =
+      input.actionType === "CONTINUE" || input.actionType === "NEXT_BEATS" ? input.selectionText || fallbackSeed : input.selectionText;
+    if (hostedAssistNeedsFallback(input.actionType, hostedFallbackContext, transformedContent)) {
       transformedContent = safeFallback() || transformedContent;
     }
   } else {
