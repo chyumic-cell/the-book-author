@@ -216,7 +216,7 @@ function looksLikePlaceholderValue(value: string) {
   );
 }
 
-async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string, timeoutMs = 25000) {
+async function generateTextOrFallback(prompt: string, maxOutputTokens: number, fallback: string, timeoutMs = 12000) {
   if (
     (process.env.VERCEL === "1" || isHostedBetaEnabled()) &&
     (process.env.STORYFORGE_DISABLE_LIVE_TARGETED_AI === "1" || process.env.STORYFORGE_LIVE_TARGETED_AI === "0")
@@ -1802,7 +1802,7 @@ async function generateCharacterDossierPayload(options: {
     .filter(Boolean)
     .join("\n\n");
 
-  const raw = await generateTextOrFallback(prompt, 1800, "", 35000);
+  const raw = await generateTextOrFallback(prompt, 1800, "", 16000);
   const parsed = raw?.trim() ? extractJsonObject(raw) : null;
   return buildCharacterBlueprintPayload(character, project, parsed ?? {});
 }

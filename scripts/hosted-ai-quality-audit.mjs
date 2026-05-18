@@ -179,7 +179,15 @@ function leakageReasons(text) {
 
 function qualityReasons(
   text,
-  { minWords = 8, requireDialogue = false, requiredTerms = [], requiredAnyTerms = [], requiredAnyCount = 1, literary = false } = {},
+  {
+    minWords = 8,
+    requireDialogue = false,
+    requiredTerms = [],
+    requiredAnyTerms = [],
+    requiredAnyCount = 1,
+    literary = false,
+    minParagraphs,
+  } = {},
 ) {
   const reasons = [];
   const words = wc(text);
@@ -207,8 +215,9 @@ function qualityReasons(
   if (literary) {
     const sentenceCount = normalized.split(/[.!?]+/).map((entry) => entry.trim()).filter(Boolean).length;
     const paragraphCount = String(text).split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean).length;
+    const requiredParagraphs = minParagraphs ?? 3;
     if (sentenceCount < 5) reasons.push("not enough sentence movement for prose");
-    if (paragraphCount < 3) reasons.push("not enough paragraph shape for prose");
+    if (paragraphCount < requiredParagraphs) reasons.push("not enough paragraph shape for prose");
     if (!/[.!?]["']?$/.test(normalized)) reasons.push("does not end like complete prose");
   }
   return reasons;
@@ -639,6 +648,7 @@ async function runAudit() {
               ? []
               : ["Malket"],
         literary: ["EXPAND", "IMPROVE_PROSE", "SHARPEN_VOICE", "ADD_TENSION", "ADD_DIALOGUE", "DESCRIPTION_TO_DIALOGUE"].includes(actionType),
+        minParagraphs: actionType === "EXPAND" ? 1 : undefined,
       });
     }
 
