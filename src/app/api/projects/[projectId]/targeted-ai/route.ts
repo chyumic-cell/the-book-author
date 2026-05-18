@@ -8,7 +8,21 @@ import {
 import { targetedCharacterAiSchema, targetedFieldAiSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 120;
+
+function withRouteTimeout<T>(operation: Promise<T>, timeoutMs = 90000) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return Promise.race([
+    operation,
+    new Promise<T>((_resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("The AI field update timed out. Please try again.")), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  });
+}
 
 export async function POST(
   request: Request,
@@ -20,20 +34,20 @@ export async function POST(
 
     if (body.mode === "character") {
       const input = targetedCharacterAiSchema.parse(body);
-      const result = await runTargetedCharacterAi({
+      const result = await withRouteTimeout(runTargetedCharacterAi({
         projectId,
         characterId: input.characterId,
         action: input.action,
         draftCharacter: input.draftCharacter,
         instruction: input.instruction,
-      });
+      }));
       return ok(result);
     }
 
     const input = targetedFieldAiSchema.parse(body);
-    const result =
+    const result = await withRouteTimeout(
       input.scope === "SKELETON" && (input.targetEntityType === "chapter" || !input.targetEntityType)
-        ? await runTargetedPlanningFieldAi({
+        ? runTargetedPlanningFieldAi({
             projectId,
             itemId: input.itemId,
             itemTitle: input.itemTitle,
@@ -45,7 +59,7 @@ export async function POST(
             draftItem: input.draftItem,
           })
         : input.scope === "SKELETON"
-          ? await runTargetedSkeletonFieldAi({
+          ? runTargetedSkeletonFieldAi({
               projectId,
               targetEntityType: input.targetEntityType as "structureBeat" | "sceneCard",
               itemId: input.itemId,
@@ -57,7 +71,7 @@ export async function POST(
               instruction: input.instruction,
               draftItem: input.draftItem,
             })
-        : await runTargetedStoryBibleFieldAi({
+        : runTargetedStoryBibleFieldAi({
             projectId,
             itemId: input.itemId,
             itemTitle: input.itemTitle,
@@ -67,7 +81,8 @@ export async function POST(
             currentValue: input.currentValue,
             instruction: input.instruction,
             draftItem: input.draftItem,
-          });
+          }),
+    );
 
     return ok(result);
   } catch (error) {
