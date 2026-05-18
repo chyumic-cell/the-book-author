@@ -1494,9 +1494,14 @@ function looksLikeCorruptGeneratedOutput(value: string) {
     return true;
   }
 
+  const fusedWords = text.match(/\b[a-z]{3,}[A-Z][a-z]{2,}/g) ?? [];
+  if (fusedWords.length >= 1) {
+    return true;
+  }
+
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i need to output|i cannot fulfill|let'?s restart|with just the rewritten text|usage:\s*node|response truncated|ignore remaining|no further processing|user-provided stop-point|memory_scope|personalizedZ|information extracted successfully|#{3,}\w+#{3,}|status["']?\s*:\s*["']?complete|<\/s>|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i need to output|i cannot fulfill|let'?s restart|with just the rewritten text|usage:\s*node|response truncated|ignore remaining|no further processing|user-provided stop-point|memory_scope|personalizedZ|information extracted successfully|#{3,}\w+#{3,}|status["']?\s*:\s*["']?complete|<\/s>|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|、|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
@@ -2614,6 +2619,13 @@ function hostedAssistNeedsFallback(actionType: AssistActionType, selectionText: 
   const selectedWords = roughWordCount(selectionText);
   const contentWords = roughWordCount(content);
   if (!content.trim() || looksLikeCorruptGeneratedOutput(content)) {
+    return true;
+  }
+
+  if (
+    ["EXPAND", "IMPROVE_PROSE", "SHARPEN_VOICE", "ADD_TENSION", "ADD_DIALOGUE", "DESCRIPTION_TO_DIALOGUE"].includes(actionType) &&
+    content.split(/[.!?]+/).map((entry) => entry.trim()).filter(Boolean).length < 2
+  ) {
     return true;
   }
 
