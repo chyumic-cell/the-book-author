@@ -10,6 +10,7 @@ import {
   cleanInlineSuggestionText,
   cleanStructuredText,
   cleanSummaryText,
+  looksLikeAiLeakage,
   sanitizeManuscriptText,
 } from "@/lib/ai-output";
 import { buildContextPackage } from "@/lib/memory";
@@ -1409,6 +1410,73 @@ async function expandShortChapterIfNeeded(options: {
   return roughWordCount(expandedContent) > words ? expandedContent : options.content;
 }
 
+function oddGeneratedCharacterRatio(value: string) {
+  const compact = value.replace(/\s/g, "");
+  if (!compact) {
+    return 1;
+  }
+
+  const allowed =
+    compact.match(/[\p{Script=Latin}\p{Script=Hebrew}\p{Script=Arabic}\p{N}"'“”‘’.,!?;:()[\]{}\-–—…/%$&@#*]/gu)
+      ?.length ?? 0;
+  return 1 - allowed / compact.length;
+}
+
+function looksLikeCorruptGeneratedOutput(value: string) {
+  const text = value.trim();
+  if (!text) {
+    return false;
+  }
+
+  const cjkCount = text.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g)?.length ?? 0;
+  if (cjkCount > Math.max(4, Math.floor(text.length * 0.02))) {
+    return true;
+  }
+
+  if (oddGeneratedCharacterRatio(text) > 0.1) {
+    return true;
+  }
+
+  return (
+    looksLikeAiLeakage(text) ||
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|```|\\hat|<\s*\/?\w+)/i.test(
+      text,
+    )
+  );
+}
+
+function trimCorruptGeneratedTail(value: string) {
+  const text = value.trim();
+  if (!text) {
+    return text;
+  }
+
+  const tailMarkers = [
+    /#\s*Outlining/i,
+    /\bchapter blueprint\b/i,
+    /\bcontext package\b/i,
+    /<｜?begin/i,
+    /\bbegin▁of▁file\b/i,
+    /\bglobal ai assistant\b/i,
+    /\bi cannot fulfill\b/i,
+    /\blet'?s restart\b/i,
+    /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]{2,}/,
+  ];
+  let cutIndex = text.length;
+  for (const pattern of tailMarkers) {
+    const match = pattern.exec(text);
+    if (match && match.index > 80) {
+      cutIndex = Math.min(cutIndex, match.index);
+    }
+  }
+
+  if (cutIndex === text.length) {
+    return text;
+  }
+
+  return text.slice(0, cutIndex).replace(/[\s#*_.,;:!?\-–—"']+$/, "").trim();
+}
+
 async function runPromptTask(options: {
   task: string;
   project: ProjectWorkspace;
@@ -1446,7 +1514,7 @@ async function runPromptTask(options: {
   if (!content.trim()) {
     throw new Error("AI did not return any visible text.");
   }
-  let cleaned = options.clean ? options.clean(content) : content.trim();
+  let cleaned = trimCorruptGeneratedTail(options.clean ? options.clean(content) : content.trim());
 
   if (options.enforceOutlineDepth && options.chapter && cleaned.trim()) {
     try {
@@ -1484,6 +1552,15 @@ async function runPromptTask(options: {
       });
     } catch (error) {
       console.warn("[ai] chapter ending repair failed; keeping generated draft", error);
+    }
+  }
+
+  cleaned = trimCorruptGeneratedTail(cleaned);
+  if (looksLikeCorruptGeneratedOutput(cleaned)) {
+    if (options.mockContent?.trim()) {
+      cleaned = trimCorruptGeneratedTail(options.clean ? options.clean(options.mockContent) : options.mockContent.trim());
+    } else {
+      throw new Error("AI returned corrupt or unrelated output instead of usable book text.");
     }
   }
 
@@ -1530,8 +1607,10 @@ async function repairThinOutlineIfNeeded(options: {
   const repairedRaw = await generateTextWithProvider(repairPrompt, {
     maxOutputTokens: Math.max(1400, wordBudgetToTokens(260, 500, 2200)),
   });
-  const repaired = repairedRaw ? cleanStructuredText(repairedRaw) : "";
-  return roughWordCount(repaired) > currentWords ? repaired : options.content;
+  const repaired = repairedRaw ? trimCorruptGeneratedTail(cleanStructuredText(repairedRaw)) : "";
+  return repaired && !looksLikeCorruptGeneratedOutput(repaired) && roughWordCount(repaired) > currentWords
+    ? repaired
+    : options.content;
 }
 
 async function enforceInlineLengthIfNeeded(options: {
