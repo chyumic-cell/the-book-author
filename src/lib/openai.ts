@@ -1452,6 +1452,24 @@ function hasBrokenGeneratedFormatting(value: string) {
   return quoteCount % 2 === 1 || italicCount % 2 === 1;
 }
 
+function looksLikeTruncatedOutline(value: string) {
+  const lines = value
+    .trim()
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const last = lines.at(-1) ?? "";
+  if (!last) {
+    return true;
+  }
+
+  if (/(?:\b(?:and|but|or|because|while|when|where|that|with|without|toward|into|from|to|of|in|on|at|by|as|the|a|an)\s*)$/i.test(last)) {
+    return true;
+  }
+
+  return roughWordCount(last) > 8 && !/[.!?]["')\]]?$/.test(last);
+}
+
 function looksLikeCorruptGeneratedOutput(value: string) {
   const text = value.trim();
   if (!text) {
@@ -1477,7 +1495,7 @@ function looksLikeCorruptGeneratedOutput(value: string) {
 
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i (?:will|would|can) (?:write|rewrite|revise|expand|tighten|help)\b|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
@@ -1569,6 +1587,10 @@ async function runPromptTask(options: {
     } catch (error) {
       console.warn("[ai] outline repair failed; keeping generated outline", error);
     }
+  }
+
+  if (options.enforceOutlineDepth && options.mockContent?.trim() && looksLikeTruncatedOutline(cleaned)) {
+    cleaned = trimCorruptGeneratedTail(options.clean ? options.clean(options.mockContent) : options.mockContent.trim());
   }
 
   if (options.enforceChapterLength && options.chapter && cleaned.trim()) {
