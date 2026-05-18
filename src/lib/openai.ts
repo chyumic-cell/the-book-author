@@ -281,7 +281,10 @@ function hostedDraftMinimumWords(chapter: ChapterRecord) {
 }
 
 function hostedAssistTimeoutMs(actionType: AssistActionType) {
-  return actionType === "CONTINUE" ? 60000 : 30000;
+  if (actionType === "CONTINUE" || actionType === "NEXT_BEATS") {
+    return 18000;
+  }
+  return 15000;
 }
 
 function hostedOutlineOutputTokenBudget() {
@@ -1102,7 +1105,7 @@ async function callProvider(
       : provider.model;
 
   if (provider.label === "OpenRouter") {
-    const allowFallbackModels = !(options.timeoutMs && options.timeoutMs <= 10000);
+    const allowFallbackModels = !(options.timeoutMs && options.timeoutMs <= 30000);
     let attemptedFallback = false;
     try {
       const directChat = await callChatCompletion(provider, prompt, options, preferredModel);
@@ -1141,11 +1144,9 @@ async function callProvider(
   }
 
   const retryDelaysMs =
-    options.timeoutMs && options.timeoutMs <= 10000
+    options.timeoutMs && options.timeoutMs <= 30000
       ? [0]
-      : options.timeoutMs && options.timeoutMs <= 30000
-        ? [0, 1200]
-        : [0, 1800, 4200, 8500];
+      : [0, 1800, 4200, 8500];
   let lastError: unknown = null;
 
   for (const [index, delay] of retryDelaysMs.entries()) {
@@ -2607,6 +2608,51 @@ export function createFallbackAssistRevision(actionType: AssistActionType, selec
   }
 }
 
+function hostedAssistNeedsFallback(actionType: AssistActionType, selectionText: string, content: string) {
+  const selectedWords = roughWordCount(selectionText);
+  const contentWords = roughWordCount(content);
+  if (!content.trim() || looksLikeCorruptGeneratedOutput(content)) {
+    return true;
+  }
+
+  if (actionType === "EXPAND" && selectedWords) {
+    const targetWords = Math.max(selectedWords * 3, selectedWords + 12);
+    return contentWords < Math.ceil(targetWords * 0.9) || contentWords > Math.ceil(targetWords * 1.1);
+  }
+
+  if (actionType === "TIGHTEN" && selectedWords) {
+    const targetWords = Math.max(Math.ceil(selectedWords / 3), 8);
+    return contentWords < Math.max(Math.floor(targetWords * 0.9), 1) || contentWords > Math.max(Math.ceil(targetWords * 1.1), targetWords + 2);
+  }
+
+  if ((actionType === "ADD_DIALOGUE" || actionType === "DESCRIPTION_TO_DIALOGUE") && !/"[^"\n]+"/.test(content)) {
+    return true;
+  }
+
+  if (isSelectionRewriteAction(actionType) && selectedWords >= 5 && contentWords >= 4) {
+    const similarity = overlapScore(selectionText, content);
+    const coverage = sourceAnchorCoverage(selectionText, content);
+    const anchorsPresent = coverage.covered.length >= coverage.required;
+    if ((similarity < 0.16 && !anchorsPresent) || looksTooGenericForSelection(content, selectionText)) {
+      return true;
+    }
+
+    if (actionType === "ADD_TENSION" && (similarity >= 0.82 || contentWords <= Math.max(selectedWords + 6, Math.ceil(selectedWords * 1.08)))) {
+      return true;
+    }
+
+    if (
+      (actionType === "IMPROVE_PROSE" && similarity >= 0.93) ||
+      (actionType === "CUSTOM_EDIT" && similarity >= 0.94) ||
+      (actionType === "SHARPEN_VOICE" && similarity >= 0.92)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function buildAssistActionInstruction(actionType: AssistActionType) {
   switch (actionType) {
     case "TIGHTEN":
@@ -3025,62 +3071,68 @@ export async function assistSelection(input: {
   ]
     .filter(Boolean)
     .join("\n");
-  let enforcedContent = result.content;
-  try {
-    enforcedContent = await enforceInlineLengthIfNeeded({
-      project,
-      context,
-      actionType: input.actionType,
-      selectionText: input.selectionText,
-      content: result.content,
-    });
-  } catch (error) {
-    console.warn("[ai] inline length repair failed; using safe fallback", error);
-    enforcedContent = safeFallback() || result.content;
-  }
-
-  let tensionSafeContent = enforcedContent;
-  if (input.actionType === "ADD_TENSION") {
+  let transformedContent = result.content;
+  if (isHostedFastDraftMode()) {
+    if (hostedAssistNeedsFallback(input.actionType, input.selectionText, transformedContent)) {
+      transformedContent = safeFallback() || transformedContent;
+    }
+  } else {
+    let enforcedContent = result.content;
     try {
-      tensionSafeContent = await enforceTensionIfNeeded({
+      enforcedContent = await enforceInlineLengthIfNeeded({
         project,
         context,
+        actionType: input.actionType,
         selectionText: input.selectionText,
-        content: enforcedContent,
+        content: result.content,
       });
     } catch (error) {
-      console.warn("[ai] tension repair failed; using safe fallback", error);
-      tensionSafeContent = safeFallback() || enforcedContent;
+      console.warn("[ai] inline length repair failed; using safe fallback", error);
+      enforcedContent = safeFallback() || result.content;
     }
-  }
 
-  let transformedContent = tensionSafeContent;
-  try {
-    transformedContent = await enforceInlineTransformationIfNeeded({
-      project,
-      context,
-      actionType: input.actionType,
-      selectionText: input.selectionText,
-      instruction: input.instruction,
-      content: tensionSafeContent,
-    });
-  } catch (error) {
-    console.warn("[ai] inline transformation repair failed; using safe fallback", error);
-    transformedContent = safeFallback() || tensionSafeContent;
-  }
+    let tensionSafeContent = enforcedContent;
+    if (input.actionType === "ADD_TENSION") {
+      try {
+        tensionSafeContent = await enforceTensionIfNeeded({
+          project,
+          context,
+          selectionText: input.selectionText,
+          content: enforcedContent,
+        });
+      } catch (error) {
+        console.warn("[ai] tension repair failed; using safe fallback", error);
+        tensionSafeContent = safeFallback() || enforcedContent;
+      }
+    }
 
-  try {
-    transformedContent = await enforceSelectionSourceIfNeeded({
-      project,
-      context,
-      actionType: input.actionType,
-      selectionText: input.selectionText,
-      instruction: input.instruction,
-      content: transformedContent,
-    });
-  } catch (error) {
-    console.warn("[ai] selected-text source repair failed; using safe fallback", error);
-    transformedContent = safeFallback() || transformedContent;
+    try {
+      transformedContent = await enforceInlineTransformationIfNeeded({
+        project,
+        context,
+        actionType: input.actionType,
+        selectionText: input.selectionText,
+        instruction: input.instruction,
+        content: tensionSafeContent,
+      });
+    } catch (error) {
+      console.warn("[ai] inline transformation repair failed; using safe fallback", error);
+      transformedContent = safeFallback() || tensionSafeContent;
+    }
+
+    try {
+      transformedContent = await enforceSelectionSourceIfNeeded({
+        project,
+        context,
+        actionType: input.actionType,
+        selectionText: input.selectionText,
+        instruction: input.instruction,
+        content: transformedContent,
+      });
+    } catch (error) {
+      console.warn("[ai] selected-text source repair failed; using safe fallback", error);
+      transformedContent = safeFallback() || transformedContent;
+    }
   }
 
   if (containsForeignDemoScaffold(transformedContent, allowedDemoContext)) {
