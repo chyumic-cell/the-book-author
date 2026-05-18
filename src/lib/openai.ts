@@ -1089,11 +1089,13 @@ async function callProvider(
       : provider.model;
 
   if (provider.label === "OpenRouter") {
+    let attemptedFallback = false;
     try {
       const directChat = await callChatCompletion(provider, prompt, options, preferredModel);
       if (directChat) {
         return directChat;
       }
+      attemptedFallback = true;
       const fallbackText = await tryOpenRouterFallbackModels(
         provider,
         prompt,
@@ -1106,7 +1108,7 @@ async function callProvider(
       }
       throw new Error(`The active OpenRouter model (${preferredModel}) returned no visible text.`);
     } catch (error) {
-      if (isRetryableProviderError(error)) {
+      if (isRetryableProviderError(error) && !attemptedFallback) {
         const fallbackText = await tryOpenRouterFallbackModels(
           provider,
           prompt,

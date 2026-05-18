@@ -186,6 +186,7 @@ function qualityReasons(
     requiredAnyTerms = [],
     requiredAnyCount = 1,
     literary = false,
+    minSentences,
     minParagraphs,
   } = {},
 ) {
@@ -215,8 +216,9 @@ function qualityReasons(
   if (literary) {
     const sentenceCount = normalized.split(/[.!?]+/).map((entry) => entry.trim()).filter(Boolean).length;
     const paragraphCount = String(text).split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean).length;
+    const requiredSentences = minSentences ?? 5;
     const requiredParagraphs = minParagraphs ?? 3;
-    if (sentenceCount < 5) reasons.push("not enough sentence movement for prose");
+    if (sentenceCount < requiredSentences) reasons.push("not enough sentence movement for prose");
     if (paragraphCount < requiredParagraphs) reasons.push("not enough paragraph shape for prose");
     if (!/[.!?]["']?$/.test(normalized)) reasons.push("does not end like complete prose");
   }
@@ -648,7 +650,12 @@ async function runAudit() {
               ? []
               : ["Malket"],
         literary: ["EXPAND", "IMPROVE_PROSE", "SHARPEN_VOICE", "ADD_TENSION", "ADD_DIALOGUE", "DESCRIPTION_TO_DIALOGUE"].includes(actionType),
-        minParagraphs: actionType === "EXPAND" ? 1 : undefined,
+        minSentences: ["EXPAND", "IMPROVE_PROSE", "SHARPEN_VOICE", "ADD_TENSION", "ADD_DIALOGUE", "DESCRIPTION_TO_DIALOGUE"].includes(actionType)
+          ? 2
+          : undefined,
+        minParagraphs: ["EXPAND", "IMPROVE_PROSE", "SHARPEN_VOICE", "ADD_TENSION", "ADD_DIALOGUE", "DESCRIPTION_TO_DIALOGUE"].includes(actionType)
+          ? 1
+          : undefined,
       });
     }
 
