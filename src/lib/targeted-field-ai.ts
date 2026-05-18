@@ -168,6 +168,9 @@ function looksLikeMetaOutput(value: string) {
 function looksLikePlaceholderValue(value: string) {
   const normalized = value.trim().toLowerCase();
   return (
+    normalized === "add character summary." ||
+    normalized === "add character summary" ||
+    normalized === "new character" ||
     normalized === "capture the character here." ||
     normalized === "define the turning point this beat should deliver." ||
     normalized === "advance the next major movement of the story." ||
@@ -856,7 +859,9 @@ function compactCharacterCanon(
       : "",
     character.name ? `Character: ${character.name}` : "",
     character.role ? `Role: ${character.role}` : "",
-    character.summary ? `Current summary: ${compactText(character.summary, 220)}` : "",
+    character.summary && !looksLikePlaceholderValue(character.summary)
+      ? `Current summary: ${compactText(character.summary, 220)}`
+      : "",
     character.goal ? `Current goal: ${compactText(character.goal, 180)}` : "",
     character.notes ? `Current notes: ${compactText(character.notes, 180)}` : "",
   ]
@@ -1265,11 +1270,13 @@ function blueprintSection(root: Record<string, unknown>, ...keys: string[]) {
 
 function cleanBlueprintString(raw: unknown, fallback: string) {
   const candidate = cleanAiFieldText(String(raw ?? ""), "");
-  if (candidate && !looksLikeMetaOutput(candidate)) {
+  if (candidate && !looksLikeMetaOutput(candidate) && !looksLikePlaceholderValue(candidate)) {
     return candidate;
   }
   const cleanedFallback = cleanAiFieldText(fallback, "");
-  return cleanedFallback && !looksLikeMetaOutput(cleanedFallback) ? cleanedFallback : "";
+  return cleanedFallback && !looksLikeMetaOutput(cleanedFallback) && !looksLikePlaceholderValue(cleanedFallback)
+    ? cleanedFallback
+    : "";
 }
 
 function currentOrFallback(current: unknown, fallback: string) {
@@ -1722,15 +1729,15 @@ async function generateCharacterDossierPayload(options: {
     "Existing character snapshot:",
     JSON.stringify(
       {
-        name: character.name,
-        role: character.role,
-        archetype: character.archetype,
-        summary: character.summary,
-        goal: character.goal,
-        fear: character.fear,
-        secret: character.secret,
-        wound: character.wound,
-        notes: character.notes,
+        name: looksLikePlaceholderValue(character.name) ? "" : character.name,
+        role: looksLikePlaceholderValue(character.role) ? "" : character.role,
+        archetype: looksLikePlaceholderValue(character.archetype) ? "" : character.archetype,
+        summary: looksLikePlaceholderValue(character.summary) ? "" : character.summary,
+        goal: looksLikePlaceholderValue(character.goal) ? "" : character.goal,
+        fear: looksLikePlaceholderValue(character.fear) ? "" : character.fear,
+        secret: looksLikePlaceholderValue(character.secret) ? "" : character.secret,
+        wound: looksLikePlaceholderValue(character.wound) ? "" : character.wound,
+        notes: looksLikePlaceholderValue(character.notes) ? "" : character.notes,
         quickProfile: character.quickProfile,
         currentState: character.currentState,
         usefulDossier: {
