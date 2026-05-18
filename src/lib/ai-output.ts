@@ -87,8 +87,12 @@ function asText(value: unknown) {
   return typeof value === "string" ? value : String(value ?? "");
 }
 
+function normalizeSmartQuotes(value: string) {
+  return value.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+}
+
 function stripLeadingWrapper(value: unknown) {
-  let text = asText(value).replace(/\r/g, "").replace(/```(?:json)?/gi, "").trim();
+  let text = normalizeSmartQuotes(asText(value)).replace(/\r/g, "").replace(/```(?:json)?/gi, "").trim();
 
   text = text.replace(
     /^(?:here(?:'s| is)|below is|i(?:'ll| will))(?:.|\n)*?(?:\n\s*\n|\n---+\s*\n|\n#{1,6}\s+)/i,

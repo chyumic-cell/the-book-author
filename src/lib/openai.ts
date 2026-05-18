@@ -1562,6 +1562,13 @@ async function runPromptTask(options: {
     }
   }
 
+  if (options.repairChapterEnding && options.chapter && options.mockContent?.trim()) {
+    const endingAssessment = assessManuscriptEnding(cleaned);
+    if (endingAssessment.needsRepair) {
+      cleaned = trimCorruptGeneratedTail(options.clean ? options.clean(options.mockContent) : options.mockContent.trim());
+    }
+  }
+
   cleaned = trimCorruptGeneratedTail(cleaned);
   if (looksLikeCorruptGeneratedOutput(cleaned)) {
     if (options.mockContent?.trim()) {
