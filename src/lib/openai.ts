@@ -1445,7 +1445,7 @@ function looksLikeCorruptGeneratedOutput(value: string) {
 
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
@@ -2366,7 +2366,7 @@ function buildSourceAnchorInstruction(selectionText: string) {
 }
 
 const assistProcessLeakPattern =
-  /\b(?:with just the rewritten text|html annotate|full-featured|lost generation|target\s*["']?\s*>?\s*\d+|ousonite|context|contextuali[sz]\w*|textuali[sz]\w*|source material|source anchors?|selected passage|selected event|selected span|replacement prose|rewrite process|style plan|continuity plan|the prompt|the instruction|on the page)\b/i;
+  /\b(?:with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|target\s*["']?\s*>?\s*\d+|ousonite|context|contextuali[sz]\w*|textuali[sz]\w*|source material|source anchors?|selected passage|selected event|selected span|replacement prose|rewrite process|style plan|continuity plan|the prompt|the instruction|on the page)\b/i;
 
 function hasAssistProcessLeak(value: string) {
   return assistProcessLeakPattern.test(value);
