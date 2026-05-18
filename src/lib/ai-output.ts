@@ -109,6 +109,14 @@ function stripLeadingWrapper(value: unknown) {
   text = text.replace(/^\s*(?:\*\*|#+\s*)?(?:draft|outline|revision)[^\n]*\n+/i, "");
   text = text.replace(/^\s*(?:\*\*|#+\s*)?(?:editorial assessment|architecture fix|revision plan)[^\n]*\n+/i, "");
 
+  if (/^"[\s\S]+"$/.test(text)) {
+    const inner = text.slice(1, -1).trim();
+    const likelyWrappedParagraph = inner.split(/\s+/).filter(Boolean).length > 12 && /(^|[^\w])'.+?'(?!\w)/.test(inner);
+    if (likelyWrappedParagraph) {
+      text = inner.replace(/(^|[^\w])'(.+?)'(?!\w)/g, '$1"$2"');
+    }
+  }
+
   return text.trim();
 }
 

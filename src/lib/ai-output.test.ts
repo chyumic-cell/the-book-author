@@ -92,6 +92,18 @@ He looked at the road and said, "If they find us, we are finished.
     expect(cleaned).not.toContain("Here is the expanded passage");
   });
 
+  it("unwraps whole-paragraph quote wrappers around converted dialogue", () => {
+    const raw =
+      "\"Malket stepped forward, close enough to smell the wine on the prince's breath. 'He's lifting it,' he muttered to the nearest servant. 'One witnessed wish. Law before objection.' The servant's hand trembled. 'The Tithe takes a memory from the speaker,' Malket added, 'but Sarun is not paying.'\"";
+
+    const cleaned = cleanInlineSuggestionText(raw);
+
+    expect(cleaned).toContain('"He\'s lifting it," he muttered');
+    expect(cleaned).toContain('"One witnessed wish. Law before objection."');
+    expect(cleaned).toContain('"The Tithe takes a memory from the speaker," Malket added');
+    expect(cleaned).not.toMatch(/^"Malket stepped/);
+  });
+
   it("removes process-language leaks from inline rewrite suggestions", () => {
     const raw = [
       "Rafi held the torn map closer to the lantern and watched the missing road darken under his thumb.",
