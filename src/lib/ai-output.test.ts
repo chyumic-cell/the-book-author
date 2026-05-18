@@ -117,6 +117,14 @@ He looked at the road and said, "If they find us, we are finished.
     expect(cleaned).not.toMatch(/\b(?:context|contextuali[sz]|textuali[sz]|source material|source anchor|selected passage|replacement prose)\b/i);
   });
 
+  it("rejects truncated inline prose instead of returning half a sentence", () => {
+    const cleaned = cleanInlineSuggestionText(
+      "Malket stood frozen while Prince Sarun lifted the silver cup with deliberate slowness, letting every candle flame catch the rim like a promise fired into stone Every noble leaned into the glow, not toward him, toward silence that",
+    );
+
+    expect(cleaned).toBe("");
+  });
+
   it("does not fall back to a wholly leaked inline answer", () => {
     const cleaned = cleanInlineSuggestionText(
       "Contextualise the selected passage by textualising the source material in replacement prose.",

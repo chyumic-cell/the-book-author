@@ -1613,6 +1613,10 @@ async function runPromptTask(options: {
     }
   }
 
+  if (!cleaned.trim() && options.mockContent?.trim()) {
+    cleaned = trimCorruptGeneratedTail(options.clean ? options.clean(options.mockContent) : options.mockContent.trim());
+  }
+
   return {
     content: cleaned.trim() ? cleaned : content.trim(),
     contextPackage: options.context,
@@ -2451,12 +2455,12 @@ function buildSourceAwareFiller(seed: string) {
 }
 
 function getFallbackSeed(selectionText: string, instruction: string) {
-  const selected = cleanInlineSuggestionText(selectionText).trim();
+  const selected = cleanInlineSuggestionText(selectionText).trim() || selectionText.trim();
   if (selected) {
     return selected;
   }
 
-  const instructed = cleanInlineSuggestionText(instruction).trim();
+  const instructed = cleanInlineSuggestionText(instruction).trim() || instruction.trim();
   if (instructed && !/^(?:apply|expand|tighten|rewrite|improve|sharpen|add|convert)\b/i.test(instructed)) {
     return instructed;
   }

@@ -53,9 +53,40 @@ function normalizeQuoteSpacing(value: string) {
     .replace(/\s+\*(?=\s|$|[,.!?;:])/g, "*");
 }
 
+function endsLikeCompleteProse(value: string) {
+  return /[.!?]["'*]?$/.test(value.trim());
+}
+
 function splitCompleteSentences(value: string) {
   const matches = value.match(/[^.!?â€¦]+(?:[.!?â€¦]+(?:["â€œâ€']+)?)/g);
   return (matches ?? []).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+function trimIncompleteFinalProse(value: string) {
+  const paragraphs = splitParagraphs(value);
+  while (paragraphs.length) {
+    const lastIndex = paragraphs.length - 1;
+    const last = paragraphs[lastIndex].trim();
+    if (endsLikeCompleteProse(last)) {
+      return paragraphs.join("\n\n").trim();
+    }
+
+    const completeSentences = splitCompleteSentences(last);
+    if (completeSentences.length) {
+      paragraphs[lastIndex] = completeSentences.join(" ").trim();
+    } else {
+      paragraphs.pop();
+    }
+  }
+
+  return "";
+}
+
+function looksTruncatedInlineProse(value: string) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return /(?:\b(?:and|but|or|because|while|when|where|that|with|without|toward|into|from|to|of|in|on|at|by|as)\s*)$/i.test(
+    normalized,
+  );
 }
 
 function openingSignature(value: string) {
@@ -384,7 +415,7 @@ export function cleanInlineSuggestionText(value: unknown) {
     .map((paragraph) => balanceThoughtItalics(balanceDialogueQuotes(paragraph, issues), issues))
     .filter(Boolean);
 
-  const cleaned = normalizeQuoteSpacing(cleanedParagraphs.join("\n\n").trim());
+  const cleaned = trimIncompleteFinalProse(normalizeQuoteSpacing(cleanedParagraphs.join("\n\n").trim()));
   if (cleaned) {
     return cleaned;
   }
@@ -394,7 +425,11 @@ export function cleanInlineSuggestionText(value: unknown) {
     return "";
   }
 
-  return fallback;
+  const normalizedFallback = normalizeQuoteSpacing(balanceThoughtItalics(balanceDialogueQuotes(fallback, issues), issues)).trim();
+  if (looksTruncatedInlineProse(normalizedFallback)) {
+    return "";
+  }
+  return trimIncompleteFinalProse(normalizedFallback);
 }
 
 function trimRepeatedBoundaryOverlap(value: string, boundary: string, side: "start" | "end") {
