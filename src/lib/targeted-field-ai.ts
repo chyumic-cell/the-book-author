@@ -149,6 +149,7 @@ function looksLikeMetaOutput(value: string) {
   const normalized = value.trim().toLowerCase();
   return (
     looksLikeAiLeakage(value) ||
+    looksLikeGarbledFieldOutput(value) ||
     normalized.startsWith("okay") ||
     normalized.startsWith("alright") ||
     normalized.startsWith("let me") ||
@@ -162,6 +163,38 @@ function looksLikeMetaOutput(value: string) {
     normalized.includes("the instruction says") ||
     normalized.includes("looking back") ||
     normalized.includes("i should")
+  );
+}
+
+function oddFieldCharacterRatio(value: string) {
+  const compact = value.replace(/\s/g, "");
+  if (!compact) {
+    return 1;
+  }
+
+  const allowed =
+    compact.match(/[\p{Script=Latin}\p{Script=Hebrew}\p{Script=Arabic}\p{N}"'“”‘’.,!?;:()[\]{}\-–—…/%$&@]/gu)
+      ?.length ?? 0;
+  return 1 - allowed / compact.length;
+}
+
+function looksLikeGarbledFieldOutput(value: string) {
+  const text = value.trim();
+  if (!text) {
+    return false;
+  }
+
+  const cjkCount = text.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g)?.length ?? 0;
+  if (cjkCount > Math.max(4, Math.floor(text.length * 0.025))) {
+    return true;
+  }
+
+  if (oddFieldCharacterRatio(text) > 0.1) {
+    return true;
+  }
+
+  return /(?:\bfunction\s*\(|\bimport\s+|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|```|\\hat|<\s*\/?\w+)/i.test(
+    text,
   );
 }
 
@@ -193,9 +226,23 @@ async function generateTextOrFallback(prompt: string, maxOutputTokens: number, f
 
   try {
     const raw = await generateTextWithProvider(prompt, { maxOutputTokens });
-    const generated = raw?.trim();
+    const generated = raw?.trim() ?? "";
     if (generated && !looksLikeMetaOutput(generated)) {
       return generated;
+    }
+
+    if (generated && looksLikeGarbledFieldOutput(generated)) {
+      const retryPrompt = [
+        prompt,
+        "The previous model response was unusable because it contained gibberish, code, random multilingual fragments, or symbols.",
+        "Ignore that previous response completely.",
+        "Return clean, book-specific field content only. No code. No random languages. No symbols. No commentary.",
+      ].join("\n\n");
+      const retryRaw = await generateTextWithProvider(retryPrompt, { maxOutputTokens });
+      const retry = retryRaw?.trim() ?? "";
+      if (retry && !looksLikeMetaOutput(retry)) {
+        return retry;
+      }
     }
   } catch {
     // Hosted free-model availability can be uneven. Field buttons should still return usable app text.
