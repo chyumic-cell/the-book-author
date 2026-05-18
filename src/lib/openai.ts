@@ -123,16 +123,29 @@ async function withProviderTimeout<T>(operation: Promise<T>, label: string, time
 
 async function withProviderAbort<T>(operation: (signal: AbortSignal) => Promise<T>, label: string, timeoutMs = PROVIDER_CALL_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs);
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timeoutError = () => new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
   try {
-    return await operation(controller.signal);
+    return await Promise.race([
+      operation(controller.signal),
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          timedOut = true;
+          controller.abort(timeoutError());
+          reject(timeoutError());
+        }, timeoutMs);
+      }),
+    ]);
   } catch (error) {
-    if (controller.signal.aborted) {
-      throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    if (timedOut || controller.signal.aborted) {
+      throw timeoutError();
     }
     throw error;
   } finally {
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -1089,26 +1102,29 @@ async function callProvider(
       : provider.model;
 
   if (provider.label === "OpenRouter") {
+    const allowFallbackModels = !(options.timeoutMs && options.timeoutMs <= 10000);
     let attemptedFallback = false;
     try {
       const directChat = await callChatCompletion(provider, prompt, options, preferredModel);
       if (directChat) {
         return directChat;
       }
-      attemptedFallback = true;
-      const fallbackText = await tryOpenRouterFallbackModels(
-        provider,
-        prompt,
-        options,
-        new Set([preferredModel]),
-        openRouterFallbackAttemptLimit(provider.model),
-      );
-      if (fallbackText) {
-        return fallbackText;
+      if (allowFallbackModels) {
+        attemptedFallback = true;
+        const fallbackText = await tryOpenRouterFallbackModels(
+          provider,
+          prompt,
+          options,
+          new Set([preferredModel]),
+          openRouterFallbackAttemptLimit(provider.model),
+        );
+        if (fallbackText) {
+          return fallbackText;
+        }
       }
       throw new Error(`The active OpenRouter model (${preferredModel}) returned no visible text.`);
     } catch (error) {
-      if (isRetryableProviderError(error) && !attemptedFallback) {
+      if (allowFallbackModels && isRetryableProviderError(error) && !attemptedFallback) {
         const fallbackText = await tryOpenRouterFallbackModels(
           provider,
           prompt,
