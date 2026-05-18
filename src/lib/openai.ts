@@ -1445,6 +1445,13 @@ function oddGeneratedCharacterRatio(value: string) {
   return 1 - allowed / compact.length;
 }
 
+function hasBrokenGeneratedFormatting(value: string) {
+  const text = value.replace(/\*\*/g, "");
+  const quoteCount = (text.match(/"/g) ?? []).length;
+  const italicCount = (text.match(/\*/g) ?? []).length;
+  return quoteCount % 2 === 1 || italicCount % 2 === 1;
+}
+
 function looksLikeCorruptGeneratedOutput(value: string) {
   const text = value.trim();
   if (!text) {
@@ -1464,9 +1471,13 @@ function looksLikeCorruptGeneratedOutput(value: string) {
     return true;
   }
 
+  if (hasBrokenGeneratedFormatting(text)) {
+    return true;
+  }
+
   return (
     looksLikeAiLeakage(text) ||
-    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
+    /(?:chapter blueprint|context package|begin▁of▁file|global ai assistant|i cannot fulfill|let'?s restart|with just the rewritten text|html annotate|full-featured|lost generation|evaluator_temp|top_p|montezuma|temperature\s*0|##,|Nagrithe|target\s*["']?\s*>?\s*\d+|ousonite|ModelBase|ToolChain|x0041|hrefBEGINN|drinkingFountain|pyrolyse|bitmap-vague|ivelope|NEEDED[a-z]+|-{8,}|ds_safety_content|用户问题|Output:\d+|pencarian|삽입되었습니다|Továri|További|ここに|pragma_|softmax|SQL；|\\(?:hat|end|in|solidly)|\]\]Output:|```|<\s*\/?\w+)/i.test(
       text,
     )
   );
