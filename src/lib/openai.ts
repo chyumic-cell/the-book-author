@@ -2513,11 +2513,18 @@ export function createFallbackAssistRevision(actionType: AssistActionType, selec
     case "SHARPEN_VOICE":
       return buildFallbackTension(seed);
     case "CONTINUE":
-      return [
-        "The next beat followed from that pressure instead of restarting the scene.",
-        "",
-        "Someone made a choice, someone else reacted badly, and the conflict moved one step closer to its real cost.",
-      ].join("\n");
+      {
+        const anchors = extractSourceAnchors(seed, 4);
+        const subject = anchors[0] ?? "The protagonist";
+        const pressure = anchors[1] ?? "the danger";
+        return [
+          `${subject} did not let the scene settle. ${pressure} still pressed on the room, turning the next silence into a demand for action.`,
+          "",
+          `"Say it plainly," ${subject} said. "What happens if I refuse?"`,
+          "",
+          `The answer did not solve the problem. It narrowed it, made it personal, and pushed the conflict one step closer to a cost no one could politely ignore.`,
+        ].join("\n");
+      }
     case "NEXT_BEATS":
       return [
         "1. Continue from the immediate consequence of the selected moment instead of reopening the scene.",
@@ -2881,9 +2888,19 @@ export async function assistSelection(input: {
   }
 
   const context = buildContextPackage(project, input.chapterId, input.localExcerpt || input.selectionText);
+  const fallbackSeed = input.selectionText.trim()
+    ? input.selectionText
+    : [
+        input.localExcerpt,
+        project.characters[0]?.name,
+        project.workingNotes[0]?.title,
+        context.chapterGoal,
+      ]
+        .filter(Boolean)
+        .join(" ");
   if (isHostedFastDraftMode() && process.env.STORYFORGE_FORCE_HOSTED_ASSIST_MOCK === "1") {
     return {
-      content: cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction), {
+      content: cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, fallbackSeed, input.instruction), {
         beforeSelection: input.beforeSelection,
         afterSelection: input.afterSelection,
       }),
@@ -2906,7 +2923,7 @@ export async function assistSelection(input: {
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
     timeoutMs: isHostedFastDraftMode() ? hostedAssistTimeoutMs(input.actionType) : undefined,
-    mockContent: createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
+    mockContent: createFallbackAssistRevision(input.actionType, fallbackSeed, input.instruction),
     clean: (value) =>
       cleanInlineSuggestionAgainstContext(value, {
         beforeSelection: input.beforeSelection,
@@ -2914,7 +2931,7 @@ export async function assistSelection(input: {
       }),
   });
   const safeFallback = () =>
-    cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction), {
+    cleanInlineSuggestionAgainstContext(createFallbackAssistRevision(input.actionType, fallbackSeed, input.instruction), {
       beforeSelection: input.beforeSelection,
       afterSelection: input.afterSelection,
     });
