@@ -2902,10 +2902,7 @@ export async function assistSelection(input: {
     roleInstruction: getRoleInstruction(input.role),
     maxOutputTokens: assistOutputTokenBudget(input.actionType, input.selectionText),
     timeoutMs: isHostedFastDraftMode() ? hostedAssistTimeoutMs(input.actionType) : undefined,
-    mockContent:
-      isHostedFastDraftMode() && input.actionType === "CONTINUE"
-        ? undefined
-        : createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
+    mockContent: createFallbackAssistRevision(input.actionType, input.selectionText, input.instruction),
     clean: (value) =>
       cleanInlineSuggestionAgainstContext(value, {
         beforeSelection: input.beforeSelection,
