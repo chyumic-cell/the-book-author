@@ -6,7 +6,7 @@ import { PwaDownloadActions } from "@/components/providers/pwa-download-actions"
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { canViewAdminConsole, requireBetaSession } from "@/lib/beta-auth";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import { getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function AccountPage() {
 
   return (
       <BetaShell
-        intro={`This is your ${APP_NAME} account dashboard. Use it to confirm your access status, reach downloads, send feedback, and review the current policies.`}
+        intro={`This is your ${APP_PROSE_NAME} account dashboard. Use it to confirm your access status, reach downloads, send feedback, and review the current policies.`}
         session={session}
         title="Your account"
       >

@@ -5,23 +5,23 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 
 import type { StoryForgeTab } from "@/types/storyforge";
 
 const INTRO_SENTENCES = [
-  `${APP_NAME} is a professional long-form writing system built to help authors plan, draft, revise, and export books in one workspace.`,
+  `${APP_PROSE_NAME} is a professional long-form writing system built to help authors plan, draft, revise, and export books in one workspace.`,
   "It combines a manuscript studio with story structure, character intelligence, continuity tracking, and AI-assisted revision tools designed for serious fiction work.",
   "The manuscript remains the source of truth, while the surrounding planning and memory systems exist to strengthen clarity, momentum, and canon instead of interrupting the writing flow.",
   "Authors can write manually, collaborate selectively with AI, or run guided long-form drafting while keeping direct editorial control over what is accepted, rejected, or changed.",
-  `${APP_NAME} is intended to produce portable, publication-ready manuscripts and reader-facing exports while preserving editorial control, workflow clarity, and professional drafting discipline.`,
+  `${APP_PROSE_NAME} is intended to produce portable, publication-ready manuscripts and reader-facing exports while preserving editorial control, workflow clarity, and professional drafting discipline.`,
 ];
 
 const ABOUT_POINTS = [
   `${APP_NAME} software, interface, and packaged installers are copyrighted to Michael William Polevoy unless a later written license or transfer states otherwise.`,
-  `${APP_NAME} is designed as a professional writing environment that keeps drafting, planning, continuity, and export tools in one place without forcing rigid workflow.`,
+  `${APP_PROSE_NAME} is designed as a professional writing environment that keeps drafting, planning, continuity, and export tools in one place without forcing rigid workflow.`,
   "Each installation should use its own personal AI API credentials. Private keys should not be embedded in shared installers or public app bundles.",
-  `${APP_NAME} is intended for desktop and mobile writing work, with desktop offering the deepest writing surface and mobile focusing on AI-led drafting plus human-led planning.`,
+  `${APP_PROSE_NAME} is intended for desktop and mobile writing work, with desktop offering the deepest writing surface and mobile focusing on AI-led drafting plus human-led planning.`,
   `Formal contractual rules for use, publication, moderation, and eligibility live on the dedicated Terms page rather than on this About ${APP_NAME} page.`,
 ];
 

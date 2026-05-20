@@ -5,7 +5,7 @@ import { PwaDownloadActions } from "@/components/providers/pwa-download-actions"
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { requireBetaSession } from "@/lib/beta-auth";
-import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_INSTALLER_FILENAME, APP_NAME } from "@/lib/brand";
+import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_INSTALLER_FILENAME, APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import { getDesktopInstallerDownloadUrl, getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
@@ -87,7 +87,7 @@ export default async function DownloadsPage() {
       <Card className="grid gap-4">
         <h2 className="text-2xl font-semibold">AI key setup</h2>
         <p className="text-sm leading-7 text-[var(--muted)]">
-          Every user must supply their own personal AI key. {APP_NAME} does not bundle your personal key into public downloads.
+          Every user must supply their own personal AI key. {APP_PROSE_NAME} does not bundle your personal key into public downloads.
         </p>
         <Link className="font-medium text-[var(--accent)] underline" href={getOpenRouterKeysUrl()}>
           Get an OpenRouter API key
