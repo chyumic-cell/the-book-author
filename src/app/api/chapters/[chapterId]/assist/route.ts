@@ -2,6 +2,7 @@ import { assistSelection, coachWriter } from "@/lib/openai";
 import { getProjectWorkspace } from "@/lib/project-data";
 import { createAssistRun } from "@/lib/story-service";
 import { fail, ok } from "@/lib/api";
+import { decorateBookAuthorBrainResult } from "@/lib/book-author-brain";
 import { assistRequestSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -49,7 +50,14 @@ export async function POST(
       suggestion: result.content,
     });
 
-    return ok({ run, contextPackage: result.contextPackage });
+    return ok(decorateBookAuthorBrainResult(
+      { run, contextPackage: result.contextPackage },
+      {
+        targetFields: ["chapter.draft"],
+        route: input.actionType === "EXPAND" || input.actionType === "TIGHTEN" ? "fast" : "strong",
+        reason: "Manuscript selection tools use local before/after text and the active chapter context.",
+      },
+    ));
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Assist action failed.");
   }

@@ -24,10 +24,32 @@ import type {
 type AssistantPayload = {
   reply: string;
   actions: ProjectChatActionRecord[];
+  proposedActions?: AssistantPlanAction[];
+  proposedChanges?: BookAuthorBrainChange[];
+  requiresApproval?: boolean;
+  nextRecommendedAction?: string;
   project: ProjectWorkspace;
   contextPackage: ContextPackage | null;
   scope: ProjectChatScope;
   nextTab: StoryForgeTab | null;
+};
+
+type AssistantPlanAction = Record<string, unknown>;
+
+type BookAuthorBrainChange = {
+  id: string;
+  kind: string;
+  targetLabel: string;
+  proposedValue?: string;
+  reason: string;
+};
+
+type PendingPreview = {
+  message: string;
+  scope: ProjectChatScope;
+  actions: AssistantPlanAction[];
+  changes: BookAuthorBrainChange[];
+  selectedIndexes: Set<number>;
 };
 
 type PhoneQuickAction = {
@@ -165,6 +187,7 @@ export function ProjectCopilotBar({
   const [message, setMessage] = useState("");
   const [applyChanges, setApplyChanges] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
   const [turns, setTurns] = useState<ProjectChatTurnRecord[]>(() => [buildGreeting(project.id, project.title)]);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -472,7 +495,20 @@ export function ProjectCopilotBar({
         ? await runAllChapterDraftWorkflow(nextMessage)
         : looksLikeAllChapterOutlineRequest(nextMessage)
           ? await runAllChapterOutlineWorkflow(nextMessage)
-          : await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
+          : applyChanges
+            ? await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  message: nextMessage,
+                  role: activeAiRole,
+                  scope: "AUTO",
+                  chapterId: selectedChapterId,
+                  applyChanges,
+                  previewOnly: true,
+                }),
+              })
+            : await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -484,10 +520,57 @@ export function ProjectCopilotBar({
             }),
           });
 
-      onProjectUpdate(data.project);
-      onContextPackage(data.contextPackage);
-      if (data.nextTab) {
-        onTabChange(data.nextTab);
+      if (applyChanges && data.proposedActions?.length && data.proposedActions.length > 1) {
+        const changes = data.proposedChanges?.length
+          ? data.proposedChanges
+          : data.proposedActions.map((action, index) => ({
+              id: `change-${index}`,
+              kind: String(action.kind ?? "CHANGE"),
+              targetLabel: String(action.title ?? action.fieldKey ?? action.entityMatch ?? `Change ${index + 1}`),
+              proposedValue: typeof action.content === "string" ? action.content : undefined,
+              reason: String(action.summary ?? "Proposed by the Book Author Brain."),
+            }));
+        setPendingPreview({
+          message: nextMessage,
+          scope: effectiveScope,
+          actions: data.proposedActions,
+          changes,
+          selectedIndexes: new Set(changes.map((_change, index) => index)),
+        });
+        setTurns((current) => [
+          ...current,
+          {
+            id: `assistant-preview-${Date.now()}`,
+            role: "assistant",
+            text: data.nextRecommendedAction || "I found multiple fields to update. Review the proposed changes before applying them.",
+            scope: data.scope,
+            createdAt: new Date().toISOString(),
+            actions: [],
+          },
+        ]);
+        return;
+      }
+
+      const appliedData =
+        applyChanges && data.proposedActions?.length === 1
+          ? await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message: nextMessage,
+                role: activeAiRole,
+                scope: "AUTO",
+                chapterId: selectedChapterId,
+                applyChanges: true,
+                approvedActions: data.proposedActions,
+              }),
+            })
+          : data;
+
+      onProjectUpdate(appliedData.project);
+      onContextPackage(appliedData.contextPackage);
+      if (appliedData.nextTab) {
+        onTabChange(appliedData.nextTab);
       }
 
       setTurns((current) => [
@@ -495,14 +578,14 @@ export function ProjectCopilotBar({
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          text: data.reply,
-          scope: data.scope,
+          text: appliedData.reply,
+          scope: appliedData.scope,
           createdAt: new Date().toISOString(),
-          actions: data.actions,
+          actions: appliedData.actions,
         },
       ]);
 
-      if (data.actions.length > 0) {
+      if (appliedData.actions.length > 0) {
       toast.success(`${APP_NAME} applied your instruction.`);
       }
     } catch (error) {
@@ -510,6 +593,72 @@ export function ProjectCopilotBar({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function applyPendingPreview() {
+    if (!pendingPreview || submitting) {
+      return;
+    }
+
+    const approvedActions = pendingPreview.actions.filter((_action, index) =>
+      pendingPreview.selectedIndexes.has(index),
+    );
+    if (approvedActions.length === 0) {
+      toast.error("Select at least one change to apply.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const data = await requestJson<AssistantPayload>(`/api/projects/${project.id}/assistant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: pendingPreview.message,
+          role: activeAiRole,
+          scope: pendingPreview.scope,
+          chapterId: selectedChapterId,
+          applyChanges: true,
+          approvedActions,
+        }),
+      });
+      onProjectUpdate(data.project);
+      onContextPackage(data.contextPackage);
+      if (data.nextTab) {
+        onTabChange(data.nextTab);
+      }
+      setPendingPreview(null);
+      setTurns((current) => [
+        ...current,
+        {
+          id: `assistant-applied-${Date.now()}`,
+          role: "assistant",
+          text: data.reply,
+          scope: data.scope,
+          createdAt: new Date().toISOString(),
+          actions: data.actions,
+        },
+      ]);
+      toast.success(`${APP_NAME} applied the approved changes.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not apply the approved changes.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function regeneratePendingPreview() {
+    if (!pendingPreview || submitting) {
+      return;
+    }
+
+    const preview = pendingPreview;
+    setPendingPreview(null);
+    setMessage(preview.message);
+    window.setTimeout(() => {
+      document.getElementById("project-copilot-input")?.focus();
+    }, 20);
+    toast.message("Edit or send again to regenerate the proposed changes.");
   }
 
   return (
@@ -586,6 +735,67 @@ export function ProjectCopilotBar({
               </div>
             ) : null}
 
+            {pendingPreview ? (
+              <div className="grid gap-3 rounded-xl border border-[color:rgba(var(--accent-rgb),0.28)] bg-[rgba(var(--accent-rgb),0.06)] p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">Review proposed changes</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {APP_NAME} found {pendingPreview.changes.length} places to update. Apply only the changes you want.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={submitting} onClick={applyPendingPreview}>
+                      Apply selected
+                    </Button>
+                    <Button disabled={submitting} onClick={regeneratePendingPreview} variant="secondary">
+                      Regenerate
+                    </Button>
+                    <Button disabled={submitting} onClick={() => setPendingPreview(null)} variant="ghost">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid max-h-[220px] gap-2 overflow-auto pr-1">
+                  {pendingPreview.changes.map((change, index) => (
+                    <label
+                      key={change.id}
+                      className="grid gap-2 rounded-lg border border-[color:var(--line)] bg-white p-3 text-sm"
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          checked={pendingPreview.selectedIndexes.has(index)}
+                          type="checkbox"
+                          onChange={(event) =>
+                            setPendingPreview((current) => {
+                              if (!current) {
+                                return current;
+                              }
+                              const selectedIndexes = new Set(current.selectedIndexes);
+                              if (event.target.checked) {
+                                selectedIndexes.add(index);
+                              } else {
+                                selectedIndexes.delete(index);
+                              }
+                              return { ...current, selectedIndexes };
+                            })
+                          }
+                        />
+                        <Chip>{change.kind}</Chip>
+                        <span className="font-semibold text-[var(--text)]">{change.targetLabel}</span>
+                      </span>
+                      <span className="text-xs text-[var(--muted)]">{change.reason}</span>
+                      {change.proposedValue ? (
+                        <span className="line-clamp-3 whitespace-pre-wrap rounded-md bg-[color:var(--panel-soft)] px-3 py-2 text-xs text-[var(--muted)]">
+                          {change.proposedValue}
+                        </span>
+                      ) : null}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div
               ref={bodyRef}
               className={cn(
@@ -634,6 +844,7 @@ export function ProjectCopilotBar({
             <form className={cn("grid gap-3", phoneShell ? "gap-2" : "")} onSubmit={handleSubmit}>
               <div className={cn("grid gap-3", phoneShell ? "grid-cols-1 gap-2" : "lg:grid-cols-[minmax(0,1fr)_auto]")}>
                 <TextareaAutosize
+                  id="project-copilot-input"
                   className={cn("resize-none", phoneShell ? "min-h-[46px] text-sm leading-5" : "min-h-[72px]")}
                   minRows={phoneShell ? 2 : 2}
                   placeholder={`Explain what to update, where it belongs, or what the AI should build.`}

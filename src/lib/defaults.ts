@@ -1,12 +1,15 @@
 import type { AiRole, AssistActionType, StoryForgeTab } from "@/types/storyforge";
 
 export const storyForgeTabs: { id: StoryForgeTab; label: string }[] = [
-  { id: "ideaLab", label: "Idea Lab" },
+  { id: "guided", label: "Guided Builder" },
+  { id: "chapters", label: "Write" },
+  { id: "brain", label: "Book Brain" },
+  { id: "review", label: "Review" },
+  { id: "export", label: "Export" },
   { id: "setup", label: "Book Setup" },
   { id: "skeleton", label: "Story Skeleton" },
   { id: "bible", label: "Story Bible" },
-  { id: "guided", label: "Guided Builder" },
-  { id: "chapters", label: "Chapters" },
+  { id: "ideaLab", label: "Idea Lab" },
   { id: "memory", label: "Memory" },
   { id: "continuity", label: "Continuity" },
   { id: "settings", label: "Settings" },

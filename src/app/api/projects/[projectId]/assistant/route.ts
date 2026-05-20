@@ -1,5 +1,6 @@
-import { runProjectAssistant } from "@/lib/project-assistant";
 import { fail, ok } from "@/lib/api";
+import { runBookAuthorProjectBrain } from "@/lib/book-author-brain";
+import type { AssistantPlanAction } from "@/lib/project-assistant";
 import { projectChatSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -12,13 +13,15 @@ export async function POST(
   try {
     const { projectId } = await context.params;
     const input = projectChatSchema.parse(await request.json());
-    const result = await runProjectAssistant({
+    const result = await runBookAuthorProjectBrain({
       projectId,
       message: input.message,
       role: input.role,
       scope: input.scope,
       chapterId: input.chapterId ?? null,
       applyChanges: input.applyChanges,
+      previewOnly: input.previewOnly,
+      approvedActions: input.approvedActions as AssistantPlanAction[] | undefined,
     });
 
     return ok({

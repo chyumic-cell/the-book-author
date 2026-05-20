@@ -55,6 +55,7 @@ import type {
   CharacterRecord,
   ContextPackage,
   ProjectWorkspace as ProjectWorkspaceData,
+  StoryForgeTab,
 } from "@/types/storyforge";
 
 type ProjectSummary = {
@@ -113,6 +114,178 @@ const AI_STATUS_LABELS: Record<string, string> = {
   "guide-fix": "Applying guide fix",
   "add-chapter": "Adding chapter",
 };
+
+function BookBrainLanding({
+  onOpenTab,
+  project,
+}: {
+  onOpenTab: (tab: StoryForgeTab) => void;
+  project: ProjectWorkspaceData;
+}) {
+  const bookRuleCount = project.workingNotes.filter((note) =>
+    note.tags.some((tag) => String(tag).toLowerCase() === "book-rule"),
+  ).length;
+
+  return (
+    <div className="grid gap-4">
+      <Card className="grid gap-3 px-5 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Book Brain</p>
+            <h2 className="text-3xl font-semibold text-[var(--text)]">Everything the AI needs to understand your book</h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-[var(--muted)]">
+              Keep the setup, bible, skeleton, style rules, and canon notes here. This is the source of truth the AI should use before it writes or edits.
+            </p>
+          </div>
+          <Button onClick={() => onOpenTab("guided")}>Use Guided Builder</Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Chip>{project.characters.length} characters</Chip>
+          <Chip>{project.structureBeats.length} structure beats</Chip>
+          <Chip>{project.plotThreads.length} plot threads</Chip>
+          <Chip>{bookRuleCount} book rules</Chip>
+          <Chip>{project.chapters.length} chapters</Chip>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {[
+          {
+            tab: "setup" as StoryForgeTab,
+            title: "Book Setup",
+            body: "Premise, genre, audience, style dials, export settings, and the core summary that keeps the book on course.",
+            cta: "Open setup",
+          },
+          {
+            tab: "bible" as StoryForgeTab,
+            title: "Story Bible",
+            body: "Characters, voices, relationships, locations, factions, mysteries, plot threads, timeline, and book rules.",
+            cta: "Open bible",
+          },
+          {
+            tab: "skeleton" as StoryForgeTab,
+            title: "Story Skeleton",
+            body: "Chapter runway, structure engine, scene cards, arcs, escalation, and the plan that keeps chapters from restarting.",
+            cta: "Open skeleton",
+          },
+        ].map((card) => (
+          <Card key={card.title} className="grid gap-4 px-5 py-5">
+            <div>
+              <h3 className="text-xl font-semibold text-[var(--text)]">{card.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{card.body}</p>
+            </div>
+            <Button onClick={() => onOpenTab(card.tab)} variant="secondary">
+              {card.cta}
+            </Button>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewLanding({
+  busy,
+  onOpenTab,
+  onRunBookGuideCheck,
+  onRunChapterGuideCheck,
+  onRunContinuityCheck,
+  onRunExtractMemory,
+  onRunSummarizeChapter,
+  onSyncChapter,
+  project,
+}: {
+  busy: boolean;
+  onOpenTab: (tab: StoryForgeTab) => void;
+  onRunBookGuideCheck: () => void;
+  onRunChapterGuideCheck: () => void;
+  onRunContinuityCheck: () => void;
+  onRunExtractMemory: () => void;
+  onRunSummarizeChapter: () => void;
+  onSyncChapter: () => void;
+  project: ProjectWorkspaceData;
+}) {
+  return (
+    <div className="grid gap-4">
+      <Card className="grid gap-3 px-5 py-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Review</p>
+        <h2 className="text-3xl font-semibold text-[var(--text)]">Check continuity, memory, and commercial-fiction strength</h2>
+        <p className="max-w-4xl text-sm leading-6 text-[var(--muted)]">
+          Use these checks after drafting or major AI changes. Continuity should catch canon problems; the bestseller guide should focus on Bell-style craft, pressure, escalation, and payoff.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Chip>{project.continuityIssues.length} continuity issues</Chip>
+          <Chip>{project.longTermMemoryItems.length} long-term memories</Chip>
+          <Chip>{project.shortTermMemoryItems.length} short-term memories</Chip>
+        </div>
+      </Card>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="grid gap-4 px-5 py-5">
+          <h3 className="text-xl font-semibold text-[var(--text)]">Continuity</h3>
+          <p className="text-sm leading-6 text-[var(--muted)]">Find contradictions, missing carry-forward, and canon drift.</p>
+          <Button disabled={busy} onClick={onRunContinuityCheck}>Run continuity check</Button>
+          <Button onClick={() => onOpenTab("continuity")} variant="secondary">Open continuity page</Button>
+        </Card>
+        <Card className="grid gap-4 px-5 py-5">
+          <h3 className="text-xl font-semibold text-[var(--text)]">Memory</h3>
+          <p className="text-sm leading-6 text-[var(--muted)]">Summarize and sync chapter state so future AI calls know what happened.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy} onClick={onRunSummarizeChapter} variant="secondary">Summarize</Button>
+            <Button disabled={busy} onClick={onSyncChapter} variant="secondary">Sync</Button>
+            <Button disabled={busy} onClick={onRunExtractMemory} variant="secondary">Extract</Button>
+          </div>
+          <Button onClick={() => onOpenTab("memory")} variant="secondary">Open memory page</Button>
+        </Card>
+        <Card className="grid gap-4 px-5 py-5">
+          <h3 className="text-xl font-semibold text-[var(--text)]">Bestseller Guide</h3>
+          <p className="text-sm leading-6 text-[var(--muted)]">Check the chapter or whole book for Bell-style pressure, structure, stakes, and payoff.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy} onClick={onRunChapterGuideCheck}>Chapter guide</Button>
+            <Button disabled={busy} onClick={onRunBookGuideCheck} variant="secondary">Whole book guide</Button>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ExportLanding({ project }: { project: ProjectWorkspaceData }) {
+  const formats = [
+    { format: "pdf", label: "PDF", help: "Fixed-layout export for printing or sharing." },
+    { format: "epub", label: "EPUB", help: "Reflowable ebook export for font resizing and word wrapping." },
+    { format: "md", label: "Markdown", help: "Clean manuscript text for editing elsewhere." },
+    { format: "txt", label: "TXT", help: "Plain text manuscript." },
+    { format: "json", label: "Backup JSON", help: "Full project backup for restore or transfer." },
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <Card className="grid gap-3 px-5 py-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Export</p>
+        <h2 className="text-3xl font-semibold text-[var(--text)]">Export {project.title}</h2>
+        <p className="max-w-4xl text-sm leading-6 text-[var(--muted)]">
+          Choose the format you need. EPUB is the standard ebook format for adjustable font size and word wrapping.
+        </p>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {formats.map((entry) => (
+          <Card key={entry.format} className="grid gap-4 px-5 py-5">
+            <div>
+              <h3 className="text-xl font-semibold text-[var(--text)]">{entry.label}</h3>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{entry.help}</p>
+            </div>
+            <a
+              className="inline-flex items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+              href={`/api/projects/${project.id}/export?format=${entry.format}`}
+            >
+              Download {entry.label}
+            </a>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function editorStatesEqual(left: EditorState, right: EditorState) {
   return shallowEqualByKeys(left, right, EDITOR_STATE_KEYS);
@@ -252,7 +425,7 @@ export function ProjectWorkspace({
       ? "pb-[24rem] xl:pb-[28rem]"
       : "pb-[5.5rem]";
   const shouldShowInspector = showInspector && activeTab !== "chapters";
-  const shouldShowChapterSidebar = activeTab === "chapters" ? showChapterSidebar && desktopShell : desktopShell;
+  const shouldShowChapterSidebar = activeTab === "chapters" ? showChapterSidebar && desktopShell : false;
   const shouldShowOuterInspector = shouldShowInspector && desktopShell;
   const canUndo = editorPastRef.current.length > 0;
   const canRedo = editorFutureRef.current.length > 0;
@@ -1937,6 +2110,21 @@ export function ProjectWorkspace({
             </Card>
           ) : null}
 
+          {activeTab === "brain" && <BookBrainLanding onOpenTab={setActiveTab} project={project} />}
+          {activeTab === "review" && (
+            <ReviewLanding
+              busy={busyAction !== null}
+              onOpenTab={setActiveTab}
+              onRunBookGuideCheck={handleRibbonBookGuideCheck}
+              onRunChapterGuideCheck={handleRibbonChapterGuideCheck}
+              onRunContinuityCheck={handleRibbonContinuity}
+              onRunExtractMemory={handleRibbonExtractMemory}
+              onRunSummarizeChapter={handleRibbonSummarize}
+              onSyncChapter={() => void handleSyncChapter()}
+              project={project}
+            />
+          )}
+          {activeTab === "export" && <ExportLanding project={project} />}
           {activeTab === "ideaLab" && <IdeaLabTab mutateIdeaLab={mutateIdeaLab} project={project} />}
           {activeTab === "guided" && (
             <GuidedBuilderTab
@@ -2089,14 +2277,11 @@ export function ProjectWorkspace({
             <div className="grid grid-cols-5 gap-1">
               <Button
                 className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
-                onClick={() => {
-                  setActiveTab("chapters");
-                  setCopilotExpanded(true);
-                }}
-                variant={copilotExpanded ? "primary" : "ghost"}
+                onClick={() => setActiveTab("guided")}
+                variant={activeTab === "guided" ? "primary" : "ghost"}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">AI</span>
-                <span>Coach</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Guide</span>
+                <span>Build</span>
               </Button>
               <Button
                 className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
@@ -2108,27 +2293,27 @@ export function ProjectWorkspace({
               </Button>
               <Button
                 className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
-                onClick={() => setActiveTab("bible")}
-                variant={activeTab === "bible" ? "primary" : "ghost"}
+                onClick={() => setActiveTab("brain")}
+                variant={["brain", "setup", "bible", "skeleton", "ideaLab"].includes(activeTab) ? "primary" : "ghost"}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Bible</span>
-                <span>Cast</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Brain</span>
+                <span>Canon</span>
               </Button>
               <Button
                 className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
-                onClick={() => setActiveTab("skeleton")}
-                variant={activeTab === "skeleton" ? "primary" : "ghost"}
+                onClick={() => setActiveTab("review")}
+                variant={["review", "continuity", "memory"].includes(activeTab) ? "primary" : "ghost"}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Arc</span>
-                <span>Plot</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Check</span>
+                <span>Review</span>
               </Button>
               <Button
                 className="min-h-[46px] flex-col gap-0.5 px-1 py-1.5 text-[10px]"
-                onClick={() => setActiveTab("setup")}
-                variant={activeTab === "setup" ? "primary" : "ghost"}
+                onClick={() => setActiveTab("export")}
+                variant={activeTab === "export" ? "primary" : "ghost"}
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Setup</span>
-                <span>Book</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">Export</span>
+                <span>Files</span>
               </Button>
             </div>
           </Card>

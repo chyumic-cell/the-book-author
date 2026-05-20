@@ -282,11 +282,13 @@ function fallbackChapterFieldValue(options: {
 
   switch (fieldKey) {
     case "title":
-      return currentValue.trim() && !looksLikeWeakTitle(currentValue) ? currentValue : "The Price of Witness";
+      return currentValue.trim() && !looksLikeWeakTitle(currentValue)
+        ? currentValue
+        : compactText(project.title || premise, 42).replace(/[.!?]+$/, "") || `Chapter ${options.chapter.number}`;
     case "purpose":
       return `${protagonist} must act on the previous pressure instead of restarting the story. The chapter should force a concrete choice, expose a cost, and move the central conflict forward through dialogue and consequence.`;
     case "currentBeat":
-      return `${protagonist} is pushed from the Oath Feast disturbance into action when the Witness Tithe creates a new immediate cost.`;
+      return `${protagonist} is pushed from the previous pressure into a concrete action that creates a new immediate cost.`;
     case "desiredMood":
       return project.bookSettings.tone || "Tense, intimate, dialogue-heavy, emotionally sharp";
     case "outline":
@@ -331,9 +333,6 @@ function fallbackStoryBibleFieldValue(project: ProjectWorkspace, fieldKey: strin
     return "book-rule\ncanon\ncontinuity";
   }
   if (fieldKey === "content" || fieldKey === "description" || fieldKey === "summary" || fieldKey === "notes") {
-    if (title.toLowerCase().includes("witness tithe") || String(instruction ?? "").toLowerCase().includes("magic law")) {
-      return `${title} is the binding magic law of the book: any wish spoken before recognized witnesses can become legal reality, but the spell collects a cherished memory as payment. The danger is that powerful people can redirect or disguise who pays the memory cost, turning public miracles into political weapons and private grief. Drafting should obey this rule without stopping the story for exposition; show it through bargains, fear, missing memories, and dialogue pressure.`;
-    }
     return `${title} is binding story canon connected to ${protagonist}'s central conflict. It should guide drafting by making the rules, consequences, and emotional pressure clear: ${compactText(instruction || premise, 260)}`;
   }
   return `${title} should stay canon-safe, specific, and synchronized with ${protagonist}'s ongoing conflict.`;

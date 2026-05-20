@@ -178,6 +178,8 @@ export const projectChatSchema = z.object({
   scope: z.enum(["AUTO", "PROJECT", "IDEA_LAB", "SKELETON", "CHAPTER", "STORY_BIBLE"]).default("AUTO"),
   chapterId: z.string().nullable().optional(),
   applyChanges: z.boolean().default(true),
+  previewOnly: z.boolean().optional().default(false),
+  approvedActions: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export const targetedFieldAiSchema = z.object({

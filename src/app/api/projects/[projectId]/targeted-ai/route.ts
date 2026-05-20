@@ -1,4 +1,5 @@
 import { fail, ok } from "@/lib/api";
+import { decorateBookAuthorBrainResult } from "@/lib/book-author-brain";
 import {
   runTargetedCharacterAi,
   runTargetedSkeletonFieldAi,
@@ -41,7 +42,11 @@ export async function POST(
         draftCharacter: input.draftCharacter,
         instruction: input.instruction,
       }));
-      return ok(result);
+      return ok(decorateBookAuthorBrainResult(result as unknown as Record<string, unknown>, {
+        targetFields: ["storyBible.character"],
+        route: "mixed",
+        reason: "Character dossiers use a targeted field pack rather than the broad assistant prompt.",
+      }));
     }
 
     const input = targetedFieldAiSchema.parse(body);
@@ -84,7 +89,10 @@ export async function POST(
           }),
     );
 
-    return ok(result);
+    return ok(decorateBookAuthorBrainResult(result as unknown as Record<string, unknown>, {
+      targetFields: [input.scope === "SKELETON" ? `skeleton.${input.fieldKey}` : `storyBible.${input.fieldKey}`],
+      route: "fast",
+    }));
   } catch (error) {
     return fail(error instanceof Error ? error.message : "The AI field update could not be completed.");
   }

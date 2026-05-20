@@ -22,7 +22,7 @@ interface WorkspaceStore {
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
-  activeTab: "chapters",
+  activeTab: "guided",
   selectedChapterId: null,
   assistMode: "CO_WRITE",
   activeAiRole: "COWRITER",

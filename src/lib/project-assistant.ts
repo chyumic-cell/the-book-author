@@ -45,7 +45,7 @@ type AssistantStoryBibleEntityType =
 type AssistantBookSetupFieldKey = keyof BookSettingsRecord;
 type AssistantStyleFieldKey = keyof StyleProfileRecord;
 
-type AssistantPlanAction = {
+export type AssistantPlanAction = {
   kind: AssistantActionKind;
   title?: string;
   content?: string;
@@ -4550,6 +4550,7 @@ async function materializePlanActions(input: {
 }
 
 const DEFAULT_SCOPE_TABS: Partial<Record<ProjectChatScope, StoryForgeTab>> = {
+  PROJECT: "brain",
   IDEA_LAB: "ideaLab",
   SKELETON: "skeleton",
   CHAPTER: "chapters",
@@ -5479,15 +5480,51 @@ export async function runProjectAssistant(input: {
   scope: ProjectChatScope;
   chapterId: string | null;
   applyChanges: boolean;
+  previewOnly?: boolean;
+  approvedActions?: AssistantPlanAction[];
 }) {
   const project = await getProjectWorkspace(input.projectId);
   if (!project) {
     throw new Error("Project not found.");
   }
 
-  const directResult = await tryDirectStructuredAssistantAction({ ...input, project });
+  if (input.approvedActions?.length) {
+    const approvedActions = sanitizePlanActions({
+      actions: input.approvedActions,
+      message: input.message,
+      scope: input.scope,
+      applyChanges: true,
+      project,
+    });
+    const actions = input.applyChanges
+      ? await applyActions(project, approvedActions, { defaultChapterId: input.chapterId })
+      : [];
+    const nextProject = (await getProjectWorkspace(input.projectId)) || project;
+    const contextPackage: ContextPackage | null = input.chapterId
+      ? buildContextPackage(nextProject, input.chapterId)
+      : null;
+
+    return {
+      reply: actions.length
+        ? `${APP_NAME} applied the approved changes.`
+        : `${APP_NAME} did not find any approved changes to apply.`,
+      actions,
+      proposedActions: [],
+      requiresApproval: false,
+      project: nextProject,
+      contextPackage,
+      scope: input.scope,
+      nextTab: defaultNextTab(input.scope),
+    };
+  }
+
+  const directResult = input.previewOnly ? null : await tryDirectStructuredAssistantAction({ ...input, project });
   if (directResult) {
-    return directResult;
+    return {
+      ...directResult,
+      proposedActions: [],
+      requiresApproval: false,
+    };
   }
 
   const intent = inferAssistantIntent(input.message, input.scope);
@@ -5519,7 +5556,8 @@ export async function runProjectAssistant(input: {
       project,
     }),
   };
-  const materializedActions = input.applyChanges
+  const shouldPrepareActions = input.applyChanges || input.previewOnly;
+  const materializedActions = shouldPrepareActions
     ? await materializePlanActions({
         project,
         role: input.role,
@@ -5529,10 +5567,10 @@ export async function runProjectAssistant(input: {
         actions: plan.actions,
       })
     : [];
-  const actions = input.applyChanges
+  const actions = input.applyChanges && !input.previewOnly
     ? await applyActions(project, materializedActions, { defaultChapterId: input.chapterId })
     : [];
-  const nextProject = (await getProjectWorkspace(input.projectId)) || project;
+  const nextProject = input.previewOnly ? project : (await getProjectWorkspace(input.projectId)) || project;
   const contextPackage: ContextPackage | null = input.chapterId
     ? buildContextPackage(nextProject, input.chapterId)
     : null;
@@ -5540,6 +5578,8 @@ export async function runProjectAssistant(input: {
   return {
     reply: plan.reply,
     actions,
+    proposedActions: input.previewOnly ? materializedActions : [],
+    requiresApproval: input.previewOnly && materializedActions.length > 1,
     project: nextProject,
     contextPackage,
     scope: input.scope,

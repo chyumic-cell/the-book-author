@@ -2121,7 +2121,6 @@ function mockOutline(project: ProjectWorkspace, chapterTitle: string, context: C
     ? truncateText(project.workingNotes[0].content, 120)
     : project.premise || "the world rule changes the cost of every choice";
   const thread = context.activePlotThreads[0]?.title ?? context.chapterGoal ?? "the main conflict";
-  const constraint = context.continuityConstraints[0]?.suggestedContext ?? "the latest consequence";
 
   return [
     `1. Open ${chapterTitle} in immediate pressure: ${protagonist} is already reacting to ${thread}, not waiting for the plot to begin.`,
@@ -2148,85 +2147,13 @@ function mockDraft(project: ProjectWorkspace, context: ContextPackage, chapter: 
     .join(" ")
     .toLowerCase();
   const inferredOpponent = chapterSignal.includes("scribe")
-    ? "the queen's scribe"
-    : chapterSignal.includes("sarun")
-      ? "Prince Sarun"
-      : "the person blocking the way";
+    ? "the record keeper"
+    : "the person blocking the way";
   const opposition = project.characters[1]?.name ?? inferredOpponent;
   const thread = context.activePlotThreads[0]?.title ?? "the central problem";
   const rule = project.workingNotes[0]?.content ?? project.premise;
   const mood = project.styleProfile.aestheticGuide || project.styleProfile.styleGuide || "tense, human, specific";
   const goal = context.chapterGoal || "force the protagonist into a meaningful choice";
-
-  if (chapterSignal.includes("ledger") && chapterSignal.includes("scribe")) {
-    return [
-      `${protagonist} caught the queen's scribe at the archive door, one hand on the latch and the other pressed flat against his robe as if he could hold his heartbeat in place.`,
-      "",
-      `"You left before the prince finished smiling," ${protagonist} said.`,
-      "",
-      `The scribe did not turn around. "Men with knives are easier to survive than men with witnesses."`,
-      "",
-      `Beyond him, the archive breathed out dust, lamp smoke, and the dry animal smell of old vellum. Shelves rose into the dark. Somewhere inside them waited the ledger that could turn a public miracle into a private theft.`,
-      "",
-      `"Whose memory did Sarun name?" ${protagonist} asked.`,
-      "",
-      `The scribe flinched. That was answer enough to make the corridor shrink around them.`,
-      "",
-      `"The ledger does not name victims," the scribe whispered. "It names substitutes. That is worse."`,
-      "",
-      `${protagonist} stepped inside and shut the archive door with his heel. "Show me."`,
-      "",
-      `For a moment the scribe looked almost young, all his court polish scraped away by fear. Then he pulled a narrow book from beneath a stack of tax rolls. Its cover was black, its clasp silver, its pages edged with tiny witness marks.`,
-      "",
-      `"Every redirected Witness Tithe for six years," the scribe said. "Every memory paid by someone who never made the wish."`,
-      "",
-      `${protagonist} opened the ledger. The first page smelled faintly of rain, though the archive had no windows. Names crawled down the columns: servants, rivals, widows, children of houses too weak to complain. Beside each name sat a legal wish, neat as a knife laid on linen.`,
-      "",
-      `"Sarun's entry," ${protagonist} said. "Where is it?"`,
-      "",
-      `The scribe touched a blank line near the bottom. Ink gathered there by itself, slow and black.`,
-      "",
-      `A footstep sounded outside the archive.`,
-      "",
-      `"Too late," the scribe breathed.`,
-      "",
-      `The latch lifted. ${protagonist} closed the ledger over his thumb and understood that proof had weight, and tonight it was heavy enough to get them both killed.`,
-    ].join("\n");
-  }
-
-  if (chapterSignal.includes("sarun") && (chapterSignal.includes("sister") || chapterSignal.includes("counter-wish"))) {
-    return [
-      `${protagonist} carried the ledger under his coat until its corners bruised his ribs. By the time he found Prince Sarun in the private court passage, the book felt less like proof than a second heart beating out of rhythm.`,
-      "",
-      `"You should have stayed at the feast," Sarun said.`,
-      "",
-      `"You should have paid your own tithe."`,
-      "",
-      `Sarun's smile thinned. The lamps behind him turned the gold thread at his collar into small, disciplined flames. "Careful, ${protagonist}. A ledger can accuse. It cannot protect."`,
-      "",
-      `${protagonist} opened the book to the wet new line. "Whose memory did you write into the debt?"`,
-      "",
-      `For the first time that night, Sarun looked genuinely pleased. "You have not read far enough."`,
-      "",
-      `The ink moved. Letters unfolded beneath ${protagonist}'s hand, and the name that appeared there struck harder than any guard's fist: his sister's name, copied in the court's legal script as if grief were only another asset to be seized.`,
-      "",
-      `*No,* ${protagonist} thought. *You do not get to spend her twice.*`,
-      "",
-      `"She is dead," ${protagonist} said.`,
-      "",
-      `"Memory is not dead while someone can be made to lose it." Sarun stepped closer. "That is the beauty of law. It reaches where mercy cannot."`,
-      "",
-      `${protagonist} heard the archive door slam somewhere behind him. Heard the scribe call his name once and then go silent. The passage narrowed to Sarun, the ledger, and the old ache he had mistaken for something safely buried.`,
-      "",
-      `"Then witness this," ${protagonist} said.`,
-      "",
-      `Sarun's eyes sharpened. "Do not."`,
-      "",
-      `${protagonist} lifted the ledger where the hidden witnesses in the walls could see it. "I wish every stolen tithe remembered its true payer."`,
-      "",
-      `The corridor went cold. Somewhere in the palace, a hundred borrowed miracles began looking for the people who had bought them.`,
-    ].join("\n");
-  }
 
   return [
     `${chapterTitle}`,
