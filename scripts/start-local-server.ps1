@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$appDir = "C:\Users\pc1\Documents\The Book Author"
+$appDir = "C:\Users\pc1\Documents\Book Author"
 $nodePath = "C:\Users\pc1\Documents\.tooling\node-v22.22.1-win-x64\node.exe"
 $serverPath = Join-Path $appDir ".next\standalone\server.js"
 $standaloneDir = Join-Path $appDir ".next\standalone"
@@ -13,7 +13,7 @@ if (!(Test-Path $serverPath)) {
   throw "Standalone server not found at $serverPath"
 }
 
-$env:DATABASE_URL = "file:C:/Users/pc1/Documents/The Book Author/prisma/dev.db"
+$env:DATABASE_URL = "file:C:/Users/pc1/Documents/Book Author/prisma/dev.db"
 $env:THE_BOOK_AUTHOR_CONFIG_DIR = $appDir
 $env:STORYFORGE_CONFIG_DIR = $appDir
 
@@ -27,4 +27,4 @@ if (Test-Path $publicSource) {
   Copy-Item -Path (Join-Path $publicSource "*") -Destination $publicTarget -Recurse -Force
 }
 
-Start-Process -FilePath $nodePath -ArgumentList $serverPath -WorkingDirectory $appDir -WindowStyle Minimized
+Start-Process -FilePath $nodePath -ArgumentList ('"{0}"' -f $serverPath) -WorkingDirectory $appDir -WindowStyle Minimized

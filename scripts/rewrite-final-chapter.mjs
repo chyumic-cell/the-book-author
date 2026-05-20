@@ -6,7 +6,7 @@ const projectId = process.env.STORYFORGE_PROJECT_ID ?? "cmn4fq5wq003pu86gn6n7sz0
 const chapterNumber = Number(process.env.STORYFORGE_CHAPTER ?? 18);
 const modelOverride = process.env.STORYFORGE_MODEL || "";
 const config = JSON.parse(
-  await readFile("C:/Users/pc1/Documents/The Book Author/.the-book-author.providers.json", "utf8"),
+  await readFile("C:/Users/pc1/Documents/Book Author/.the-book-author.providers.json", "utf8"),
 );
 
 const openrouter = config.openrouter;

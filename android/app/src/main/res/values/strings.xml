@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">The Book Author</string>
-    <string name="title_activity_main">The Book Author</string>
+    <string name="app_name">Book Author</string>
+    <string name="title_activity_main">Book Author</string>
     <string name="package_name">com.michaelpolevoy.thebookauthor</string>
     <string name="custom_url_scheme">com.michaelpolevoy.thebookauthor</string>
 </resources>

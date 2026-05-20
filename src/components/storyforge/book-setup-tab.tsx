@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import { StyleExportSettingsCard } from "@/components/storyforge/style-export-settings-card";
 
 import type { SetupDraft } from "@/components/storyforge/workspace-helpers";
@@ -38,7 +38,7 @@ export function BookSetupTab({
           <div>
             <h3 className="text-3xl">Book setup</h3>
             <p className="text-sm text-[var(--muted)]">
-            Human steering stays durable and central. {APP_NAME} uses this layer every time it builds a compact prompt package.
+              Human steering stays durable and central. {APP_NAME} uses this layer every time it builds a compact prompt package.
             </p>
           </div>
           <Button disabled={busy} onClick={onSave}>
@@ -58,7 +58,7 @@ export function BookSetupTab({
           </div>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
             {coreSummary ||
-              "When you leave this project, The Book Author will generate a short 5 to 10 sentence reminder of what this book is truly about, using the setup, story bible, skeleton, and memory."}
+              `When you leave this project, ${APP_PROSE_NAME} will generate a short 5 to 10 sentence reminder of what this book is truly about, using the setup, story bible, skeleton, and memory.`}
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">

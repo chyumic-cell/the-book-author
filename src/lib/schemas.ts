@@ -223,7 +223,7 @@ export const providerSettingsSchema = z.object({
     model: z.string().default("openrouter/free"),
     baseUrl: z.string().default("https://openrouter.ai/api/v1"),
     siteUrl: z.string().default("http://localhost:3000"),
-    appName: z.string().default("The Book Author"),
+    appName: z.string().default("Book Author"),
   }),
   custom: z.object({
     apiKey: z.string().optional(),

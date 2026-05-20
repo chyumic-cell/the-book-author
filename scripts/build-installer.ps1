@@ -1,14 +1,14 @@
 $ErrorActionPreference = "Stop"
 
-$appDir = "C:\Users\pc1\Documents\The Book Author"
+$appDir = "C:\Users\pc1\Documents\Book Author"
 $nodeSourceDir = "C:\Users\pc1\Documents\.tooling\node-v22.22.1-win-x64"
 $distDir = Join-Path $appDir "dist"
 $stagingDir = Join-Path $distDir "installer-staging"
-$payloadRoot = Join-Path $stagingDir "The-Book-Author"
+$payloadRoot = Join-Path $stagingDir "Book-Author"
 $payloadZip = Join-Path $stagingDir "the-book-author-payload.zip"
 $installCmdSource = Join-Path $appDir "installer\install.cmd"
 $installCmdTarget = Join-Path $payloadRoot "install.cmd"
-$installerPath = Join-Path $distDir "The-Book-Author-Installer.cmd"
+$installerPath = Join-Path $distDir "Book-Author-Installer.cmd"
 
 function Ensure-CleanDirectory([string]$path) {
   if (Test-Path $path) {
@@ -23,9 +23,9 @@ Ensure-CleanDirectory $stagingDir
 Ensure-CleanDirectory $payloadRoot
 
 $includePaths = @(
-  "Launch The Book Author.cmd",
-  "The Book Author Server.cmd",
-  "Stop The Book Author.cmd",
+  "Launch Book Author.cmd",
+  "Book Author Server.cmd",
+  "Stop Book Author.cmd",
   "public",
   "runtime",
   "prisma",
@@ -91,7 +91,7 @@ Set-Content -Path (Join-Path $payloadRoot ".the-book-author.providers.json") -Va
     "model": "openrouter/auto",
     "baseUrl": "https://openrouter.ai/api/v1",
     "siteUrl": "http://127.0.0.1:3000",
-    "appName": "The Book Author"
+    "appName": "Book Author"
   },
   "custom": {
     "apiKey": "",
@@ -112,7 +112,7 @@ if (Test-Path $runtimeEnvPath) {
     'OPENROUTER_MODEL="openrouter/auto"',
     'OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"',
     'OPENROUTER_SITE_URL="http://127.0.0.1:3000"',
-    'OPENROUTER_APP_NAME="The Book Author"',
+    'OPENROUTER_APP_NAME="Book Author"',
     'OPENROUTER_SETUP_URL="https://openrouter.ai/keys"',
     'THE_BOOK_AUTHOR_DEFAULT_PROVIDER="OPENROUTER"',
     'THE_BOOK_AUTHOR_REQUIRE_PERSONAL_AI_KEY="true"',
@@ -137,28 +137,28 @@ $payloadBase64 = [System.Convert]::ToBase64String(
 $installerHeader = @'
 @echo off
 setlocal EnableExtensions
-title The Book Author Installer
+title Book Author Installer
 
 set "SELF_PATH=%~f0"
-set "WORK_DIR=%TEMP%\The-Book-Author-Installer-%RANDOM%%RANDOM%"
+set "WORK_DIR=%TEMP%\Book-Author-Installer-%RANDOM%%RANDOM%"
 set "PAYLOAD_ZIP=%WORK_DIR%\the-book-author-payload.zip"
-set "EXPAND_DIR=%WORK_DIR%\The-Book-Author"
+set "EXPAND_DIR=%WORK_DIR%\Book-Author"
 set "INSTALL_DIR=%THE_BOOK_AUTHOR_INSTALL_DIR%"
-if not defined INSTALL_DIR set "INSTALL_DIR=%LOCALAPPDATA%\The Book Author"
+if not defined INSTALL_DIR set "INSTALL_DIR=%LOCALAPPDATA%\Book Author"
 set "SHORTCUT_DIR=%THE_BOOK_AUTHOR_SHORTCUT_DIR%"
 if not defined SHORTCUT_DIR set "SHORTCUT_DIR=%USERPROFILE%\Desktop"
-set "DESKTOP_SHORTCUT=%SHORTCUT_DIR%\The Book Author.lnk"
+set "DESKTOP_SHORTCUT=%SHORTCUT_DIR%\Book Author.lnk"
 set "SHOULD_LAUNCH=1"
 if /I "%THE_BOOK_AUTHOR_SKIP_LAUNCH%"=="1" set "SHOULD_LAUNCH=0"
 
-echo Preparing The Book Author installer...
+echo Preparing Book Author installer...
 if exist "%WORK_DIR%" rmdir /s /q "%WORK_DIR%" >nul 2>nul
 mkdir "%WORK_DIR%" >nul 2>nul
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$source = $env:SELF_PATH; $output = $env:PAYLOAD_ZIP; $marker = '__THE_BOOK_AUTHOR_PAYLOAD_BELOW__'; $content = Get-Content -LiteralPath $source -Raw; $index = $content.LastIndexOf($marker); if ($index -lt 0) { throw 'Installer payload marker was not found.' }; $payload = [regex]::Replace($content.Substring($index + $marker.Length), '\s', ''); [System.IO.File]::WriteAllBytes($output, [System.Convert]::FromBase64String($payload))"
 if errorlevel 1 (
-  echo The Book Author payload could not be unpacked.
+  echo Book Author payload could not be unpacked.
   rmdir /s /q "%WORK_DIR%" >nul 2>nul
   pause
   exit /b 1
@@ -167,7 +167,7 @@ if errorlevel 1 (
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Expand-Archive -LiteralPath '%PAYLOAD_ZIP%' -DestinationPath '%EXPAND_DIR%' -Force"
 if errorlevel 1 (
-  echo The Book Author files could not be extracted.
+  echo Book Author files could not be extracted.
   rmdir /s /q "%WORK_DIR%" >nul 2>nul
   pause
   exit /b 1
@@ -179,29 +179,29 @@ if not exist "%INSTALL_DIR%" (
 
 robocopy "%EXPAND_DIR%" "%INSTALL_DIR%" /MIR /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
-  echo The Book Author files could not be copied into the install location.
+  echo Book Author files could not be copied into the install location.
   rmdir /s /q "%WORK_DIR%" >nul 2>nul
   pause
   exit /b 1
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch The Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\public\the-book-author-icon.ico'; $shortcut.Save()"
+  "$shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut('%DESKTOP_SHORTCUT%'); $shortcut.TargetPath = '%INSTALL_DIR%\Launch Book Author.cmd'; $shortcut.WorkingDirectory = '%INSTALL_DIR%'; $shortcut.IconLocation = '%INSTALL_DIR%\public\the-book-author-icon.ico'; $shortcut.Save()"
 if errorlevel 1 (
-  echo The Book Author installed, but the desktop shortcut could not be created.
+  echo Book Author installed, but the desktop shortcut could not be created.
 )
 
-echo The Book Author was installed to:
+echo Book Author was installed to:
 echo %INSTALL_DIR%
 echo.
 echo A desktop shortcut was created or updated.
 echo This install does not include an AI key.
-echo Add your own key in The Book Author under Settings ^> AI providers.
+echo Add your own key in Book Author under Settings ^> AI providers.
 echo OpenRouter keys: https://openrouter.ai/keys
 echo.
 
 if "%SHOULD_LAUNCH%"=="1" (
-  start "" "%INSTALL_DIR%\Launch The Book Author.cmd"
+  start "" "%INSTALL_DIR%\Launch Book Author.cmd"
 )
 
 rmdir /s /q "%WORK_DIR%" >nul 2>nul

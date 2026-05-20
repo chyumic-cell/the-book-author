@@ -1,8 +1,8 @@
-# The Book Author Hosted Private-Beta Deployment Guide
+# Book Author Hosted Private-Beta Deployment Guide
 
 ## What this deployment mode does
 
-The Book Author now supports a **hosted private-beta portal** that is safe to publish before the full cloud writing stack exists.
+Book Author now supports a **hosted private-beta portal** that is safe to publish before the full cloud writing stack exists.
 
 In this phase:
 
@@ -19,7 +19,7 @@ In this phase:
 ## What is ready right now
 
 - Desktop installer:
-- `C:\Users\pc1\Documents\The Book Author\dist\The-Book-Author-Installer.cmd`
+- `C:\Users\pc1\Documents\Book Author\dist\Book-Author-Installer.cmd`
 - Phone/web install:
   - installable PWA with Android and iPhone home-screen support
 - Hosted private-beta portal:
@@ -46,10 +46,10 @@ In this phase:
 
 Create a free Neon Postgres project and copy the connection string into `DATABASE_URL`.
 
-### 2. Push The Book Author to GitHub
+### 2. Push Book Author to GitHub
 
 1. Create a GitHub repository.
-2. Push the `The Book Author` folder to GitHub.
+2. Push the `Book Author` folder to GitHub.
 
 ### 3. Import into Vercel
 
@@ -62,7 +62,7 @@ Create a free Neon Postgres project and copy the connection string into `DATABAS
 
 After deployment, the public site should show:
 
-- The Book Author private-beta landing page
+- Book Author private-beta landing page
 - sign-in / sign-up pages
 - terms page
 - downloads page
@@ -72,24 +72,24 @@ It should **not** allow the public hosted site to open the old shared `/projects
 
 ## Desktop and phone distribution
 
-### The Book Author - PC
+### Book Author - PC
 
 Users download the installer from:
 
-- `/downloads/The-Book-Author-Installer.cmd`
+- `/downloads/Book-Author-Installer.cmd`
 
-After installing, they must use their own AI key in The Book Author settings.
+After installing, they must use their own AI key in Book Author settings.
 
-### The Book Author - Android
+### Book Author - Android
 
-Users open the hosted The Book Author site in Chrome on Android and choose:
+Users open the hosted Book Author site in Chrome on Android and choose:
 
 - Install app
 - or Add to Home Screen
 
-### The Book Author - iPhone / iPad
+### Book Author - iPhone / iPad
 
-Users open the hosted The Book Author site in Safari and choose:
+Users open the hosted Book Author site in Safari and choose:
 
 - Share
 - Add to Home Screen
@@ -106,7 +106,7 @@ This deployment mode is intentionally conservative.
 
 If you want a public installer page outside Vercel, you can also upload:
 
-- `The-Book-Author-Installer.cmd`
+- `Book-Author-Installer.cmd`
 
 to:
 

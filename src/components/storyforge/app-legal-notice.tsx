@@ -1,7 +1,7 @@
 "use client";
 
 import { AppBrandMark } from "@/components/brand/app-brand-mark";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 export function AppLegalNotice({
@@ -17,7 +17,7 @@ export function AppLegalNotice({
       )}
     >
       <AppBrandMark className="items-center align-baseline" betaClassName="text-[0.6em]" /> software and interface
-      copyright (c) 2026 Michael William Polevoy. By using {APP_NAME}, users agree to {APP_NAME} credit requirements,{" "}
+      copyright (c) 2026 Michael William Polevoy. By using {APP_PROSE_NAME}, users agree to {APP_NAME} credit requirements,{" "}
       {APP_NAME} commercial participation terms, and {APP_NAME} moderation rights.
       Users remain solely responsible for originality, permissions, legal compliance, and any harmful or unlawful
       material created, revised, exported, or published with the app. {APP_NAME} may ban accounts that use the platform

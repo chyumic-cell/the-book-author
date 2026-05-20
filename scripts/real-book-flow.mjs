@@ -445,8 +445,8 @@ async function runMobilePass(projectUrl, descriptor, assistantPrompt) {
       await jsClick(openButton.first());
     }
 
-    await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 30000 });
-    const adviceOnly = page.getByLabel("Let The Book Author implement direct changes");
+    await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 30000 });
+    const adviceOnly = page.getByLabel("Let the Book Author implement direct changes");
     if (await adviceOnly.count()) {
       await adviceOnly.evaluate((node) => {
         node.checked = false;
@@ -455,7 +455,7 @@ async function runMobilePass(projectUrl, descriptor, assistantPrompt) {
       });
     }
     await dock
-      .getByPlaceholder(/Explain a scene problem, ask for stronger options, or tell The Book Author what to update\./i)
+      .getByPlaceholder(/Explain a scene problem, ask for stronger options, or tell Book Author what to update\./i)
       .fill(assistantPrompt);
     await jsClick(dock.getByRole("button", { name: "Send", exact: true }));
     await pagePause(3000);

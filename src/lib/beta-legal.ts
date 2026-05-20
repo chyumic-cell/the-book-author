@@ -1,6 +1,6 @@
 import "server-only";
 
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import {
   STORYFORGE_TERMS_LAST_UPDATED,
   STORYFORGE_TERMS_VERSION,
@@ -13,7 +13,7 @@ export function getStoryForgeTermsSummary() {
   return [
     `${APP_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting fiction with optional AI assistance.`,
     `During this private-beta phase, public web accounts are used for access, moderation, feedback, and export monitoring, while book/project work is intended to remain on the user's own device rather than in a shared ${APP_NAME} manuscript database.`,
-    `Each user must supply their own AI API key, and ${APP_NAME} links users to OpenRouter for that setup: ${getOpenRouterKeysUrl()}.`,
+    `Each user must supply their own AI API key, and ${APP_PROSE_NAME} links users to OpenRouter for that setup: ${getOpenRouterKeysUrl()}.`,
     `Use of the platform is conditioned on acceptance of the ${APP_NAME} Terms and Publishing Policy, which govern ownership claims, credit requirements, export handling, conduct standards, and moderation rights.`,
     `${APP_NAME} software and service operations are managed by ${getStoryForgeOwnerName()}.`,
   ];
@@ -41,7 +41,7 @@ export function getStoryForgeTermsSections() {
     {
       title: "3. Intellectual Property and Publishing Policy",
       body: [
-        `By using ${APP_NAME}, the user acknowledges and agrees that ${ownerName} claims ${APP_NAME}-level ownership and commercial participation rights in works produced through the platform, as described in this publishing policy.`,
+        `By using ${APP_PROSE_NAME}, the user acknowledges and agrees that ${ownerName} claims ${APP_NAME}-level ownership and commercial participation rights in works produced through the platform, as described in this publishing policy.`,
         `The user agrees that ${APP_NAME} must receive credit whenever a work produced through the platform is published, distributed, or otherwise released publicly.`,
         `The user further agrees that ${APP_NAME} is entitled to no less than fifty percent (50%) of profits derived from books or other published works produced through the platform, unless a later written agreement signed by ${APP_NAME} states otherwise.`,
         "The user is responsible for obtaining their own legal advice before relying on the platform for commercial publication or revenue-generating release.",

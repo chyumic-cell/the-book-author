@@ -138,10 +138,10 @@ async function createAuditProject(page) {
   await page.getByPlaceholder("The Glass Meridian").fill(`Button Audit ${stamp}`);
   await page
     .getByPlaceholder("A mapmaker races a self-censoring oracle.")
-    .fill("A QA operator stress-tests every The Book Author control and keeps the book stable under pressure.");
+    .fill("A QA operator stress-tests every Book Author control and keeps the book stable under pressure.");
   await page
     .getByPlaceholder("What is the story fundamentally about?")
-    .fill("A QA operator clicks every major The Book Author control, pushes the AI tools, and makes sure the workspace stays coherent through the whole session.");
+    .fill("A QA operator clicks every major Book Author control, pushes the AI tools, and makes sure the workspace stays coherent through the whole session.");
   await page
     .getByPlaceholder("Who is the protagonist, what is changing, and what is the fundamental conflict?")
     .fill("The protagonist stress-tests an AI writing suite, verifies that edits are reversible, and keeps the manuscript usable while every system is exercised.");
@@ -247,13 +247,13 @@ async function testRibbonButtons(page) {
   await page.waitForURL(/\/projects\//, { timeout: 30000 });
   await openRibbon(page, "AI Engine");
   await setRibbonToggle(page, "Show Command Bar", "Hide Command Bar", true);
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 20000 });
   await openRibbon(page, "AI Engine");
   await setRibbonToggle(page, "Show Command Bar", "Hide Command Bar", false);
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ state: "detached", timeout: 20000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ state: "detached", timeout: 20000 });
   await openRibbon(page, "AI Engine");
   await setRibbonToggle(page, "Show AI Bar", "Hide AI Bar", true);
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 20000 });
   await openRibbon(page, "AI Engine");
   await setRibbonToggle(page, "Show AI Bar", "Hide AI Bar", false);
   await openRibbon(page, "AI Engine");
@@ -289,7 +289,7 @@ async function testRibbonButtons(page) {
   await page.getByRole("heading", { name: "Chapter planning", exact: true }).waitFor({ state: "detached", timeout: 10000 });
   await openRibbon(page, "View");
   await setRibbonToggle(page, "Show AI Bar", "Hide AI Bar", true);
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 20000 });
   await openRibbon(page, "View");
   await setRibbonToggle(page, "Show AI Bar", "Hide AI Bar", false);
   await openRibbon(page, "View");
@@ -539,16 +539,16 @@ async function testChapterWorkspace(page) {
 
 async function testCopilot(page) {
   const dock = page.locator("#project-copilot-dock");
-  const collapsedInput = dock.getByPlaceholder("Ask The Book Author plainly for help, edits, ideas, or chapter changes.");
+  const collapsedInput = dock.getByPlaceholder("Ask the Book Author plainly for help, edits, ideas, or chapter changes.");
   await collapsedInput.fill("Add a working note called Button Audit Note and mention that every control was exercised.");
   await jsClick(dock.getByRole("button", { name: "Send", exact: true }));
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 180000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 180000 });
   await pagePause(2000);
   const expandedDock = page.locator("#project-copilot-dock");
-  await expandedDock.getByLabel("Let The Book Author implement direct changes").uncheck();
+  await expandedDock.getByLabel("Let the Book Author implement direct changes").uncheck();
   await expandedDock
     .getByPlaceholder(/Explain (what to update|a scene problem)/)
-    .fill("Give short advice on how to use The Book Author well during drafting.");
+    .fill("Give short advice on how to use Book Author well during drafting.");
   await jsClick(expandedDock.getByRole("button", { name: "Send", exact: true }));
   await pagePause(2500);
   await jsClick(expandedDock.getByRole("button", { name: "AI key settings", exact: true }));
@@ -559,7 +559,7 @@ async function testCopilot(page) {
   if ((await openButton.count()) > 0 && (await openButton.first().isVisible().catch(() => false))) {
     await jsClick(openButton.first());
   }
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 20000 });
   const collapseButton = reopenedDock.getByRole("button", { name: "Collapse", exact: true });
   if ((await collapseButton.count()) > 0) {
     await jsClick(collapseButton.first());
@@ -703,7 +703,7 @@ async function testStoryBible(page) {
   if (await addRelationshipButton.isDisabled()) {
     await jsClick(characterMaster.getByRole("button", { name: "New character", exact: true }));
     await pagePause(1000);
-    await page.getByLabel("Free-text core").fill("A second dossier exists so The Book Author can exercise relationship mapping and save a connection.");
+    await page.getByLabel("Free-text core").fill("A second dossier exists so Book Author can exercise relationship mapping and save a connection.");
     await jsClick(characterMaster.getByRole("button", { name: "Save dossier", exact: true }));
     await pagePause(800);
   }

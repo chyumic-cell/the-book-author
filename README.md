@@ -1,6 +1,6 @@
-# The Book Author
+# Book Author
 
-The Book Author is a local-first book-building studio for fiction writers. It combines a manuscript workspace, story bible, structure engine, continuity dashboard, layered memory system, and an optional AI copilot that can act as ghostwriter, cowriter, story doctor, developmental editor, brainstorm partner, writing coach, or beta reader.
+Book Author is a local-first book-building studio for fiction writers. It combines a manuscript workspace, story bible, structure engine, continuity dashboard, layered memory system, and an optional AI copilot that can act as ghostwriter, cowriter, story doctor, developmental editor, brainstorm partner, writing coach, or beta reader.
 
 ## What It Does
 
@@ -45,7 +45,7 @@ The skeleton tracks:
 
 ### Memory Architecture
 
-The Book Author keeps prompt payloads compact by separating:
+Book Author keeps prompt payloads compact by separating:
 
 - Long-term canon: characters, world rules, durable plot changes, promises, themes
 - Short-term memory: recent summaries, active emotional tone, temporary objects, scene carry-forward
@@ -63,7 +63,7 @@ The bottom chat bar is designed for natural instructions. Examples:
 - "Explain why this chapter feels flat."
 - "Brainstorm three stronger versions of this reveal."
 
-When `Apply changes` is enabled, The Book Author will make controlled updates directly in the project when your request clearly asks for it.
+When `Apply changes` is enabled, Book Author will make controlled updates directly in the project when your request clearly asks for it.
 
 ## AI Providers
 
@@ -75,7 +75,7 @@ Provider settings live in the Settings tab. Supported:
 
 Provider secrets are stored locally in `.the-book-author.providers.json` and are ignored by git.
 
-If you do not configure a live provider, The Book Author can fall back to mock responses while you test the product shell.
+If you do not configure a live provider, Book Author can fall back to mock responses while you test the product shell.
 
 ## Setup
 
@@ -121,7 +121,7 @@ OPENROUTER_API_KEY=""
 OPENROUTER_MODEL="openai/gpt-4.1-mini"
 OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 OPENROUTER_SITE_URL="http://localhost:3000"
-OPENROUTER_APP_NAME="The Book Author"
+OPENROUTER_APP_NAME="Book Author"
 CUSTOM_AI_API_KEY=""
 CUSTOM_AI_LABEL="Custom compatible API"
 CUSTOM_AI_BASE_URL=""

@@ -8,7 +8,7 @@ import { requestJson } from "@/components/storyforge/workspace-helpers";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { APP_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
 import { aiRoleOptions } from "@/lib/defaults";
 import { cn } from "@/lib/utils";
 import type {
@@ -532,7 +532,7 @@ export function ProjectCopilotBar({
                   ) : null}
                 </div>
                 <div>
-            <h3 className={cn("text-xl font-semibold", phoneShell ? "text-base" : "")}>Talk to {APP_NAME}</h3>
+            <h3 className={cn("text-xl font-semibold", phoneShell ? "text-base" : "")}>Talk to {APP_PROSE_NAME}</h3>
                   <p className={cn("text-sm text-[var(--muted)]", phoneShell ? "hidden text-xs leading-5" : "")}>
                     Ask plainly for brainstorming, coaching, edits, or story-state help without leaving the page.
                   </p>
@@ -562,7 +562,7 @@ export function ProjectCopilotBar({
               </label>
               <label className={cn("inline-flex items-center gap-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--panel-soft)] px-4 py-3 text-sm text-[var(--muted)]", phoneShell ? "px-3 py-2 text-xs leading-4" : "")}>
                 <input checked={applyChanges} type="checkbox" onChange={(event) => setApplyChanges(event.target.checked)} />
-                  Let {APP_NAME} implement direct changes
+                  Let {APP_PROSE_NAME} implement direct changes
               </label>
             </div>
 
@@ -669,7 +669,7 @@ export function ProjectCopilotBar({
             <TextareaAutosize
               className={cn("resize-none", phoneShell ? "min-h-[38px] text-sm leading-5" : "min-h-[44px]")}
               minRows={1}
-              placeholder={`Ask ${APP_NAME} plainly for help, edits, ideas, or chapter changes.`}
+              placeholder={`Ask ${APP_PROSE_NAME} plainly for help, edits, ideas, or chapter changes.`}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onFocus={() => onExpandedChange(true)}

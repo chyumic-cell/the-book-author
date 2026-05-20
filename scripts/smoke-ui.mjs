@@ -16,7 +16,7 @@ async function createSmokeProject(page) {
   await page.waitForURL(/\/projects\/new/, { timeout: 30000 });
   await page.getByPlaceholder("The Glass Meridian").fill(title);
   await page.getByPlaceholder("A mapmaker races a self-censoring oracle.").fill(
-    "A compact QA story used to prove that The Book Author can still create and open a project in hosted mode."
+    "A compact QA story used to prove that Book Author can still create and open a project in hosted mode."
   );
   await page.getByPlaceholder("What is the story fundamentally about?").fill(
     "A writer stress-tests a drafting system and needs the workspace to stay stable while all the moving parts behave."
@@ -150,7 +150,7 @@ async function getLayoutState(page) {
     smartContextVisible: !!Array.from(document.querySelectorAll("h4")).find((el) => el.textContent === "Smart Context"),
     outlineVisible: !!Array.from(document.querySelectorAll("label")).find((el) => (el.textContent || "").includes("Chapter outline")),
     planningVisible: !!Array.from(document.querySelectorAll("h4")).find((el) => el.textContent === "Chapter planning"),
-    aiDockExpanded: !!Array.from(document.querySelectorAll("h3")).find((el) => el.textContent === "Talk to The Book Author"),
+    aiDockExpanded: !!Array.from(document.querySelectorAll("h3")).find((el) => el.textContent === "Talk to the Book Author"),
     zoomLabel: Array.from(document.querySelectorAll("button"))
       .map((el) => (el.textContent || "").trim())
       .find((text) => /^\d+%$/.test(text)) || null,
@@ -192,9 +192,9 @@ async function toggleViewPanels(page, viewportName) {
   await page.getByRole("heading", { name: "Chapter planning", exact: true }).waitFor({ state: "detached", timeout: 10000 });
 
   await clickRibbonAction(page, ["Show AI Bar"]);
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ timeout: 10000 });
   await jsClick(page.getByRole("button", { name: "Collapse", exact: true }));
-  await page.getByRole("heading", { name: "Talk to The Book Author", exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("heading", { name: "Talk to the Book Author", exact: true }).waitFor({ state: "detached", timeout: 10000 });
 
   const state = await getLayoutState(page);
   assert.equal(state.bodyScroll, false, `${viewportName}: body scroll leaked after panel toggles`);
@@ -238,7 +238,7 @@ async function testSelectionAndContextMenu(page, viewportName) {
   await editor.focus();
   const initialValue = await editor.inputValue();
   if (!initialValue.trim()) {
-    await editor.fill("Selection smoke text for The Book Author.");
+    await editor.fill("Selection smoke text for Book Author.");
     await page.waitForTimeout(1200);
   }
   await editor.evaluate((node) => {
