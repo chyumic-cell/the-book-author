@@ -1,6 +1,6 @@
 import "server-only";
 
-import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME, APP_SENTENCE_NAME } from "@/lib/brand";
 import {
   STORYFORGE_TERMS_LAST_UPDATED,
   STORYFORGE_TERMS_VERSION,
@@ -11,7 +11,7 @@ import {
 
 export function getStoryForgeTermsSummary() {
   return [
-    `${APP_PROSE_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting fiction with optional AI assistance.`,
+    `${APP_SENTENCE_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting fiction with optional AI assistance.`,
     `During this private-beta phase, public web accounts are used for access, moderation, feedback, and export monitoring, while book/project work is intended to remain on the user's own device rather than in a shared ${APP_NAME} manuscript database.`,
     `Each user must supply their own AI API key, and ${APP_PROSE_NAME} links users to OpenRouter for that setup: ${getOpenRouterKeysUrl()}.`,
     `Use of the platform is conditioned on acceptance of the ${APP_NAME} Terms and Publishing Policy, which govern ownership claims, credit requirements, export handling, conduct standards, and moderation rights.`,
@@ -27,7 +27,7 @@ export function getStoryForgeTermsSections() {
     {
       title: `1. ${APP_NAME} Service Scope`,
       body: [
-        `${APP_PROSE_NAME} is provided as a professional writing environment for planning, structuring, drafting, revising, and exporting books with optional AI assistance.`,
+        `${APP_SENTENCE_NAME} is provided as a professional writing environment for planning, structuring, drafting, revising, and exporting books with optional AI assistance.`,
         `The private-beta web service is intended to manage access, policies, support, moderation, and export oversight. In phase one, users are expected to keep their actual working manuscripts and project libraries on their own devices unless a later ${APP_NAME} release states otherwise.`,
       ],
     },
@@ -89,7 +89,7 @@ export function getStoryForgeTermsSections() {
     {
       title: "9. Beta Status and Legal Review",
       body: [
-        `${APP_PROSE_NAME} is currently operating in a private-beta state. Features, policies, and deployment practices may change.`,
+        `${APP_SENTENCE_NAME} is currently operating in a private-beta state. Features, policies, and deployment practices may change.`,
         "These terms are product-facing policy text and should be reviewed by qualified legal counsel before being relied on as a final public commercial agreement.",
       ],
     },

@@ -1,5 +1,6 @@
 export const APP_NAME = "Book Author";
 export const APP_PROSE_NAME = "the Book Author";
+export const APP_SENTENCE_NAME = "The Book Author";
 export const APP_BETA_MARK = "ᴮᴱᵀᴬ";
 export const APP_RUNTIME_NAME = `${APP_NAME} ${APP_BETA_MARK}`;
 export const APP_INSTALLER_FILENAME = "Book-Author-Installer.cmd";

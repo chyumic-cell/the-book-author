@@ -8,7 +8,7 @@ import { ProjectLibraryGrid } from "@/components/storyforge/project-library-grid
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { getOptionalBetaSession } from "@/lib/beta-auth";
-import { APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
+import { APP_NAME, APP_PROSE_NAME, APP_SENTENCE_NAME } from "@/lib/brand";
 import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import { listProjects } from "@/lib/project-data";
 
@@ -109,7 +109,7 @@ export default async function HomePage() {
 
     return (
       <BetaShell
-        intro={`${APP_PROSE_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting books with optional AI help. Use this site to sign in, open the web workspace, install the app to your phone home screen, review the publishing terms, and send feedback.`}
+        intro={`${APP_SENTENCE_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting books with optional AI help. Use this site to sign in, open the web workspace, install the app to your phone home screen, review the publishing terms, and send feedback.`}
         session={session}
         title={<AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.44em]" />}
       >
@@ -125,7 +125,7 @@ export default async function HomePage() {
                 What <AppBrandMark betaClassName="text-[0.46em]" /> does
               </h2>
               <p className="text-sm leading-7 text-[var(--muted)]">
-                {APP_PROSE_NAME} is a professional writing environment for planning, outlining, drafting, revising, tracking canon, and exporting full-length books with optional AI assistance.
+                {APP_SENTENCE_NAME} is a professional writing environment for planning, outlining, drafting, revising, tracking canon, and exporting full-length books with optional AI assistance.
               </p>
               <p className="text-sm leading-7 text-[var(--muted)]">
                 Sign in to open the live web workspace, install it to your phone home screen, or use the desktop build when you want a local Windows app.
@@ -150,7 +150,7 @@ export default async function HomePage() {
           <Card className="grid gap-4">
             <Chip>How access works</Chip>
             <ul className="grid gap-3 text-sm text-[var(--muted)]">
-              <li>Create a {APP_PROSE_NAME} account with a username and password.</li>
+              <li>Create your {APP_NAME} account with a username and password.</li>
               <li>Accept the {APP_NAME} Terms and Publishing Policy before access is activated.</li>
               <li>Download the desktop app or install the mobile web app to your home screen.</li>
               <li>Bring your own OpenRouter or OpenAI key. {APP_PROSE_NAME} does not bundle your personal key into public downloads.</li>
