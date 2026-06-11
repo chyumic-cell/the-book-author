@@ -7,11 +7,6 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_NAME } from "@/lib/brand";
 
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
 function isStandaloneDisplay() {
   if (typeof window === "undefined") {
     return false;
@@ -32,14 +27,6 @@ function isMobileLikeDevice() {
   return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;
 }
 
-function isIosBrowser() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
-
 function isAndroidBrowser() {
   if (typeof navigator === "undefined") {
     return false;
@@ -50,11 +37,8 @@ function isAndroidBrowser() {
 
 export function PwaInstallPrompt() {
   const pathname = usePathname();
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [hiddenForSession, setHiddenForSession] = useState(false);
   const [installed, setInstalled] = useState(false);
-  const [isInstallable, setIsInstallable] = useState(false);
-  const [isIos, setIsIos] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -65,7 +49,6 @@ export function PwaInstallPrompt() {
 
     const refreshState = () => {
       setInstalled(isStandaloneDisplay());
-      setIsIos(isIosBrowser());
       setIsAndroid(isAndroidBrowser());
       setIsMobile(isMobileLikeDevice());
     };
@@ -74,18 +57,9 @@ export function PwaInstallPrompt() {
     window.addEventListener("resize", refreshState);
     window.addEventListener("appinstalled", refreshState);
 
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallEvent(event as BeforeInstallPromptEvent);
-      setIsInstallable(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-
     return () => {
       window.removeEventListener("resize", refreshState);
       window.removeEventListener("appinstalled", refreshState);
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     };
   }, []);
 
@@ -94,25 +68,16 @@ export function PwaInstallPrompt() {
       return false;
     }
 
+    if (!isAndroid) {
+      return false;
+    }
+
     if (pathname && pathname !== "/" && pathname !== "/downloads") {
       return false;
     }
 
-    return isInstallable || isIos || isAndroid;
-  }, [hiddenForSession, installed, isInstallable, isIos, isAndroid, isMobile, pathname]);
-
-  async function handleInstall() {
-    if (!installEvent) {
-      return;
-    }
-
-    await installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    if (choice.outcome === "accepted") {
-      setInstalled(true);
-      setHiddenForSession(true);
-    }
-  }
+    return true;
+  }, [hiddenForSession, installed, isAndroid, isMobile, pathname]);
 
   if (!shouldShow) {
     return null;
@@ -130,15 +95,10 @@ export function PwaInstallPrompt() {
             width={48}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--text)]">Download {APP_NAME}</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Download {APP_NAME} for Android</p>
             <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-              Add {APP_NAME} to your phone so it opens like an app with your logo and standalone layout.
+              Install the APK directly so the phone build opens like a normal app.
             </p>
-            {isIos && !isInstallable ? (
-              <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                On iPhone or iPad, tap <strong>Share</strong> and then <strong>Add to Home Screen</strong>.
-              </p>
-            ) : null}
             {isAndroid ? (
               <p className="mt-2 text-xs leading-5 text-[var(--muted)]">
                 On Android, download the APK directly. Android may ask you to allow installs from this browser or file manager.
@@ -156,10 +116,6 @@ export function PwaInstallPrompt() {
             >
               Download APK
             </a>
-          ) : isInstallable ? (
-            <Button onClick={() => void handleInstall()} type="button">
-              Download app
-            </Button>
           ) : null}
           <Button onClick={() => setHiddenForSession(true)} type="button" variant="secondary">
             Not now

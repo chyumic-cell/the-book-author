@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { unstable_noStore as noStore } from "next/cache";
 
-import { BetaShell } from "@/components/beta/beta-shell";
 import { AppBrandMark } from "@/components/brand/app-brand-mark";
 import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { ProjectLibraryGrid } from "@/components/storyforge/project-library-grid";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { getOptionalBetaSession } from "@/lib/beta-auth";
-import { APP_NAME, APP_PROSE_NAME, APP_SENTENCE_NAME } from "@/lib/brand";
-import { isHostedBetaEnabled } from "@/lib/hosted-beta-config";
+import {
+  APP_ANDROID_APK_DOWNLOAD_PATH,
+  APP_INSTALLER_FILENAME,
+  APP_NAME,
+  APP_PROSE_NAME,
+} from "@/lib/brand";
+import { getOpenRouterKeysUrl, isHostedBetaEnabled } from "@/lib/hosted-beta-config";
 import { listProjects } from "@/lib/project-data";
 
 export const dynamic = "force-dynamic";
@@ -97,69 +100,91 @@ function AppHome({
   );
 }
 
+function HostedDownloadHome() {
+  return (
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.14)] via-transparent to-[rgba(53,100,77,0.12)]" />
+        <div className="relative grid gap-5">
+          <div className="flex flex-wrap gap-2">
+            <Chip>Download center</Chip>
+            <Chip>Local-first writing</Chip>
+            <Chip>Bring your own AI key</Chip>
+          </div>
+          <div className="grid gap-3">
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+              <AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.42em]" />
+            </h1>
+            <p className="max-w-3xl text-base leading-8 text-[var(--muted)]">
+              Download the local Windows app or the Android APK. Your real writing workspace is meant to live on your own device, and each user adds their own OpenRouter or OpenAI key inside the app.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <section className="grid gap-5 md:grid-cols-2">
+        <Card className="grid gap-4">
+          <div className="grid gap-2">
+            <Chip>Windows desktop</Chip>
+            <h2 className="text-2xl font-semibold">{APP_NAME} - PC</h2>
+            <p className="text-sm leading-7 text-[var(--muted)]">
+              Install the desktop build when you want the full local writing workspace on your computer.
+            </p>
+          </div>
+          <a
+            className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_12px_24px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={`/downloads/${APP_INSTALLER_FILENAME}`}
+          >
+            Download desktop app
+          </a>
+        </Card>
+
+        <Card className="grid gap-4">
+          <div className="grid gap-2">
+            <Chip>Android APK</Chip>
+            <h2 className="text-2xl font-semibold">{APP_NAME} - Android</h2>
+            <p className="text-sm leading-7 text-[var(--muted)]">
+              Download the APK directly for Android phones. Android may ask you to allow installs from your browser or file manager.
+            </p>
+          </div>
+          <a
+            className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_12px_24px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={APP_ANDROID_APK_DOWNLOAD_PATH}
+          >
+            Download Android APK
+          </a>
+        </Card>
+      </section>
+
+      <Card className="grid gap-3">
+        <h2 className="text-xl font-semibold">Before you write</h2>
+        <p className="text-sm leading-7 text-[var(--muted)]">
+          {APP_PROSE_NAME} does not bundle Michael&apos;s private AI key. After installing, add your own key in Settings.
+        </p>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <Link className="font-semibold text-[var(--accent)] underline" href={getOpenRouterKeysUrl()}>
+            Get an OpenRouter key
+          </Link>
+          <Link className="font-semibold text-[var(--accent)] underline" href="/terms">
+            Read the terms
+          </Link>
+          <Link className="font-semibold text-[var(--accent)] underline" href="/feedback">
+            Send feedback
+          </Link>
+        </div>
+      </Card>
+
+      <AppLegalNotice />
+    </main>
+  );
+}
+
 export default async function HomePage() {
   noStore();
   if (isHostedBetaEnabled()) {
-    const session = await getOptionalBetaSession();
-
-    if (session) {
-      const projects = await listProjects();
-      return <AppHome hosted projects={projects} />;
-    }
-
-    return (
-      <BetaShell
-        intro={`${APP_SENTENCE_NAME} is a professional writing platform for planning, outlining, drafting, revising, and exporting books with optional AI help. Use this site to sign in, open the web workspace, install the app to your phone home screen, review the publishing terms, and send feedback.`}
-        session={session}
-        title={<AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.44em]" />}
-      >
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="grid gap-5">
-            <div className="flex flex-wrap gap-2">
-              <Chip>Local-first writing</Chip>
-              <Chip>Per-user AI keys</Chip>
-              <Chip>Account-based access</Chip>
-            </div>
-            <div className="grid gap-3">
-              <h2 className="text-3xl font-semibold">
-                What <AppBrandMark betaClassName="text-[0.46em]" /> does
-              </h2>
-              <p className="text-sm leading-7 text-[var(--muted)]">
-                {APP_SENTENCE_NAME} is a professional writing environment for planning, outlining, drafting, revising, tracking canon, and exporting full-length books with optional AI assistance.
-              </p>
-              <p className="text-sm leading-7 text-[var(--muted)]">
-                Sign in to open the live web workspace, install it to your phone home screen, or use the desktop build when you want a local Windows app.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                className="inline-flex items-center rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_18px_40px_rgba(var(--accent-rgb),0.2)] transition hover:bg-[var(--accent-strong)]"
-                href={session ? "/" : "/sign-up"}
-              >
-                {session ? "Open the app" : "Create account"}
-              </Link>
-              <Link
-                className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/70 px-5 py-3 text-sm font-semibold text-[var(--text)] transition hover:bg-white"
-                href="/terms"
-              >
-                Read the terms
-              </Link>
-            </div>
-          </Card>
-
-          <Card className="grid gap-4">
-            <Chip>How access works</Chip>
-            <ul className="grid gap-3 text-sm text-[var(--muted)]">
-              <li>Create your {APP_NAME} account with a username and password.</li>
-              <li>Accept the {APP_NAME} Terms and Publishing Policy before access is activated.</li>
-              <li>Download the desktop app or install the mobile web app to your home screen.</li>
-              <li>Bring your own OpenRouter or OpenAI key. {APP_PROSE_NAME} does not bundle your personal key into public downloads.</li>
-              <li>Use the feedback channel if you hit bugs, deployment problems, or confusing UI.</li>
-            </ul>
-          </Card>
-        </section>
-      </BetaShell>
-    );
+    return <HostedDownloadHome />;
   }
 
   const projects = await listProjects();

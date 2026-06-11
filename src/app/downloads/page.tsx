@@ -1,98 +1,96 @@
 import Link from "next/link";
 
-import { BetaShell } from "@/components/beta/beta-shell";
-import { PwaDownloadActions } from "@/components/providers/pwa-download-actions";
+import { AppBrandMark } from "@/components/brand/app-brand-mark";
+import { AppLegalNotice } from "@/components/storyforge/app-legal-notice";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
-import { requireBetaSession } from "@/lib/beta-auth";
-import { APP_ANDROID_APK_DOWNLOAD_PATH, APP_INSTALLER_FILENAME, APP_NAME, APP_PROSE_NAME } from "@/lib/brand";
-import { getDesktopInstallerDownloadUrl, getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
+import {
+  APP_ANDROID_APK_DOWNLOAD_PATH,
+  APP_INSTALLER_FILENAME,
+  APP_NAME,
+  APP_PROSE_NAME,
+} from "@/lib/brand";
+import { getOpenRouterKeysUrl } from "@/lib/hosted-beta-config";
 
 export const dynamic = "force-dynamic";
 
-export default async function DownloadsPage() {
-  const session = await requireBetaSession();
-  const desktopInstallerUrl = getDesktopInstallerDownloadUrl();
-
+export default function DownloadsPage() {
   return (
-      <BetaShell
-        intro={`Download ${APP_NAME} for desktop, download the Android APK, or install the iPhone home-screen web app. Actual book data is intended to stay on the user's own computer or phone instead of inside a shared cloud manuscript database.`}
-        session={session}
-        title="Downloads and device setup"
-      >
-      <Card className="grid gap-4">
-        <div className="flex flex-wrap gap-2">
-          <Chip>Local-first writing</Chip>
-          <Chip>Bring your own AI key</Chip>
-          <Chip>Use in browser too</Chip>
+    <main className="mx-auto flex min-h-[100dvh] w-full max-w-5xl flex-col gap-6 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-r from-[rgba(var(--accent-rgb),0.14)] via-transparent to-[rgba(53,100,77,0.12)]" />
+        <div className="relative grid gap-5">
+          <div className="flex flex-wrap gap-2">
+            <Chip>Downloads</Chip>
+            <Chip>Local-first</Chip>
+            <Chip>No shared manuscript cloud</Chip>
+          </div>
+          <div className="grid gap-3">
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+              <AppBrandMark nameClassName="text-inherit" betaClassName="text-[0.42em]" />
+            </h1>
+            <p className="max-w-3xl text-base leading-8 text-[var(--muted)]">
+              Choose the version you want to install. The desktop app is the main writing environment; the Android APK is the phone build.
+            </p>
+          </div>
         </div>
-        <PwaDownloadActions />
       </Card>
 
-      <Card className="grid gap-4">
-        <div className="grid gap-3">
-          <h2 className="text-2xl font-semibold">{APP_NAME} - PC</h2>
-          <p className="text-sm leading-7 text-[var(--muted)]">
-            Install the Windows desktop build to keep your writing workspace and project library on the local machine.
-          </p>
-          {desktopInstallerUrl ? (
-            <a
-              className="inline-flex w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] hover:bg-[var(--accent-strong)] hover:border-[var(--accent-strong)]"
-              download
-              href={`/downloads/${APP_INSTALLER_FILENAME}`}
-            >
-              Download {APP_NAME} - PC
-            </a>
-          ) : (
+      <section className="grid gap-5 md:grid-cols-2">
+        <Card className="grid gap-4">
+          <div className="grid gap-2">
+            <Chip>Windows desktop</Chip>
+            <h2 className="text-2xl font-semibold">{APP_NAME} - PC</h2>
             <p className="text-sm leading-7 text-[var(--muted)]">
-              The hosted desktop installer link is being refreshed right now. The web app is still available immediately on this site.
+              Download this on a Windows computer when you want the full local writing workspace and project library.
             </p>
-          )}
-          <Link className="font-medium text-[var(--accent)] underline" href="/">
-            Open the web app now
+          </div>
+          <a
+            className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_12px_24px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={`/downloads/${APP_INSTALLER_FILENAME}`}
+          >
+            Download desktop app
+          </a>
+        </Card>
+
+        <Card className="grid gap-4">
+          <div className="grid gap-2">
+            <Chip>Android APK</Chip>
+            <h2 className="text-2xl font-semibold">{APP_NAME} - Android</h2>
+            <p className="text-sm leading-7 text-[var(--muted)]">
+              Download the APK directly for Android. If Android blocks the install, allow installs from your browser or file manager.
+            </p>
+          </div>
+          <a
+            className="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_12px_24px_rgba(var(--accent-rgb),0.18)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
+            download
+            href={APP_ANDROID_APK_DOWNLOAD_PATH}
+          >
+            Download Android APK
+          </a>
+        </Card>
+      </section>
+
+      <Card className="grid gap-3">
+        <h2 className="text-xl font-semibold">AI key setup</h2>
+        <p className="text-sm leading-7 text-[var(--muted)]">
+          {APP_PROSE_NAME} does not include a shared AI key in public downloads. Add your own OpenRouter or OpenAI key inside Settings after installation.
+        </p>
+        <div className="flex flex-wrap gap-3 text-sm">
+          <Link className="font-semibold text-[var(--accent)] underline" href={getOpenRouterKeysUrl()}>
+            Get an OpenRouter key
+          </Link>
+          <Link className="font-semibold text-[var(--accent)] underline" href="/terms">
+            Terms
+          </Link>
+          <Link className="font-semibold text-[var(--accent)] underline" href="/feedback">
+            Feedback
           </Link>
         </div>
       </Card>
 
-      <Card className="grid gap-4">
-        <h2 className="text-2xl font-semibold">{APP_NAME} - Android</h2>
-        <p className="text-sm leading-7 text-[var(--muted)]">
-          Download the Android APK directly. This installs {APP_NAME} as a phone app that opens the live Vercel version,
-          so improvements can keep arriving without rebuilding the APK every time.
-        </p>
-        <div className="grid gap-2">
-          <a
-            className="inline-flex w-fit items-center justify-center rounded-md border border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-ink)] shadow-[0_8px_18px_rgba(var(--accent-rgb),0.18)] hover:border-[var(--accent-strong)] hover:bg-[var(--accent-strong)]"
-            download
-            href={APP_ANDROID_APK_DOWNLOAD_PATH}
-          >
-            Download {APP_NAME} - Android APK
-          </a>
-          <p className="text-xs leading-6 text-[var(--muted)]">
-            Android may ask you to allow installs from your browser or file manager. That is normal for an APK downloaded
-            outside the Google Play Store.
-          </p>
-        </div>
-      </Card>
-
-      <Card className="grid gap-4">
-        <h2 className="text-2xl font-semibold">{APP_NAME} - iOS</h2>
-        <p className="text-sm leading-7 text-[var(--muted)]">
-          Open the {APP_NAME} site in Safari on iPhone or iPad, tap the Share button, then choose <strong>Add to Home Screen</strong>.
-          iOS uses the apple-touch icon and launches it as a standalone web app.
-        </p>
-        <PwaDownloadActions />
-      </Card>
-
-      <Card className="grid gap-4">
-        <h2 className="text-2xl font-semibold">AI key setup</h2>
-        <p className="text-sm leading-7 text-[var(--muted)]">
-          Every user must supply their own personal AI key. {APP_PROSE_NAME} does not bundle your personal key into public downloads.
-        </p>
-        <Link className="font-medium text-[var(--accent)] underline" href={getOpenRouterKeysUrl()}>
-          Get an OpenRouter API key
-        </Link>
-      </Card>
-    </BetaShell>
+      <AppLegalNotice />
+    </main>
   );
 }
